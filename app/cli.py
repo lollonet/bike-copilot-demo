@@ -216,7 +216,9 @@ def fetch_sitemap(
     offers: list[OfferInput] = []
     seen: set[tuple[str, str, str]] = set()
     with httpx.Client(
-        timeout=10.0, headers=hdrs or {"User-Agent": "BikeCopilotBot/0.1"}
+        timeout=10.0,
+        headers=hdrs or {"User-Agent": "BikeCopilotBot/0.1"},
+        follow_redirects=True,
     ) as client:
         for u in urls:
             try:

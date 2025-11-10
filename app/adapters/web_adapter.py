@@ -47,7 +47,17 @@ def _text(el) -> str:
 
 def _to_bool(s: str) -> bool:
     v = s.strip().lower()
-    return v in {"1", "yes", "y", "true", "ok", "available", "stock"}
+    return v in {
+        "1",
+        "yes",
+        "y",
+        "true",
+        "ok",
+        "available",
+        "stock",
+        "instock",
+        "in stock",
+    }
 
 
 def _to_price(s: str) -> float:
@@ -151,7 +161,13 @@ def parse_detail_html(
         if not sel:
             return ""
         el = scope.select_one(sel)
-        return el.get_text(strip=True) if el else ""
+        if el is None:
+            return ""
+        # If meta tag, prefer content attribute
+        if getattr(el, "name", "").lower() == "meta":
+            val = el.get("content")
+            return str(val) if val is not None else ""
+        return el.get_text(strip=True)
 
     brand = pick("brand")
     name = pick("name")
@@ -234,7 +250,9 @@ def fetch_and_parse_urls(
 
     def _fetch(u: str) -> str:
         with httpx.Client(
-            timeout=10.0, headers=headers or {"User-Agent": "BikeCopilotBot/0.1"}
+            timeout=10.0,
+            headers=headers or {"User-Agent": "BikeCopilotBot/0.1"},
+            follow_redirects=True,
         ) as client:
             r = client.get(u)
             r.raise_for_status()
@@ -378,7 +396,9 @@ def parse_sitemap_urls(
 
     def _fetch(u: str) -> str:
         with httpx.Client(
-            timeout=10.0, headers=headers or {"User-Agent": "BikeCopilotBot/0.1"}
+            timeout=10.0,
+            headers=headers or {"User-Agent": "BikeCopilotBot/0.1"},
+            follow_redirects=True,
         ) as client:
             r = client.get(u)
             r.raise_for_status()
