@@ -29,7 +29,9 @@ class WebMapping(TypedDict):
     pagination: NotRequired[PaginationMapping]
     search: NotRequired[SearchMapping]
     item_link: NotRequired[str]
-    detail: NotRequired[dict[str, str]]
+    detail: NotRequired[
+        dict[str, str]
+    ]  # may include keys: name, price, brand, mpn, in_stock, lead_time_days, category
 
 
 def _load_mapping(path: Path) -> WebMapping:
@@ -204,6 +206,8 @@ def parse_detail_html(
                 mpn = mm.group(1)
 
     mpn = mpn.strip()
+    category = pick("category").strip()
+
     if not brand or not mpn or not price_s:
         return None, None
 
@@ -215,6 +219,7 @@ def parse_detail_html(
         mpn=mpn,
         ean=None,
         name=name or f"{brand} {mpn}",
+        category=(category or None),
         speed=None,
         brake=None,
         axle=None,

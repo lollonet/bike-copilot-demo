@@ -15,5 +15,6 @@ detail:
   price: ".summary .price"
   brand: "h1.product_title"
   mpn: ".product_meta .sku, .product_meta .sku_wrapper .sku"
+  category: ".product_meta .posted_in a"
   in_stock: ".summary .stock"
   lead_time_days: ""
