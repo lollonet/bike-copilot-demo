@@ -13,7 +13,6 @@ from sqlalchemy import select
 
 from .config import settings
 from .models import EventLog, SessionLocal, SupplierOffer, create_all
-from .quote import render_quote
 from .search import search
 from .types import Problem, QuoteRequest, QuoteResponse, SearchRequest, SearchResponse
 from .logging_utils import log_event
@@ -110,44 +109,56 @@ def api_quote(
 ) -> QuoteResponse:
     create_all()
     with SessionLocal() as db:
-        offer = db.scalar(select(SupplierOffer).where(SupplierOffer.id == req.offer_id))
-        if not offer:
+        # Build items list from request
+        if not req.items:
             raise HTTPException(
                 status_code=400,
                 detail=Problem(
-                    kind="not_found", message="offer_id not found"
+                    kind="invalid_request", message="items required"
                 ).model_dump(),
             )
-        product = offer.product
+        items: list[dict[str, object]] = []
+        for cart in req.items:
+            offer = db.scalar(
+                select(SupplierOffer).where(SupplierOffer.id == cart.offer_id)
+            )
+            if not offer:
+                raise HTTPException(
+                    status_code=400,
+                    detail=Problem(
+                        kind="not_found", message=f"offer_id {cart.offer_id} not found"
+                    ).model_dump(),
+                )
+            product = offer.product
+            qty = max(1, int(cart.qty))
+            items.append(
+                {
+                    "brand": product.brand,
+                    "mpn": product.mpn,
+                    "name": product.name,
+                    "supplier": offer.supplier,
+                    "price": offer.price,
+                    "qty": qty,
+                    "in_stock": offer.in_stock,
+                    "lead_time_days": offer.lead_time_days,
+                }
+            )
         context = {
             "customer_name": req.customer_name,
             "customer_contact": req.customer_contact,
             "validity_days": req.validity_days,
             "notes": req.notes,
-            "item": {
-                "brand": product.brand,
-                "mpn": product.mpn,
-                "name": product.name,
-                "supplier": offer.supplier,
-                "price": offer.price,
-                "in_stock": offer.in_stock,
-                "lead_time_days": offer.lead_time_days,
-            },
+            "items": items,
         }
+        from .quote import render_quote
+
         html_path, pdf_path = render_quote(context)
 
         # Log event
         db.add(
             EventLog(
                 type="quote_created",
-                payload={
-                    "offer_id": offer.id,
-                    "brand": product.brand,
-                    "mpn": product.mpn,
-                    "supplier": offer.supplier,
-                    "price": offer.price,
-                    "pdf": bool(pdf_path),
-                },
+                payload={"count": len(items), "pdf": bool(pdf_path)},
             )
         )
         db.commit()
@@ -157,7 +168,7 @@ def api_quote(
             kind="api",
             message="quote created",
             trace_id=getattr(request.state, "trace_id", None),
-            extra={"offer_id": offer.id, "pdf": bool(pdf_path)},
+            extra={"count": len(items), "pdf": bool(pdf_path)},
         )
         from urllib.parse import urljoin
         from pathlib import Path

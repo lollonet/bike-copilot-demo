@@ -56,7 +56,11 @@ class SearchResponse(BaseModel):
 
 
 class QuoteRequest(BaseModel):
-    offer_id: int
+    class CartItem(BaseModel):
+        offer_id: int
+        qty: int = 1
+
+    items: list[CartItem]
     customer_name: str
     customer_contact: str
     validity_days: int = 7

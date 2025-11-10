@@ -29,23 +29,33 @@
     <table>
       <thead>
         <tr>
-          <th>Brand</th><th>MPN</th><th>Descrizione</th><th>Fornitore</th><th>Prezzo</th>
+          <th>Brand</th><th>MPN</th><th>Descrizione</th><th>Fornitore</th><th>Qtà</th><th>Prezzo</th><th>Totale riga</th>
         </tr>
       </thead>
       <tbody>
+        {% set rows = items if items is defined else [item] %}
+        {% set subtotal = 0 %}
+        {% for it in rows %}
+        {% set qty = it.qty if it.qty is defined else 1 %}
+        {% set line_total = (it.price * qty) %}
+        {% set subtotal = subtotal + line_total %}
         <tr>
-          <td>{{ item.brand }}</td>
-          <td>{{ item.mpn }}</td>
-          <td>{{ item.name }}</td>
-          <td>{{ item.supplier }}</td>
-          <td style="text-align:right">{{ '%.2f'|format(item.price) }} €</td>
+          <td>{{ it.brand }}</td>
+          <td>{{ it.mpn }}</td>
+          <td>{{ it.name }}</td>
+          <td>{{ it.supplier }}</td>
+          <td style="text-align:right">{{ qty }}</td>
+          <td style="text-align:right">{{ '%.2f'|format(it.price) }} €</td>
+          <td style="text-align:right">{{ '%.2f'|format(line_total) }} €</td>
         </tr>
+        {% endfor %}
       </tbody>
     </table>
     {% set vat = (env_vat or 0.0) %}
-    {% set vat_amount = (item.price * vat) %}
-    {% set total = (item.price + vat_amount) %}
+    {% set vat_amount = (subtotal * vat) %}
+    {% set total = (subtotal + vat_amount) %}
     <p>
+      Subtotale: {{ '%.2f'|format(subtotal) }} €<br/>
       IVA ({{ (vat*100)|round(0) }}%): {{ '%.2f'|format(vat_amount) }} €<br/>
       <strong>Totale:</strong> {{ '%.2f'|format(total) }} €
     </p>

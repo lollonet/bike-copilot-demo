@@ -68,7 +68,12 @@ def test_health(client: TestClient) -> None:
 
 def test_quote_requires_auth(client: TestClient) -> None:
     r = client.post(
-        "/quote", json={"offer_id": 1, "customer_name": "A", "customer_contact": "B"}
+        "/quote",
+        json={
+            "items": [{"offer_id": 1, "qty": 1}],
+            "customer_name": "A",
+            "customer_contact": "B",
+        },
     )
     assert r.status_code in (401, 403)
 
@@ -79,7 +84,7 @@ def test_quote_and_files(client: TestClient) -> None:
         "/quote",
         auth=auth,
         json={
-            "offer_id": 1,
+            "items": [{"offer_id": 1, "qty": 2}],
             "customer_name": "A",
             "customer_contact": "B",
             "validity_days": 7,

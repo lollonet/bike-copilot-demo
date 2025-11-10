@@ -108,15 +108,18 @@ def _create_quote(
             "customer_contact": contact,
             "validity_days": validity,
             "notes": notes,
-            "item": {
-                "brand": product.brand,
-                "mpn": product.mpn,
-                "name": product.name,
-                "supplier": offer.supplier,
-                "price": offer.price,
-                "in_stock": offer.in_stock,
-                "lead_time_days": offer.lead_time_days,
-            },
+            "items": [
+                {
+                    "brand": product.brand,
+                    "mpn": product.mpn,
+                    "name": product.name,
+                    "supplier": offer.supplier,
+                    "price": offer.price,
+                    "qty": 1,
+                    "in_stock": offer.in_stock,
+                    "lead_time_days": offer.lead_time_days,
+                }
+            ],
         }
         html_path, pdf_path = render_quote(context)
         db.add(
@@ -137,6 +140,7 @@ def build_interface() -> gr.Blocks:
         """)
 
         results_state = gr.State({})
+        cart_state = gr.State({})
 
         with gr.Row():
             with gr.Column(scale=1):
@@ -204,7 +208,29 @@ def build_interface() -> gr.Blocks:
                 offer_select = gr.Dropdown(
                     label="Seleziona offerta", choices=[], interactive=True
                 )
+                with gr.Row():
+                    qty_input = gr.Number(label="Qtà", value=1, precision=0)
+                    add_btn = gr.Button("Aggiungi al carrello")
                 preview = gr.Markdown("Seleziona un'offerta per i dettagli")
+                gr.Markdown("### Carrello")
+                cart_table = gr.Dataframe(
+                    headers=[
+                        "ID",
+                        "Brand",
+                        "MPN",
+                        "Fornitore",
+                        "Prezzo",
+                        "Qtà",
+                        "Totale",
+                    ],
+                    interactive=False,
+                )
+                cart_select = gr.Dropdown(
+                    label="Rimuovi dal carrello", choices=[], interactive=True
+                )
+                with gr.Row():
+                    remove_btn = gr.Button("Rimuovi selezionato")
+                    clear_cart_btn = gr.Button("Svuota carrello")
                 gr.Markdown("### Preventivo")
                 with gr.Row():
                     customer = gr.Textbox(
@@ -301,24 +327,135 @@ def build_interface() -> gr.Blocks:
             _on_select, inputs=[offer_select, results_state], outputs=preview
         )
 
+        def _cart_rows(cart: dict[int, dict[str, Any]]):
+            rows = []
+            labels = []
+            for oid, info in cart.items():
+                qty = int(info.get("qty", 1))
+                total = float(info.get("price", 0.0)) * qty
+                rows.append(
+                    [
+                        oid,
+                        info.get("brand", ""),
+                        info.get("mpn", ""),
+                        info.get("supplier", ""),
+                        round(float(info.get("price", 0.0)), 2),
+                        qty,
+                        round(total, 2),
+                    ]
+                )
+                labels.append(f"{oid} · {info.get('brand', '')} {info.get('mpn', '')}")
+            return rows, labels
+
+        def _on_add(
+            offer_label: str | None,
+            qty: float | int,
+            mapping: dict[int, dict[str, Any]],
+            cart: dict[int, dict[str, Any]],
+        ):
+            if not offer_label:
+                return gr.update(), cart, gr.update()
+            try:
+                offer_id = int(str(offer_label).split(" · ")[0])
+            except Exception:
+                return gr.update(), cart, gr.update()
+            info = mapping.get(offer_id)
+            if not info:
+                return gr.update(), cart, gr.update()
+            prev = cart.get(offer_id, {**info, "qty": 0})
+            prev_qty = int(prev.get("qty", 0))
+            prev.update({"qty": prev_qty + max(1, int(qty))})
+            cart[offer_id] = prev
+            rows, labels = _cart_rows(cart)
+            return (
+                rows,
+                cart,
+                gr.update(choices=labels, value=(labels[-1] if labels else None)),
+            )
+
+        add_btn.click(
+            _on_add,
+            inputs=[offer_select, qty_input, results_state, cart_state],
+            outputs=[cart_table, cart_state, cart_select],
+        )
+
+        def _on_remove(cart_label: str | None, cart: dict[int, dict[str, Any]]):
+            if not cart_label:
+                return gr.update(), cart, gr.update()
+            try:
+                offer_id = int(str(cart_label).split(" · ")[0])
+            except Exception:
+                return gr.update(), cart, gr.update()
+            if offer_id in cart:
+                cart.pop(offer_id)
+            rows, labels = _cart_rows(cart)
+            return rows, cart, gr.update(choices=labels, value=None)
+
+        remove_btn.click(
+            _on_remove,
+            inputs=[cart_select, cart_state],
+            outputs=[cart_table, cart_state, cart_select],
+        )
+
+        def _on_clear_cart():
+            return [], {}, gr.update(choices=[], value=None)
+
+        clear_cart_btn.click(
+            _on_clear_cart, inputs=[], outputs=[cart_table, cart_state, cart_select]
+        )
+
         def _on_quote(
             offer_label: str | None,
             customer: str,
             contact: str,
             validity: int,
             notes: str,
+            cart: dict[int, dict[str, Any]],
         ):
-            if not offer_label:
-                return "Seleziona un'offerta", "", ""
+            # Prefer cart items if present; otherwise fallback to selected offer
+            items: list[dict[str, Any]] = []
+            if cart:
+                for oid, info in cart.items():
+                    items.append({"offer_id": int(oid), "qty": int(info.get("qty", 1))})
+            else:
+                if not offer_label:
+                    return "Seleziona un'offerta", "", ""
+                try:
+                    offer_id = int(str(offer_label).split(" · ")[0])
+                except Exception:
+                    return "Seleziona un'offerta", "", ""
+                items = [{"offer_id": offer_id, "qty": 1}]
+            # Call API
             try:
-                offer_id = int(str(offer_label).split(" · ")[0])
+                auth = (API_USER, API_PASS) if API_USER and API_PASS else None
+                payload = {
+                    "items": items,
+                    "customer_name": customer,
+                    "customer_contact": contact,
+                    "validity_days": int(validity),
+                    "notes": notes or None,
+                }
+                r = httpx.post(f"{API_BASE}/quote", json=payload, auth=auth, timeout=15)
+                if r.status_code == 200:
+                    data = r.json()
+                    return (
+                        data.get("html_path", ""),
+                        data.get("pdf_path") or "",
+                        data.get("file_url") or "",
+                    )
             except Exception:
+                pass
+            # Fallback to local single selection only
+            if not items:
                 return "Seleziona un'offerta", "", ""
-            return _create_quote(offer_id, customer, contact, validity, notes)
+            first = items[0]
+            return _create_quote(
+                int(first["offer_id"]), customer, contact, validity, notes
+            )
 
         quote_btn.click(
             _on_quote,
-            inputs=[offer_select, customer, contact, validity, notes],
+            inputs=[offer_select, customer, contact, validity, notes, cart_state],
             outputs=[html_out, pdf_out, file_url],
         )
 

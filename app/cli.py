@@ -165,12 +165,13 @@ def search_cli(
 @app.command()
 def quote_cli(
     offer_id: int = typer.Option(..., autocompletion=_offer_id_completions),
+    qty: int = typer.Option(1, min=1),
     customer_name: str = typer.Option(...),
     customer_contact: str = typer.Option(...),
     validity_days: int = typer.Option(7),
     notes: str | None = typer.Option(None),
 ) -> None:
-    """Render a quote for an existing offer and print artifact paths."""
+    """Render a quote for an existing offer (single-line) and print artifact paths."""
     with SessionLocal() as db:
         offer = db.get(SupplierOffer, offer_id)
         if offer is None:
@@ -182,15 +183,18 @@ def quote_cli(
             "customer_contact": customer_contact,
             "validity_days": validity_days,
             "notes": notes,
-            "item": {
-                "brand": product.brand,
-                "mpn": product.mpn,
-                "name": product.name,
-                "supplier": offer.supplier,
-                "price": offer.price,
-                "in_stock": offer.in_stock,
-                "lead_time_days": offer.lead_time_days,
-            },
+            "items": [
+                {
+                    "brand": product.brand,
+                    "mpn": product.mpn,
+                    "name": product.name,
+                    "supplier": offer.supplier,
+                    "price": offer.price,
+                    "qty": int(qty),
+                    "in_stock": offer.in_stock,
+                    "lead_time_days": offer.lead_time_days,
+                }
+            ],
         }
         html_path, pdf_path = render_quote(context)
         db.add(

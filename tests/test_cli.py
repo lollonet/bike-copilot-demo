@@ -69,6 +69,8 @@ def test_quote_cli(runner: CliRunner, tmp_path: Path) -> None:
             "quote-cli",
             "--offer-id",
             "1",
+            "--qty",
+            "2",
             "--customer-name",
             "Mario",
             "--customer-contact",
