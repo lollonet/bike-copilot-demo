@@ -5,7 +5,6 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from sqlalchemy import select
-from sqlalchemy.orm import Session
 
 from .models import PriceHistory, Product, SupplierOffer, SessionLocal, create_all
 from .types import OfferInput, ProductInput
@@ -25,12 +24,10 @@ class IngestStats:
     offers_skipped: int = 0
 
 
-
-
 def upsert(core: list[ProductInput], offers: list[OfferInput]) -> IngestStats:
     create_all()
     stats = IngestStats()
-    with SessionLocal() as db:  # type: Session
+    with SessionLocal() as db:
         # Products
         for p in core:
             # Prefer EAN; fallback to brand+mpn exact match
@@ -39,7 +36,9 @@ def upsert(core: list[ProductInput], offers: list[OfferInput]) -> IngestStats:
                 existing = db.scalar(select(Product).where(Product.ean == p.ean))
             if existing is None:
                 existing = db.scalar(
-                    select(Product).where(Product.brand == p.brand, Product.mpn == p.mpn)
+                    select(Product).where(
+                        Product.brand == p.brand, Product.mpn == p.mpn
+                    )
                 )
             if existing is None:
                 obj = Product(
@@ -77,7 +76,9 @@ def upsert(core: list[ProductInput], offers: list[OfferInput]) -> IngestStats:
 
         # Offers
         for o in offers:
-            product = db.scalar(select(Product).where(Product.brand == o.brand, Product.mpn == o.mpn))
+            product = db.scalar(
+                select(Product).where(Product.brand == o.brand, Product.mpn == o.mpn)
+            )
             if not product:
                 stats = IngestStats(
                     products_new=stats.products_new,
@@ -87,12 +88,13 @@ def upsert(core: list[ProductInput], offers: list[OfferInput]) -> IngestStats:
                 )
                 continue
 
-            existing = db.scalar(
+            offer_existing = db.scalar(
                 select(SupplierOffer).where(
-                    SupplierOffer.product_id == product.id, SupplierOffer.supplier == o.supplier
+                    SupplierOffer.product_id == product.id,
+                    SupplierOffer.supplier == o.supplier,
                 )
             )
-            if existing is None:
+            if offer_existing is None:
                 offer = SupplierOffer(
                     product_id=product.id,
                     supplier=o.supplier,
@@ -103,11 +105,15 @@ def upsert(core: list[ProductInput], offers: list[OfferInput]) -> IngestStats:
                 db.add(offer)
             else:
                 # Price history on change
-                if existing.price != o.price:
-                    db.add(PriceHistory(offer_id=existing.id, price=o.price, source_hash=None))
-                existing.price = o.price
-                existing.in_stock = o.in_stock
-                existing.lead_time_days = o.lead_time_days
+                if offer_existing.price != o.price:
+                    db.add(
+                        PriceHistory(
+                            offer_id=offer_existing.id, price=o.price, source_hash=None
+                        )
+                    )
+                offer_existing.price = o.price
+                offer_existing.in_stock = o.in_stock
+                offer_existing.lead_time_days = o.lead_time_days
             stats = IngestStats(
                 products_new=stats.products_new,
                 products_updated=stats.products_updated,

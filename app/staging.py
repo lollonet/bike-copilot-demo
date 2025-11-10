@@ -4,9 +4,8 @@ import hashlib
 from pathlib import Path
 from typing import Final
 
-from sqlalchemy.orm import Session
 
-from .models import RawIngest, SessionLocal
+from .models import RawIngest, SessionLocal, create_all
 
 
 HASH_CHUNK: Final[int] = 1024 * 64
@@ -25,10 +24,16 @@ def _sha256_path(path: Path) -> str:
 
 def stage_file(provider: str, kind: str, path: Path) -> RawIngest:
     digest = _sha256_path(path)
-    with SessionLocal() as db:  # type: Session
-        entry = RawIngest(provider=provider, kind=kind, uri=str(path), content_hash=digest, stored_path=str(path))
+    create_all()
+    with SessionLocal() as db:
+        entry = RawIngest(
+            provider=provider,
+            kind=kind,
+            uri=str(path),
+            content_hash=digest,
+            stored_path=str(path),
+        )
         db.add(entry)
         db.commit()
         db.refresh(entry)
         return entry
-

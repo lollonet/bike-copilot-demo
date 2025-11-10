@@ -28,7 +28,7 @@ Environment
 - Key vars: `APP_DB_URL`, `APP_OUT_DIR`, `APP_VAT`, `APP_BASIC_USER`, `APP_BASIC_PASS`.
 
 Health
-- `GET /health` → `{status:'ok', db:true, pdfkit:<bool>, version:'<x.y.z>'}`
+- `GET /health` → `{status:'ok', db:true, pdfkit:<bool>, version:'<x.y.z>'}`; responses include `X-Trace-Id` header.
 
 CLI Autocomplete
 - Show script: `uv run python -m app.cli --show-completion`
@@ -46,9 +46,16 @@ PDF Ingest
 - Example: `uv run python -m app.ingest_pdf --pdf /path/to/catalog.pdf --mapping providers/example.yaml --provider ExamplePDF`
 - Provide a mapping YAML that defines column → canonical field.
 
+Web Ingest (HTML mapping)
+- Example: `uv run python -m app.cli fetch-web --html providers/html/example.html --mapping providers/web-example.yaml`
+- Mapping YAML defines CSS selectors for `root`, `brand`, `mpn`, `name`, `price` (and optional `in_stock`, `lead_time_days`).
+
 Security
 - Basic Auth guards `/quote`, `/kpi/*`, and `/files/*` when `APP_BASIC_USER` and `APP_BASIC_PASS` are set.
 - `/files/*` serves only `.html` and `.pdf` from `APP_OUT_DIR`.
+
+Quote customization
+- Optional env: `APP_SHOP_NAME`, `APP_SHOP_ADDRESS`, `APP_SHOP_CONTACT`, `APP_SHOP_LOGO` (path/URL) for header in the PDF/HTML.
 
 Systemd (example)
 - Service file: `deploy/bike-copilot.service` (uses `EnvironmentFile=/etc/default/bike-copilot-demo`).

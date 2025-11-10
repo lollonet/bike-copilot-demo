@@ -1,0 +1,9 @@
+supplier: WebDemo
+root: "table#offers tbody tr"
+brand: "td.brand"
+mpn: "td.mpn"
+name: "td.name"
+price: "td.price"
+in_stock: "td.stock"
+lead_time_days: "td.lead"
+

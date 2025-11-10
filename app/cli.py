@@ -1,9 +1,6 @@
 from __future__ import annotations
 
-import json
-import os
 from pathlib import Path
-from typing import Iterable
 
 import rich
 import typer
@@ -11,9 +8,9 @@ from rich.table import Table
 
 from .adapters.csv_adapter import parse_offers_csv, parse_products_csv
 from .adapters.pdf_adapter import extract_from_pdf
-from .config import settings
+from .adapters.web_adapter import parse_file as parse_web_file
 from .ingest import IngestStats, upsert
-from .models import EventLog, Product, SessionLocal, SupplierOffer, create_all
+from .models import EventLog, SessionLocal, SupplierOffer, create_all
 from .quote import render_quote
 from .search import search
 from .types import Brake, Freehub, QuoteResponse, Rotor, SearchRequest
@@ -26,11 +23,16 @@ def _offer_id_completions(incomplete: str) -> list[str]:
     create_all()
     with SessionLocal() as db:
         rows: list[tuple[int, str, str, str, float]] = [
-            (o.id, o.product.brand, o.product.mpn, o.supplier, float(o.price)) for o in db.query(SupplierOffer).all()
+            (o.id, o.product.brand, o.product.mpn, o.supplier, float(o.price))
+            for o in db.query(SupplierOffer).all()
         ]
     # complete by id prefix
     inc = incomplete.strip()
-    values = [str(r[0]) for r in rows if str(r[0]).startswith(inc)] if inc else [str(r[0]) for r in rows]
+    values = (
+        [str(r[0]) for r in rows if str(r[0]).startswith(inc)]
+        if inc
+        else [str(r[0]) for r in rows]
+    )
     return values[:50]
 
 
@@ -42,8 +44,22 @@ def _init() -> None:
 
 @app.command("ingest-csv")
 def ingest_csv(
-    products: Path = typer.Option(..., exists=True, file_okay=True, dir_okay=False, readable=True, help="products.csv"),
-    offers: Path = typer.Option(..., exists=True, file_okay=True, dir_okay=False, readable=True, help="offers.csv"),
+    products: Path = typer.Option(
+        ...,
+        exists=True,
+        file_okay=True,
+        dir_okay=False,
+        readable=True,
+        help="products.csv",
+    ),
+    offers: Path = typer.Option(
+        ...,
+        exists=True,
+        file_okay=True,
+        dir_okay=False,
+        readable=True,
+        help="offers.csv",
+    ),
 ) -> None:
     """Ingest demo CSVs with staging and upsert."""
     ps = parse_products_csv(products)
@@ -54,12 +70,31 @@ def ingest_csv(
 
 @app.command("ingest-pdf")
 def ingest_pdf(
-    pdf: Path = typer.Option(..., exists=True, file_okay=True, dir_okay=False, readable=True),
-    mapping: Path | None = typer.Option(None, exists=False, help="Provider mapping YAML"),
+    pdf: Path = typer.Option(
+        ..., exists=True, file_okay=True, dir_okay=False, readable=True
+    ),
+    mapping: Path | None = typer.Option(
+        None, exists=False, help="Provider mapping YAML"
+    ),
     provider: str = typer.Option("PDFProvider"),
 ) -> None:
     """Extract tables from PDF and upsert using a mapping file."""
     products, offers = extract_from_pdf(pdf, mapping)
+    stats: IngestStats = upsert(products, offers)
+    rich.print(stats)
+
+
+@app.command("fetch-web")
+def fetch_web(
+    html: Path = typer.Option(
+        ..., exists=True, file_okay=True, dir_okay=False, readable=True
+    ),
+    mapping: Path = typer.Option(
+        ..., exists=True, file_okay=True, dir_okay=False, readable=True
+    ),
+) -> None:
+    """Parse a local HTML file with a mapping YAML and upsert results."""
+    products, offers = parse_web_file(html, mapping)
     stats: IngestStats = upsert(products, offers)
     rich.print(stats)
 
@@ -86,11 +121,27 @@ def search_cli(
     )
     res = search(req)
     table = Table(title="Top 3 Offers")
-    for col in ("offer_id", "brand", "mpn", "supplier", "price", "stock", "lead", "score"):
+    for col in (
+        "offer_id",
+        "brand",
+        "mpn",
+        "supplier",
+        "price",
+        "stock",
+        "lead",
+        "score",
+    ):
         table.add_column(col)
     for it in res.items:
         table.add_row(
-            str(it.id), it.brand, it.mpn, it.supplier, f"{it.price:.2f}", "yes" if it.in_stock else "no", str(it.lead_time_days or "-"), f"{it.score:.3f}"
+            str(it.id),
+            it.brand,
+            it.mpn,
+            it.supplier,
+            f"{it.price:.2f}",
+            "yes" if it.in_stock else "no",
+            str(it.lead_time_days or "-"),
+            f"{it.score:.3f}",
         )
     rich.print(table)
 
@@ -126,9 +177,18 @@ def quote_cli(
             },
         }
         html_path, pdf_path = render_quote(context)
-        db.add(EventLog(type="quote_created", payload={"offer_id": offer.id, "cli": True, "pdf": bool(pdf_path)}))
+        db.add(
+            EventLog(
+                type="quote_created",
+                payload={"offer_id": offer.id, "cli": True, "pdf": bool(pdf_path)},
+            )
+        )
         db.commit()
-        out = QuoteResponse(content_type="application/pdf" if pdf_path else "text/html", html_path=html_path, pdf_path=pdf_path)
+        out = QuoteResponse(
+            content_type="application/pdf" if pdf_path else "text/html",
+            html_path=html_path,
+            pdf_path=pdf_path,
+        )
         rich.print(out.model_dump())
 
 
@@ -137,7 +197,12 @@ def health() -> None:
     from shutil import which
     from . import __version__
 
-    info = {"status": "ok", "db": True, "pdfkit": bool(which("wkhtmltopdf")), "version": __version__}
+    info = {
+        "status": "ok",
+        "db": True,
+        "pdfkit": bool(which("wkhtmltopdf")),
+        "version": __version__,
+    }
     rich.print(info)
 
 
@@ -162,4 +227,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

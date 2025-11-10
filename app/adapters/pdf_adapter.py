@@ -10,7 +10,9 @@ import yaml
 from ..types import OfferInput, ProductInput
 
 
-def extract_from_pdf(path: Path, mapping_yaml: Path | None = None) -> tuple[list[ProductInput], list[OfferInput]]:
+def extract_from_pdf(
+    path: Path, mapping_yaml: Path | None = None
+) -> tuple[list[ProductInput], list[OfferInput]]:
     mapping: dict[str, Any] = {}
     if mapping_yaml and mapping_yaml.exists():
         mapping = yaml.safe_load(mapping_yaml.read_text(encoding="utf-8")) or {}
@@ -26,7 +28,8 @@ def extract_from_pdf(path: Path, mapping_yaml: Path | None = None) -> tuple[list
             for tbl in tbls:
                 if not tbl or not tbl[0]:
                     continue
-                df = pd.DataFrame(tbl[1:], columns=tbl[0])
+                cols = [str(c) if c is not None else "" for c in tbl[0]]
+                df = pd.DataFrame(tbl[1:], columns=pd.Index(cols))
                 frames.append(df)
 
     if not frames:
@@ -66,7 +69,17 @@ def extract_from_pdf(path: Path, mapping_yaml: Path | None = None) -> tuple[list
             continue
         # Product row
         products.append(
-            ProductInput(brand=brand, mpn=mpn, ean=None, name=name or f"{brand} {mpn}", speed=None, brake=None, axle=None, rotor=None, freehub=None)
+            ProductInput(
+                brand=brand,
+                mpn=mpn,
+                ean=None,
+                name=name or f"{brand} {mpn}",
+                speed=None,
+                brake=None,
+                axle=None,
+                rotor=None,
+                freehub=None,
+            )
         )
         # Offer row
         price_val = r.get(price_c)

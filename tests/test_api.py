@@ -31,7 +31,15 @@ def _seed_db():
         db.add(p)
         db.commit()
         db.refresh(p)
-        db.add(SupplierOffer(product_id=p.id, supplier="S", price=10.0, in_stock=True, lead_time_days=2))
+        db.add(
+            SupplierOffer(
+                product_id=p.id,
+                supplier="S",
+                price=10.0,
+                in_stock=True,
+                lead_time_days=2,
+            )
+        )
         db.commit()
 
 
@@ -55,10 +63,13 @@ def test_health(client: TestClient) -> None:
     data = r.json()
     assert data.get("status") == "ok"
     assert "version" in data
+    assert r.headers.get("X-Trace-Id")
 
 
 def test_quote_requires_auth(client: TestClient) -> None:
-    r = client.post("/quote", json={"offer_id": 1, "customer_name": "A", "customer_contact": "B"})
+    r = client.post(
+        "/quote", json={"offer_id": 1, "customer_name": "A", "customer_contact": "B"}
+    )
     assert r.status_code in (401, 403)
 
 
@@ -67,7 +78,12 @@ def test_quote_and_files(client: TestClient) -> None:
     r = client.post(
         "/quote",
         auth=auth,
-        json={"offer_id": 1, "customer_name": "A", "customer_contact": "B", "validity_days": 7},
+        json={
+            "offer_id": 1,
+            "customer_name": "A",
+            "customer_contact": "B",
+            "validity_days": 7,
+        },
     )
     assert r.status_code == 200
     data = r.json()
@@ -81,4 +97,3 @@ def test_quote_and_files(client: TestClient) -> None:
     # Block non-allowed extension
     fr2 = client.get("/files/README.md", auth=auth)
     assert fr2.status_code == 404
-

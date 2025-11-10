@@ -5,17 +5,18 @@ from shutil import which
 
 import secrets
 
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException, Request
+from typing import Mapping
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from fastapi.responses import FileResponse
 from sqlalchemy import select
-from sqlalchemy.orm import Session
 
 from .config import settings
 from .models import EventLog, SessionLocal, SupplierOffer, create_all
 from .quote import render_quote
 from .search import search
 from .types import Problem, QuoteRequest, QuoteResponse, SearchRequest, SearchResponse
+from .logging_utils import log_event
 
 
 app = FastAPI(title="Bike Copilot Demo")
@@ -26,27 +27,58 @@ _basic = HTTPBasic()
 def require_auth(creds: HTTPBasicCredentials = Depends(_basic)) -> None:
     # If creds configured, enforce; otherwise allow (demo default)
     if settings.basic_user and settings.basic_pass:
-        if not (secrets.compare_digest(creds.username, settings.basic_user) and secrets.compare_digest(creds.password, settings.basic_pass)):
+        if not (
+            secrets.compare_digest(creds.username, settings.basic_user)
+            and secrets.compare_digest(creds.password, settings.basic_pass)
+        ):
             raise HTTPException(status_code=401, detail="Unauthorized")
     else:
         # Auth disabled; do nothing
         return
 
 
+@app.middleware("http")
+async def attach_trace_id(request: Request, call_next):
+    import uuid
+
+    trace_id = request.headers.get("x-trace-id") or uuid.uuid4().hex
+    request.state.trace_id = trace_id
+    response = await call_next(request)
+    response.headers["X-Trace-Id"] = trace_id
+    return response
+
+
 @app.get("/health")
-def health() -> dict[str, object]:
+def health(request: Request) -> Mapping[str, object]:
     # Ensure DB exists and report environment
     create_all()
     db_ok = True
     pdfkit_ok = bool(which("wkhtmltopdf"))
     from . import __version__
 
-    return {"status": "ok", "db": db_ok, "pdfkit": pdfkit_ok, "version": __version__}
+    payload = {"status": "ok", "db": db_ok, "pdfkit": pdfkit_ok, "version": __version__}
+    log_event(
+        "INFO",
+        op="health",
+        kind="status",
+        message="health ok",
+        trace_id=getattr(request.state, "trace_id", None),
+    )
+    return payload
 
 
 @app.post("/search", response_model=SearchResponse, responses={400: {"model": Problem}})
-def api_search(req: SearchRequest) -> SearchResponse:
-    return search(req)
+def api_search(req: SearchRequest, request: Request) -> SearchResponse:
+    res = search(req)
+    log_event(
+        "INFO",
+        op="search",
+        kind="api",
+        message="search completed",
+        trace_id=getattr(request.state, "trace_id", None),
+        extra={"results": len(res.items)},
+    )
+    return res
 
 
 @app.get("/files/{name:path}")
@@ -62,12 +94,19 @@ def serve_file(name: str, _: None = Depends(require_auth)) -> FileResponse:
 
 
 @app.post("/quote", response_model=QuoteResponse, responses={400: {"model": Problem}})
-def api_quote(req: QuoteRequest, _: None = Depends(require_auth)) -> QuoteResponse:
+def api_quote(
+    req: QuoteRequest, request: Request, _: None = Depends(require_auth)
+) -> QuoteResponse:
     create_all()
-    with SessionLocal() as db:  # type: Session
+    with SessionLocal() as db:
         offer = db.scalar(select(SupplierOffer).where(SupplierOffer.id == req.offer_id))
         if not offer:
-            raise HTTPException(status_code=400, detail=Problem(kind="not_found", message="offer_id not found").model_dump())
+            raise HTTPException(
+                status_code=400,
+                detail=Problem(
+                    kind="not_found", message="offer_id not found"
+                ).model_dump(),
+            )
         product = offer.product
         context = {
             "customer_name": req.customer_name,
@@ -101,6 +140,14 @@ def api_quote(req: QuoteRequest, _: None = Depends(require_auth)) -> QuoteRespon
             )
         )
         db.commit()
+        log_event(
+            "INFO",
+            op="quote",
+            kind="api",
+            message="quote created",
+            trace_id=getattr(request.state, "trace_id", None),
+            extra={"offer_id": offer.id, "pdf": bool(pdf_path)},
+        )
         return QuoteResponse(
             content_type="application/pdf" if pdf_path else "text/html",
             html_path=html_path,
@@ -109,13 +156,21 @@ def api_quote(req: QuoteRequest, _: None = Depends(require_auth)) -> QuoteRespon
 
 
 @app.get("/kpi/today")
-def kpi_today(_: None = Depends(require_auth)) -> dict[str, int]:
+def kpi_today(request: Request, _: None = Depends(require_auth)) -> dict[str, int]:
     create_all()
     now = datetime.now(timezone.utc)
     start = datetime(year=now.year, month=now.month, day=now.day, tzinfo=timezone.utc)
-    with SessionLocal() as db:  # type: Session
+    with SessionLocal() as db:
         rows = db.scalars(select(EventLog.type).where(EventLog.ts >= start)).all()
         counts: dict[str, int] = {}
         for t in rows:
             counts[t] = counts.get(t, 0) + 1
+        log_event(
+            "INFO",
+            op="kpi",
+            kind="api",
+            message="kpi today",
+            trace_id=getattr(request.state, "trace_id", None),
+            extra={"counts": counts},
+        )
         return counts

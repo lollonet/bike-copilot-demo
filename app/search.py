@@ -1,12 +1,8 @@
 from __future__ import annotations
 
-import math
-from pathlib import Path
-from typing import Any
 
 import yaml
-from sqlalchemy import func, select
-from sqlalchemy.orm import Session
+from sqlalchemy import select
 
 from .config import settings
 from .models import EventLog, Product, SessionLocal, SupplierOffer
@@ -19,7 +15,9 @@ def _load_synonyms() -> dict[str, dict[str, list[str]]]:
     return data
 
 
-def apply_synonyms(value: str | None, category: str, synonyms: dict[str, dict[str, list[str]]]) -> str | None:
+def apply_synonyms(
+    value: str | None, category: str, synonyms: dict[str, dict[str, list[str]]]
+) -> str | None:
     if value is None:
         return None
     v = str(value).strip().lower()
@@ -31,7 +29,9 @@ def apply_synonyms(value: str | None, category: str, synonyms: dict[str, dict[st
     return value
 
 
-def compatibility_score(req: SearchRequest, product: Product, synonyms: dict[str, dict[str, list[str]]]) -> tuple[int, list[str], list[str]]:
+def compatibility_score(
+    req: SearchRequest, product: Product, synonyms: dict[str, dict[str, list[str]]]
+) -> tuple[int, list[str], list[str]]:
     score = 0
     pros: list[str] = []
     cons: list[str] = []
@@ -67,7 +67,7 @@ def final_score(offer: SupplierOffer, comp_score: int, min_price: float) -> floa
 
 def search(request: SearchRequest) -> SearchResponse:
     synonyms = _load_synonyms()
-    with SessionLocal() as db:  # type: Session
+    with SessionLocal() as db:
         q = select(Product)
         products = db.scalars(q).all()
 
@@ -75,15 +75,25 @@ def search(request: SearchRequest) -> SearchResponse:
         filtered: list[Product] = []
         for p in products:
             ok = True
-            if request.speed and apply_synonyms(request.speed, "speed", synonyms) != apply_synonyms(p.speed, "speed", synonyms):
+            if request.speed and apply_synonyms(
+                request.speed, "speed", synonyms
+            ) != apply_synonyms(p.speed, "speed", synonyms):
                 ok = False
-            if request.freehub and apply_synonyms(request.freehub.value, "freehub", synonyms) != apply_synonyms(p.freehub, "freehub", synonyms):
+            if request.freehub and apply_synonyms(
+                request.freehub.value, "freehub", synonyms
+            ) != apply_synonyms(p.freehub, "freehub", synonyms):
                 ok = False
-            if request.brake and apply_synonyms(request.brake.value, "brake", synonyms) != apply_synonyms(p.brake, "brake", synonyms):
+            if request.brake and apply_synonyms(
+                request.brake.value, "brake", synonyms
+            ) != apply_synonyms(p.brake, "brake", synonyms):
                 ok = False
-            if request.axle and apply_synonyms(request.axle, "axle", synonyms) != apply_synonyms(p.axle, "axle", synonyms):
+            if request.axle and apply_synonyms(
+                request.axle, "axle", synonyms
+            ) != apply_synonyms(p.axle, "axle", synonyms):
                 ok = False
-            if request.rotor and apply_synonyms(request.rotor.value, "rotor", synonyms) != apply_synonyms(p.rotor, "rotor", synonyms):
+            if request.rotor and apply_synonyms(
+                request.rotor.value, "rotor", synonyms
+            ) != apply_synonyms(p.rotor, "rotor", synonyms):
                 ok = False
             if ok:
                 filtered.append(p)
@@ -128,7 +138,9 @@ def search(request: SearchRequest) -> SearchResponse:
                     payload={
                         "filters": {
                             "speed": request.speed,
-                            "freehub": request.freehub.value if request.freehub else None,
+                            "freehub": request.freehub.value
+                            if request.freehub
+                            else None,
                             "brake": request.brake.value if request.brake else None,
                             "axle": request.axle,
                             "rotor": request.rotor.value if request.rotor else None,

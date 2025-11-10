@@ -8,7 +8,15 @@ from .quote import render_quote
 from .models import EventLog, SessionLocal, SupplierOffer
 
 
-def _do_search(query: str, speed: str, freehub: str, brake: str, axle: str, rotor: str, budget: float | None):
+def _do_search(
+    query: str,
+    speed: str,
+    freehub: str,
+    brake: str,
+    axle: str,
+    rotor: str,
+    budget: float | None,
+):
     req = SearchRequest(
         query_text=query or None,
         speed=(speed or None),
@@ -35,7 +43,9 @@ def _do_search(query: str, speed: str, freehub: str, brake: str, axle: str, roto
     return rows
 
 
-def _create_quote(offer_id: int, customer: str, contact: str, validity: int, notes: str):
+def _create_quote(
+    offer_id: int, customer: str, contact: str, validity: int, notes: str
+):
     with SessionLocal() as db:
         offer = db.get(SupplierOffer, int(offer_id))
         if offer is None:
@@ -57,25 +67,44 @@ def _create_quote(offer_id: int, customer: str, contact: str, validity: int, not
             },
         }
         html_path, pdf_path = render_quote(context)
-        db.add(EventLog(type="quote_created", payload={"offer_id": offer.id, "ui": True, "pdf": bool(pdf_path)}))
+        db.add(
+            EventLog(
+                type="quote_created",
+                payload={"offer_id": offer.id, "ui": True, "pdf": bool(pdf_path)},
+            )
+        )
         db.commit()
         return html_path, (pdf_path or "")
 
 
-def build_interface() -> gr.Interface:
+def build_interface() -> gr.Blocks:
     with gr.Blocks() as demo:
         gr.Markdown("# Bike Copilot Demo – Lite UI")
         with gr.Row():
             query = gr.Textbox(label="Testo libero (opzionale)")
         with gr.Row():
             speed = gr.Textbox(label="Velocità (es. 11 o 12)")
-            freehub = gr.Dropdown(choices=["", "HG", "XD", "MS"], value="", label="Freehub")
+            freehub = gr.Dropdown(
+                choices=["", "HG", "XD", "MS"], value="", label="Freehub"
+            )
             brake = gr.Dropdown(choices=["", "disc"], value="", label="Freno")
             axle = gr.Textbox(label="Axle (es. 12x148)")
             rotor = gr.Dropdown(choices=["", "CL", "6B"], value="", label="Rotore")
             budget = gr.Number(label="Budget max", value=None)
         search_btn = gr.Button("Cerca")
-        results = gr.Dataframe(headers=["offer_id", "brand", "mpn", "supplier", "price", "stock", "lead", "score"], interactive=False)
+        results = gr.Dataframe(
+            headers=[
+                "offer_id",
+                "brand",
+                "mpn",
+                "supplier",
+                "price",
+                "stock",
+                "lead",
+                "score",
+            ],
+            interactive=False,
+        )
 
         with gr.Row():
             offer_id = gr.Number(label="offer_id")
@@ -87,8 +116,16 @@ def build_interface() -> gr.Interface:
         html_out = gr.Textbox(label="HTML path", interactive=False)
         pdf_out = gr.Textbox(label="PDF path (se disponibile)", interactive=False)
 
-        search_btn.click(_do_search, inputs=[query, speed, freehub, brake, axle, rotor, budget], outputs=results)
-        quote_btn.click(_create_quote, inputs=[offer_id, customer, contact, validity, notes], outputs=[html_out, pdf_out])
+        search_btn.click(
+            _do_search,
+            inputs=[query, speed, freehub, brake, axle, rotor, budget],
+            outputs=results,
+        )
+        quote_btn.click(
+            _create_quote,
+            inputs=[offer_id, customer, contact, validity, notes],
+            outputs=[html_out, pdf_out],
+        )
     return demo
 
 

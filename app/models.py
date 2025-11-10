@@ -15,7 +15,13 @@ from sqlalchemy import (
     create_engine,
     event,
 )
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship, sessionmaker
+from sqlalchemy.orm import (
+    DeclarativeBase,
+    Mapped,
+    mapped_column,
+    relationship,
+    sessionmaker,
+)
 
 from .config import settings
 
@@ -28,6 +34,7 @@ def get_engine():
     engine = create_engine(settings.db_url, echo=False, future=True)
 
     if settings.db_url.startswith("sqlite"):
+
         @event.listens_for(engine, "connect")
         def _set_sqlite_pragma(dbapi_connection, connection_record):  # type: ignore[no-redef]
             cursor = dbapi_connection.cursor()
@@ -38,7 +45,9 @@ def get_engine():
     return engine
 
 
-SessionLocal = sessionmaker(bind=get_engine(), autoflush=False, autocommit=False, future=True)
+SessionLocal = sessionmaker(
+    bind=get_engine(), autoflush=False, autocommit=False, future=True
+)
 
 
 class Product(Base):
@@ -72,9 +81,13 @@ class SupplierOffer(Base):
     price: Mapped[float] = mapped_column(Float)
     in_stock: Mapped[bool] = mapped_column(Boolean, default=False)
     lead_time_days: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, index=True)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, index=True
+    )
     currency: Mapped[str | None] = mapped_column(String(8), nullable=True)
-    extra: Mapped[dict[str, str | int | float | bool | None] | None] = mapped_column(JSON, nullable=True)
+    extra: Mapped[dict[str, str | int | float | bool | None] | None] = mapped_column(
+        JSON, nullable=True
+    )
 
     product: Mapped[Product] = relationship(back_populates="offers")
 
@@ -89,7 +102,9 @@ class EventLog(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     ts: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, index=True)
     type: Mapped[str] = mapped_column(String(50), index=True)
-    payload: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    payload: Mapped[dict[str, str | int | float | bool | None] | None] = mapped_column(
+        JSON, nullable=True
+    )
 
 
 def create_all() -> None:
@@ -107,6 +122,7 @@ class RawIngest(Base):
     uri: Mapped[str] = mapped_column(String(500))
     content_hash: Mapped[str] = mapped_column(String(64), index=True)
     stored_path: Mapped[str] = mapped_column(String(500))
+
 
 Index("ix_raw_ingest_hash", RawIngest.content_hash)
 

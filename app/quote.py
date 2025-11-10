@@ -29,7 +29,16 @@ def render_quote(context: dict[str, Any]) -> tuple[str, str | None]:
     env = jinja2.Environment(loader=jinja2.FileSystemLoader("app/templates"))
     tmpl = env.get_template("quote.html")
     # Inject env-level defaults like VAT into the template context
-    html = tmpl.render(**{**context, "env_vat": float(os.environ.get("APP_VAT", "0"))})
+    html = tmpl.render(
+        **{
+            **context,
+            "env_vat": float(os.environ.get("APP_VAT", "0")),
+            "shop_name": os.environ.get("APP_SHOP_NAME", ""),
+            "shop_address": os.environ.get("APP_SHOP_ADDRESS", ""),
+            "shop_contact": os.environ.get("APP_SHOP_CONTACT", ""),
+            "shop_logo": os.environ.get("APP_SHOP_LOGO", ""),
+        }
+    )
     html_path.write_text(html, encoding="utf-8")
 
     # Try PDF if wkhtmltopdf is available

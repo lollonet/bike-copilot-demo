@@ -15,3 +15,5 @@ pytest
 pdfplumber
 typer
 rich
+basedpyright
+beautifulsoup4

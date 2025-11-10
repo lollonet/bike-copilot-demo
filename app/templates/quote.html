@@ -10,7 +10,17 @@
     </style>
   </head>
   <body>
-    <h1>Preventivo</h1>
+    <header style="display:flex; align-items:center; gap:16px;">
+      {% if shop_logo %}
+      <img src="{{ shop_logo }}" alt="Logo" style="max-height:64px;"/>
+      {% endif %}
+      <div>
+        <h1 style="margin:0">Preventivo</h1>
+        {% if shop_name %}<div><strong>{{ shop_name }}</strong></div>{% endif %}
+        {% if shop_address %}<div>{{ shop_address }}</div>{% endif %}
+        {% if shop_contact %}<div>{{ shop_contact }}</div>{% endif %}
+      </div>
+    </header>
     <section>
       <strong>Cliente:</strong> {{ customer_name }} — {{ customer_contact }}<br/>
       <strong>Validità:</strong> {{ validity_days }} giorni

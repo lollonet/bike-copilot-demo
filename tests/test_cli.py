@@ -29,7 +29,15 @@ def _seed_db():
         db.add(p)
         db.commit()
         db.refresh(p)
-        db.add(SupplierOffer(product_id=p.id, supplier="S", price=10.0, in_stock=True, lead_time_days=2))
+        db.add(
+            SupplierOffer(
+                product_id=p.id,
+                supplier="S",
+                price=10.0,
+                in_stock=True,
+                lead_time_days=2,
+            )
+        )
         db.commit()
 
 
@@ -69,4 +77,3 @@ def test_quote_cli(runner: CliRunner, tmp_path: Path) -> None:
     )
     assert result.exit_code == 0
     assert "html_path" in result.stdout
-
