@@ -58,6 +58,26 @@ def _to_price(s: str) -> float:
     return float(t)
 
 
+def _price_text(el) -> str:
+    """Extract a single price text from a WooCommerce container.
+
+    Prefer <ins> current price when on sale; else first .woocommerce-Price-amount.
+    Fallback to element text.
+    """
+    if el is None:
+        return ""
+    # On sale: <ins><span class="woocommerce-Price-amount">€9,90</span></ins>
+    ins_amt = el.select_one(
+        "ins .woocommerce-Price-amount, ins span.woocommerce-Price-amount"
+    )
+    if ins_amt is not None:
+        return ins_amt.get_text(strip=True)
+    amt = el.select_one(".woocommerce-Price-amount, span.amount")
+    if amt is not None:
+        return amt.get_text(strip=True)
+    return el.get_text(strip=True)
+
+
 def parse_html(
     html: str, mapping: WebMapping
 ) -> tuple[list[ProductInput], list[OfferInput]]:
@@ -69,7 +89,7 @@ def parse_html(
         brand = _text(r.select_one(mapping["brand"]))
         mpn = _text(r.select_one(mapping["mpn"]))
         name = _text(r.select_one(mapping["name"]))
-        price_s = _text(r.select_one(mapping["price"]))
+        price_s = _price_text(r.select_one(mapping["price"]))
         if not brand or not mpn or not price_s:
             continue
         in_stock = True
@@ -136,12 +156,24 @@ def parse_detail_html(
     brand = pick("brand")
     name = pick("name")
     mpn = pick("mpn")
-    price_s = pick("price")
+    price_sel = detail.get("price") or ""
+    price_el = scope.select_one(price_sel) if price_sel else None
+    price_s = _price_text(price_el)
     in_stock_s = pick("in_stock")
     lead_s = pick("lead_time_days")
 
     if not brand and name:
         brand = name.split()[0]
+
+    # Fallback: if MPN missing, try to extract from meta text (e.g., "COD: XYZ")
+    if not mpn:
+        meta_el = scope.select_one(".product_meta")
+        meta_text = meta_el.get_text(" ", strip=True) if meta_el else ""
+        import re
+
+        m = re.search(r"\bCOD[:\s]+([\w\-\./]+)", meta_text, flags=re.IGNORECASE)
+        if m:
+            mpn = m.group(1)
 
     if not brand or not mpn or not price_s:
         return None, None
