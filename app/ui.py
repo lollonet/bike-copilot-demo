@@ -226,11 +226,14 @@ def build_interface() -> gr.Blocks:
                     interactive=False,
                 )
                 cart_select = gr.Dropdown(
-                    label="Rimuovi dal carrello", choices=[], interactive=True
+                    label="Seleziona riga carrello", choices=[], interactive=True
                 )
                 with gr.Row():
+                    minus_btn = gr.Button("− Qtà")
+                    plus_btn = gr.Button("+ Qtà")
                     remove_btn = gr.Button("Rimuovi selezionato")
                     clear_cart_btn = gr.Button("Svuota carrello")
+                totals_md = gr.Markdown(visible=True)
                 gr.Markdown("### Preventivo")
                 with gr.Row():
                     customer = gr.Textbox(
@@ -347,6 +350,21 @@ def build_interface() -> gr.Blocks:
                 labels.append(f"{oid} · {info.get('brand', '')} {info.get('mpn', '')}")
             return rows, labels
 
+        def _cart_totals(cart: dict[int, dict[str, Any]]):
+            subtotal = 0.0
+            for info in cart.values():
+                qty = int(info.get("qty", 1))
+                price = float(info.get("price", 0.0))
+                subtotal += price * qty
+            vat_rate = float(os.environ.get("APP_VAT", "0") or 0)
+            vat = subtotal * vat_rate
+            total = subtotal + vat
+            return subtotal, vat_rate, vat, total
+
+        def _totals_md(cart: dict[int, dict[str, Any]]):
+            subtotal, vat_rate, vat, total = _cart_totals(cart)
+            return f"**Subtotale:** €{subtotal:.2f} &nbsp;&nbsp; **IVA ({vat_rate * 100:.0f}%):** €{vat:.2f} &nbsp;&nbsp; **Totale:** €{total:.2f}"
+
         def _on_add(
             offer_label: str | None,
             qty: float | int,
@@ -371,37 +389,78 @@ def build_interface() -> gr.Blocks:
                 rows,
                 cart,
                 gr.update(choices=labels, value=(labels[-1] if labels else None)),
+                _totals_md(cart),
             )
 
         add_btn.click(
             _on_add,
             inputs=[offer_select, qty_input, results_state, cart_state],
-            outputs=[cart_table, cart_state, cart_select],
+            outputs=[cart_table, cart_state, cart_select, totals_md],
         )
 
         def _on_remove(cart_label: str | None, cart: dict[int, dict[str, Any]]):
             if not cart_label:
-                return gr.update(), cart, gr.update()
+                return gr.update(), cart, gr.update(), _totals_md(cart)
             try:
                 offer_id = int(str(cart_label).split(" · ")[0])
             except Exception:
-                return gr.update(), cart, gr.update()
+                return gr.update(), cart, gr.update(), _totals_md(cart)
             if offer_id in cart:
                 cart.pop(offer_id)
             rows, labels = _cart_rows(cart)
-            return rows, cart, gr.update(choices=labels, value=None)
+            return rows, cart, gr.update(choices=labels, value=None), _totals_md(cart)
 
         remove_btn.click(
             _on_remove,
             inputs=[cart_select, cart_state],
-            outputs=[cart_table, cart_state, cart_select],
+            outputs=[cart_table, cart_state, cart_select, totals_md],
         )
 
         def _on_clear_cart():
-            return [], {}, gr.update(choices=[], value=None)
+            return [], {}, gr.update(choices=[], value=None), ""
 
         clear_cart_btn.click(
-            _on_clear_cart, inputs=[], outputs=[cart_table, cart_state, cart_select]
+            _on_clear_cart,
+            inputs=[],
+            outputs=[cart_table, cart_state, cart_select, totals_md],
+        )
+
+        def _on_adjust(
+            sign: str, cart_label: str | None, cart: dict[int, dict[str, Any]]
+        ):
+            if not cart_label:
+                return gr.update(), cart, gr.update(), _totals_md(cart)
+            try:
+                offer_id = int(str(cart_label).split(" · ")[0])
+            except Exception:
+                return gr.update(), cart, gr.update(), _totals_md(cart)
+            if offer_id not in cart:
+                return gr.update(), cart, gr.update(), _totals_md(cart)
+            cur = cart[offer_id]
+            qty = int(cur.get("qty", 1))
+            if sign == "+":
+                qty += 1
+            else:
+                qty = max(1, qty - 1)
+            cur["qty"] = qty
+            cart[offer_id] = cur
+            rows, labels = _cart_rows(cart)
+            return (
+                rows,
+                cart,
+                gr.update(choices=labels, value=cart_label),
+                _totals_md(cart),
+            )
+
+        plus_btn.click(
+            _on_adjust,
+            inputs=[gr.State("+"), cart_select, cart_state],
+            outputs=[cart_table, cart_state, cart_select, totals_md],
+        )
+        minus_btn.click(
+            _on_adjust,
+            inputs=[gr.State("-"), cart_select, cart_state],
+            outputs=[cart_table, cart_state, cart_select, totals_md],
         )
 
         def _render_local_cart(
