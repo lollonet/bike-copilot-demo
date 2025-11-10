@@ -293,10 +293,14 @@ def fetch_and_parse_urls(
             if next_sel:
                 soup = BeautifulSoup(html, "html.parser")
                 page_count = 1
+                current_url = seed
                 nxt = soup.select_one(next_sel)
                 while nxt is not None and page_count < max_pages:
                     href_attr = nxt.get("href") if nxt else None
-                    href = str(href_attr) if href_attr is not None else None
+                    # Normalize relative pagination links to absolute
+                    href = _abs_url(
+                        current_url, str(href_attr) if href_attr is not None else None
+                    )
                     if not href or href in seen_pages:
                         break
                     seen_pages.add(href)
@@ -305,6 +309,8 @@ def fetch_and_parse_urls(
                         html = _fetch(href)
                     except Exception:
                         break
+                    # Track current page URL for subsequent pagination joins
+                    current_url = href
                     if item_link_sel and has_detail:
                         soup = BeautifulSoup(html, "html.parser")
                         rows = soup.select(mapping["root"])  # type: ignore[index]
