@@ -404,6 +404,48 @@ def build_interface() -> gr.Blocks:
             _on_clear_cart, inputs=[], outputs=[cart_table, cart_state, cart_select]
         )
 
+        def _render_local_cart(
+            items: list[dict[str, int]],
+            customer: str,
+            contact: str,
+            validity: int,
+            notes: str,
+        ):
+            from .models import SupplierOffer
+
+            rows: list[dict[str, Any]] = []
+            with SessionLocal() as db:
+                for entry in items:
+                    oid = int(entry.get("offer_id", 0))
+                    qty = int(entry.get("qty", 1))
+                    offer = db.get(SupplierOffer, oid)
+                    if not offer:
+                        continue
+                    p = offer.product
+                    rows.append(
+                        {
+                            "brand": p.brand,
+                            "mpn": p.mpn,
+                            "name": p.name,
+                            "supplier": offer.supplier,
+                            "price": offer.price,
+                            "qty": qty,
+                            "in_stock": offer.in_stock,
+                            "lead_time_days": offer.lead_time_days,
+                        }
+                    )
+            if not rows:
+                return "Nessun elemento nel carrello", "", ""
+            ctx = {
+                "customer_name": customer,
+                "customer_contact": contact,
+                "validity_days": validity,
+                "notes": notes,
+                "items": rows,
+            }
+            html_path, pdf_path = render_quote(ctx)
+            return html_path, (pdf_path or ""), ""
+
         def _on_quote(
             offer_label: str | None,
             customer: str,
@@ -443,15 +485,11 @@ def build_interface() -> gr.Blocks:
                         data.get("pdf_path") or "",
                         data.get("file_url") or "",
                     )
+                # Fall back to local multi-line rendering on non-200
+                return _render_local_cart(items, customer, contact, validity, notes)
             except Exception:
-                pass
-            # Fallback to local single selection only
-            if not items:
-                return "Seleziona un'offerta", "", ""
-            first = items[0]
-            return _create_quote(
-                int(first["offer_id"]), customer, contact, validity, notes
-            )
+                # Robust fallback to local multi-line rendering
+                return _render_local_cart(items, customer, contact, validity, notes)
 
         quote_btn.click(
             _on_quote,
