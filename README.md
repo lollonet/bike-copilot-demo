@@ -8,24 +8,27 @@ Quick start
 Makefile targets
 - `make status` – ruff fix/format + basedpyright typecheck.
 - `make test` – run pytest with correct env/cache.
-- `make seed` – seed the full mapped catalog (100 articles) into SQLite.
+- `make seed` – seed demo CSVs (o usare CLI synth per 1000 articoli).
 - `make api` – run FastAPI on `:8000`.
 - `make ui` – run Gradio UI on `:7860`.
 - CLI help: `uv run python -m app.cli --help`.
 
-Demo script (2 minutes)
+Quick demo (2 minutes)
 - `uv pip install -r requirements.txt`
-- `cp .env.example .env` (optional: edit VAT/auth)
-- `make seed`
-- `make api` then in another shell:
-  - Search: `curl -s http://localhost:8000/search -X POST -H 'content-type: application/json' -d '{"speed":"11"}' | jq`
-  - Quote: `curl -s -u demo:demo123 http://localhost:8000/quote -X POST -H 'content-type: application/json' -d '{"offer_id":1,"customer_name":"Mario","customer_contact":"mario@example.com"}' | jq`
-  - KPI: `curl -s -u demo:demo123 http://localhost:8000/kpi/today | jq`
-  - Files (protected): `curl -I -u demo:demo123 http://localhost:8000/files/QUOTE-YYYYMMDD-HHMM.pdf`
+- `cp .env.example .env` (opzionale: imposta VAT/auth)
+- Popola dati:
+  - semplice: `make seed`
+  - catalogo reale + fornitori sintetici: `uv run python -m app.cli reset-db && uv run python -m app.cli ingest-csv-synth --csv ./catalogo_real_mtb.csv --mapping providers/csv-catalogo-mtb.yaml --suppliers 3 --coverage 0.65 --jitter 0.15`
+- `make api` e in un’altra shell `make ui`
+- UI: cerca (“borraccia”), aggiungi più offerte al carrello (Qtà +/−), crea preventivo (multi‑riga con totali). 
+- API quick check:
+  - Search: `curl -s :8000/search -H 'content-type: application/json' -d '{"query_text":"borraccia"}' | jq`
+  - Facets: `curl -s :8000/facets -H 'content-type: application/json' -d '{"query_text":"borraccia"}' | jq`
+  - Quote (multi‑item): `curl -s -u demo:demo123 :8000/quote -H 'content-type: application/json' -d '{"items":[{"offer_id":1,"qty":2},{"offer_id":2,"qty":1}],"customer_name":"Mario","customer_contact":"mario@example.com"}' | jq`
 
 Environment
-- Copy `.env.example` to `.env` and adjust as needed.
-- Key vars: `APP_DB_URL`, `APP_OUT_DIR`, `APP_VAT`, `APP_BASIC_USER`, `APP_BASIC_PASS`.
+- Copy `.env.example` to `.env` e regola se serve.
+- Variabili utili: `APP_DB_URL`, `APP_OUT_DIR`, `APP_VAT`, `APP_BASIC_USER`, `APP_BASIC_PASS`, `APP_API_BASE` (per UI → API).
 
 Health
 - `GET /health` → `{status:'ok', db:true, pdfkit:<bool>, version:'<x.y.z>'}`; responses include `X-Trace-Id` header.
@@ -36,15 +39,17 @@ CLI Autocomplete
 - After install, TAB completes commands/params; `--offer-id` dynamically completes from DB.
 
 CLI Examples
-- Ingest CSV: `uv run python -m app.cli ingest-csv --products data/demo/products.csv --offers data/demo/offers.csv`
+- Ingest base CSV: `uv run python -m app.cli ingest-csv --products data/demo/products.csv --offers data/demo/offers.csv`
+- Ingest CSV mappato: `uv run python -m app.cli ingest-csv-mapped --csv ./catalogo_real_mtb.csv --mapping providers/csv-catalogo-mtb.yaml`
+- Ingest sintetico (doppioni per fornitori): `uv run python -m app.cli ingest-csv-synth --csv ./catalogo_real_mtb.csv --mapping providers/csv-catalogo-mtb.yaml --suppliers 3 --coverage 0.65 --jitter 0.15`
 - Search: `uv run python -m app.cli search-cli --speed 11 --freehub HG`
-- Quote (with offer completion): `uv run python -m app.cli quote-cli --offer-id <TAB> --customer-name Mario --customer-contact mario@example.com`
+- Quote (con qty): `uv run python -m app.cli quote-cli --offer-id <TAB> --qty 2 --customer-name Mario --customer-contact mario@example.com`
 - UI: `uv run python -m app.cli ui`
 - API: `uv run python -m app.cli api`
 
 PDF Ingest
-- Example: `uv run python -m app.ingest_pdf --pdf /path/to/catalog.pdf --mapping providers/example.yaml --provider ExamplePDF`
-- Provide a mapping YAML that defines column → canonical field.
+- Esempio: `uv run python -m app.ingest_pdf --pdf /path/to/catalog.pdf --mapping providers/example.yaml --provider ExamplePDF`
+- Il mapping YAML definisce colonne → campi canonici.
 
 Web Ingest (HTML mapping)
 - Example: `uv run python -m app.cli fetch-web --html providers/html/example.html --mapping providers/web-example.yaml`
@@ -53,6 +58,13 @@ Web Ingest (HTML mapping)
 Security
 - Basic Auth guards `/quote`, `/kpi/*`, and `/files/*` when `APP_BASIC_USER` and `APP_BASIC_PASS` are set.
 - `/files/*` serves only `.html` and `.pdf` from `APP_OUT_DIR`.
+
+UI features
+- Ricerca per testo con token (brand/mpn/nome) + budget cap.
+- Filtri dinamici post‑ricerca (facets): Velocità, Corpetto, Freno, Rotore (Axle come info), Fornitori, Categoria; tooltip con conteggi.
+- “Solo in stock”, “Budget massimo” con info min/max da facets.
+- Carrello multi‑articolo con Qtà +/- , totali live (Subtotale/IVA/Totale).
+- Preventivo multi‑riga con PDF/HTML; `file_url` se l’API è attiva; fallback locale robusto.
 
 Quote customization
 - Optional env: `APP_SHOP_NAME`, `APP_SHOP_ADDRESS`, `APP_SHOP_CONTACT`, `APP_SHOP_LOGO` (path/URL) for header in the PDF/HTML.
