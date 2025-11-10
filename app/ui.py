@@ -5,7 +5,7 @@ import gradio as gr
 from .search import search
 from .types import Brake, Freehub, Rotor, SearchRequest
 from .quote import render_quote
-from .models import EventLog, SessionLocal
+from .models import EventLog, SessionLocal, SupplierOffer
 
 
 def _do_search(query: str, speed: str, freehub: str, brake: str, axle: str, rotor: str, budget: float | None):
@@ -36,28 +36,30 @@ def _do_search(query: str, speed: str, freehub: str, brake: str, axle: str, roto
 
 
 def _create_quote(offer_id: int, customer: str, contact: str, validity: int, notes: str):
-    # Minimal flow: get context from last search is out of scope; accept offer_id directly.
-    # Render a placeholder quote content with identifiers only.
-    context = {
-        "customer_name": customer,
-        "customer_contact": contact,
-        "validity_days": validity,
-        "notes": notes,
-        "item": {
-            "brand": "",
-            "mpn": "",
-            "name": "",
-            "supplier": f"offer:{offer_id}",
-            "price": 0.0,
-            "in_stock": True,
-            "lead_time_days": None,
-        },
-    }
-    html_path, pdf_path = render_quote(context)
     with SessionLocal() as db:
-        db.add(EventLog(type="quote_created", payload={"offer_id": offer_id, "ui": True, "pdf": bool(pdf_path)}))
+        offer = db.get(SupplierOffer, int(offer_id))
+        if offer is None:
+            return "OFFERTA NON TROVATA", ""
+        product = offer.product
+        context = {
+            "customer_name": customer,
+            "customer_contact": contact,
+            "validity_days": validity,
+            "notes": notes,
+            "item": {
+                "brand": product.brand,
+                "mpn": product.mpn,
+                "name": product.name,
+                "supplier": offer.supplier,
+                "price": offer.price,
+                "in_stock": offer.in_stock,
+                "lead_time_days": offer.lead_time_days,
+            },
+        }
+        html_path, pdf_path = render_quote(context)
+        db.add(EventLog(type="quote_created", payload={"offer_id": offer.id, "ui": True, "pdf": bool(pdf_path)}))
         db.commit()
-    return html_path, (pdf_path or "")
+        return html_path, (pdf_path or "")
 
 
 def build_interface() -> gr.Interface:
@@ -97,4 +99,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

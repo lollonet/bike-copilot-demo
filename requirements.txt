@@ -11,3 +11,4 @@ Jinja2
 pdfkit
 python-multipart
 httpx
+pytest
