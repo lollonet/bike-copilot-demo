@@ -1,0 +1,13 @@
+supplier: ExamplePDF
+columns:
+  Marca: brand
+  Codice: mpn
+  Descrizione: name
+  Prezzo: price
+brand_col: brand
+mpn_col: mpn
+name_col: name
+price_col: price
+stock_col: Disponibile
+lead_col: Giorni
+

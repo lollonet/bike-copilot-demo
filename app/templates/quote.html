@@ -10,8 +10,37 @@
     </style>
   </head>
   <body>
-    <h1>Quote</h1>
-    <p>Placeholder template. Implement later.</p>
+    <h1>Preventivo</h1>
+    <section>
+      <strong>Cliente:</strong> {{ customer_name }} — {{ customer_contact }}<br/>
+      <strong>Validità:</strong> {{ validity_days }} giorni
+    </section>
+    <hr/>
+    <table>
+      <thead>
+        <tr>
+          <th>Brand</th><th>MPN</th><th>Descrizione</th><th>Fornitore</th><th>Prezzo</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>{{ item.brand }}</td>
+          <td>{{ item.mpn }}</td>
+          <td>{{ item.name }}</td>
+          <td>{{ item.supplier }}</td>
+          <td style="text-align:right">{{ '%.2f'|format(item.price) }} €</td>
+        </tr>
+      </tbody>
+    </table>
+    {% set vat = (env_vat or 0.0) %}
+    {% set vat_amount = (item.price * vat) %}
+    {% set total = (item.price + vat_amount) %}
+    <p>
+      IVA ({{ (vat*100)|round(0) }}%): {{ '%.2f'|format(vat_amount) }} €<br/>
+      <strong>Totale:</strong> {{ '%.2f'|format(total) }} €
+    </p>
+    {% if notes %}
+    <p><em>Note:</em> {{ notes }}</p>
+    {% endif %}
   </body>
 </html>
-

@@ -7,7 +7,7 @@ from pathlib import Path
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from .models import Product, SupplierOffer, SessionLocal, create_all
+from .models import PriceHistory, Product, SupplierOffer, SessionLocal, create_all
 from .types import OfferInput, ProductInput
 from .adapters.csv_adapter import parse_offers_csv, parse_products_csv
 from .staging import stage_file
@@ -77,9 +77,7 @@ def upsert(core: list[ProductInput], offers: list[OfferInput]) -> IngestStats:
 
         # Offers
         for o in offers:
-            product = db.scalar(
-                select(Product).where(Product.brand == o.brand, Product.mpn == o.mpn)
-            )
+            product = db.scalar(select(Product).where(Product.brand == o.brand, Product.mpn == o.mpn))
             if not product:
                 stats = IngestStats(
                     products_new=stats.products_new,
@@ -88,14 +86,28 @@ def upsert(core: list[ProductInput], offers: list[OfferInput]) -> IngestStats:
                     offers_skipped=stats.offers_skipped + 1,
                 )
                 continue
-            offer = SupplierOffer(
-                product_id=product.id,
-                supplier=o.supplier,
-                price=o.price,
-                in_stock=o.in_stock,
-                lead_time_days=o.lead_time_days,
+
+            existing = db.scalar(
+                select(SupplierOffer).where(
+                    SupplierOffer.product_id == product.id, SupplierOffer.supplier == o.supplier
+                )
             )
-            db.add(offer)
+            if existing is None:
+                offer = SupplierOffer(
+                    product_id=product.id,
+                    supplier=o.supplier,
+                    price=o.price,
+                    in_stock=o.in_stock,
+                    lead_time_days=o.lead_time_days,
+                )
+                db.add(offer)
+            else:
+                # Price history on change
+                if existing.price != o.price:
+                    db.add(PriceHistory(offer_id=existing.id, price=o.price, source_hash=None))
+                existing.price = o.price
+                existing.in_stock = o.in_stock
+                existing.lead_time_days = o.lead_time_days
             stats = IngestStats(
                 products_new=stats.products_new,
                 products_updated=stats.products_updated,

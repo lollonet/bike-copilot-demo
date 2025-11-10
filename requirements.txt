@@ -12,3 +12,6 @@ pdfkit
 python-multipart
 httpx
 pytest
+pdfplumber
+typer
+rich

@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from shutil import which
 
 import secrets
 
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
-from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -33,10 +34,14 @@ def require_auth(creds: HTTPBasicCredentials = Depends(_basic)) -> None:
 
 
 @app.get("/health")
-def health() -> dict[str, str]:
-    # Ensure DB exists
+def health() -> dict[str, object]:
+    # Ensure DB exists and report environment
     create_all()
-    return {"status": "ok"}
+    db_ok = True
+    pdfkit_ok = bool(which("wkhtmltopdf"))
+    from . import __version__
+
+    return {"status": "ok", "db": db_ok, "pdfkit": pdfkit_ok, "version": __version__}
 
 
 @app.post("/search", response_model=SearchResponse, responses={400: {"model": Problem}})
@@ -44,8 +49,16 @@ def api_search(req: SearchRequest) -> SearchResponse:
     return search(req)
 
 
-# Static files for quotes
-app.mount("/files", StaticFiles(directory=settings.out_dir), name="files")
+@app.get("/files/{name:path}")
+def serve_file(name: str, _: None = Depends(require_auth)) -> FileResponse:
+    # Only serve .html or .pdf from the out directory; prevent traversal.
+    from pathlib import Path
+
+    allowed = {".html", ".pdf"}
+    p = Path(settings.out_dir) / name
+    if not p.is_file() or p.suffix.lower() not in allowed:
+        raise HTTPException(status_code=404, detail="Not found")
+    return FileResponse(str(p))
 
 
 @app.post("/quote", response_model=QuoteResponse, responses={400: {"model": Problem}})

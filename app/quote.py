@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+import os
 from pathlib import Path
 from typing import Any
 
@@ -27,7 +28,8 @@ def render_quote(context: dict[str, Any]) -> tuple[str, str | None]:
     # Render HTML
     env = jinja2.Environment(loader=jinja2.FileSystemLoader("app/templates"))
     tmpl = env.get_template("quote.html")
-    html = tmpl.render(**context)
+    # Inject env-level defaults like VAT into the template context
+    html = tmpl.render(**{**context, "env_vat": float(os.environ.get("APP_VAT", "0"))})
     html_path.write_text(html, encoding="utf-8")
 
     # Try PDF if wkhtmltopdf is available
@@ -42,4 +44,3 @@ def render_quote(context: dict[str, Any]) -> tuple[str, str | None]:
             return str(html_path), None
     else:
         return str(html_path), None
-

@@ -9,3 +9,5 @@ api:
 seed:
 	uv run python -m app.ingest --products data/demo/products.csv --offers data/demo/offers.csv
 
+ui:
+	uv run python -m app.ui

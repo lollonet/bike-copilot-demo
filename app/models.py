@@ -10,6 +10,7 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
+    UniqueConstraint,
     String,
     create_engine,
     event,
@@ -77,6 +78,10 @@ class SupplierOffer(Base):
 
     product: Mapped[Product] = relationship(back_populates="offers")
 
+    __table_args__ = (
+        UniqueConstraint("product_id", "supplier", name="uq_offer_product_supplier"),
+    )
+
 
 class EventLog(Base):
     __tablename__ = "event_log"
@@ -104,3 +109,13 @@ class RawIngest(Base):
     stored_path: Mapped[str] = mapped_column(String(500))
 
 Index("ix_raw_ingest_hash", RawIngest.content_hash)
+
+
+class PriceHistory(Base):
+    __tablename__ = "price_history"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    ts: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, index=True)
+    offer_id: Mapped[int] = mapped_column(ForeignKey("supplier_offer.id"), index=True)
+    price: Mapped[float] = mapped_column(Float)
+    source_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
