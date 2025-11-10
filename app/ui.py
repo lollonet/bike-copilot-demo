@@ -373,30 +373,44 @@ def build_interface() -> gr.Blocks:
                     category_val = category if category in category_choices else ""
 
                     thr = 0.15
+
+                    def _annotate(info: str | None, cov: float) -> str | None:
+                        if not info:
+                            return None
+                        return (
+                            f"{info} — poche specifiche nei risultati"
+                            if cov < thr
+                            else info
+                        )
+
+                    cov_speed = _coverage(f.get("speed", {}))
+                    cov_freehub = _coverage(f.get("freehub", {}))
+                    cov_brake = _coverage(f.get("brake", {}))
+                    cov_rotor = _coverage(f.get("rotor", {}))
                     speed_upd = gr.update(
                         choices=[""] + speed_choices,
                         value=speed_val,
-                        info=(speed_info or None),
-                        interactive=(_coverage(f.get("speed", {})) >= thr),
+                        info=_annotate((speed_info or None), cov_speed),
+                        interactive=(cov_speed >= thr),
                     )
                     freehub_upd = gr.update(
                         choices=[""] + freehub_choices,
                         value=freehub_val,
-                        info=(freehub_info or None),
-                        interactive=(_coverage(f.get("freehub", {})) >= thr),
+                        info=_annotate((freehub_info or None), cov_freehub),
+                        interactive=(cov_freehub >= thr),
                     )
                     brake_upd = gr.update(
                         choices=[""] + brake_choices,
                         value=brake_val,
-                        info=(brake_info or None),
-                        interactive=(_coverage(f.get("brake", {})) >= thr),
+                        info=_annotate((brake_info or None), cov_brake),
+                        interactive=(cov_brake >= thr),
                     )
                     axle_upd = gr.update(info=(axle_info or None))
                     rotor_upd = gr.update(
                         choices=[""] + rotor_choices,
                         value=rotor_val,
-                        info=(rotor_info or None),
-                        interactive=(_coverage(f.get("rotor", {})) >= thr),
+                        info=_annotate((rotor_info or None), cov_rotor),
+                        interactive=(cov_rotor >= thr),
                     )
                     suppliers_upd = gr.update(
                         choices=sorted(list(f.get("supplier", {}).keys()))
@@ -495,7 +509,6 @@ def build_interface() -> gr.Blocks:
         )
 
         for ctrl in [
-            query,
             speed,
             freehub,
             brake,
@@ -537,6 +550,38 @@ def build_interface() -> gr.Blocks:
                     budget_slider,
                 ],
             )
+
+        # Textbox does not trigger live change-search; use Enter or the button
+        query.submit(
+            _on_search,
+            inputs=[
+                query,
+                speed,
+                freehub,
+                brake,
+                axle,
+                rotor,
+                budget,
+                category,
+                suppliers,
+                in_stock,
+            ],
+            outputs=[
+                results,
+                offer_select,
+                results_state,
+                status,
+                speed,
+                freehub,
+                brake,
+                axle,
+                rotor,
+                suppliers,
+                category,
+                budget,
+                budget_slider,
+            ],
+        )
 
         def _on_clear():
             return (
