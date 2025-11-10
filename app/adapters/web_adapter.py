@@ -356,3 +356,51 @@ def build_search_urls(query: str, mapping_yaml: Path) -> list[str]:
     from urllib.parse import quote_plus
 
     return [tmpl.format(q=quote_plus(query))]
+
+
+def parse_sitemap_urls(
+    sitemap_url: str, headers: dict[str, str] | None = None, limit: int | None = None
+) -> list[str]:
+    """Parse a sitemap index or urlset and return a list of <loc> URLs.
+
+    If it's an index, fetch child sitemaps. Applies an optional limit.
+    """
+    import httpx
+    import xml.etree.ElementTree as ET
+
+    seen: set[str] = set()
+
+    def _fetch(u: str) -> str:
+        with httpx.Client(
+            timeout=10.0, headers=headers or {"User-Agent": "BikeCopilotBot/0.1"}
+        ) as client:
+            r = client.get(u)
+            r.raise_for_status()
+            return r.text
+
+    def _parse(xml_text: str) -> list[str]:
+        try:
+            root = ET.fromstring(xml_text)
+        except Exception:
+            return []
+        ns = "{http://www.sitemaps.org/schemas/sitemap/0.9}"
+        urls: list[str] = []
+        if root.tag.endswith("sitemapindex"):
+            for sm in root.findall(f"{ns}sitemap"):
+                loc = sm.findtext(f"{ns}loc") or ""
+                if loc and loc not in seen:
+                    seen.add(loc)
+                    child = _fetch(loc)
+                    urls.extend(_parse(child))
+        elif root.tag.endswith("urlset"):
+            for u in root.findall(f"{ns}url"):
+                loc = u.findtext(f"{ns}loc") or ""
+                if loc:
+                    urls.append(loc)
+        return urls
+
+    xml = _fetch(sitemap_url)
+    urls = _parse(xml)
+    if limit is not None and limit > 0:
+        return urls[:limit]
+    return urls
