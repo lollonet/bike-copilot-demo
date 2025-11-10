@@ -37,6 +37,7 @@ def _do_search(
     )
     res = search(req)
     rows = []
+    table_rows: list[list[object]] = []
     options: list[tuple[str, int]] = []
     mapping: dict[int, dict[str, Any]] = {}
     for it in res.items:
@@ -51,6 +52,18 @@ def _do_search(
             "Score": round(it.score, 3),
         }
         rows.append(row)
+        table_rows.append(
+            [
+                it.id,
+                it.brand,
+                it.mpn,
+                it.supplier,
+                round(it.price, 2),
+                "Sì" if it.in_stock else "No",
+                it.lead_time_days or "-",
+                round(it.score, 3),
+            ]
+        )
         label = f"{it.id} · {it.brand} {it.mpn} · {it.supplier} · €{it.price:.2f}"
         options.append((label, it.id))
         mapping[it.id] = {
@@ -59,7 +72,7 @@ def _do_search(
             "supplier": it.supplier,
             "price": it.price,
         }
-    return rows, options, mapping, f"Trovate {len(rows)} offerte"
+    return table_rows, options, mapping, f"Trovate {len(rows)} offerte"
 
 
 def _create_quote(
@@ -225,12 +238,11 @@ def build_interface() -> gr.Blocks:
             rows, options, mapping, msg = _do_search(
                 query, speed, freehub, brake, axle, rotor, budget
             )
+            labels = [opt[0] for opt in options]
+            default_label = labels[0] if labels else None
             return (
                 rows,
-                gr.update(
-                    choices=[opt[0] for opt in options],
-                    value=(options[0][1] if options else None),
-                ),
+                gr.update(choices=labels, value=default_label),
                 {k: v for k, v in mapping.items()},
                 msg,
             )

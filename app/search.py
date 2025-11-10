@@ -71,10 +71,18 @@ def search(request: SearchRequest) -> SearchResponse:
         q = select(Product)
         products = db.scalars(q).all()
 
-        # Pre-filter on requested fields
+        # Pre-filter on requested fields and optional text tokens
         filtered: list[Product] = []
+        qtext = (request.query_text or "").strip().lower()
+        tokens = [t for t in qtext.split() if t]
         for p in products:
             ok = True
+            if tokens:
+                hay = f"{p.brand or ''} {p.mpn or ''} {p.name or ''}".lower()
+                for t in tokens:
+                    if t not in hay:
+                        ok = False
+                        break
             if request.speed and apply_synonyms(
                 request.speed, "speed", synonyms
             ) != apply_synonyms(p.speed, "speed", synonyms):
