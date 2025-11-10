@@ -10,7 +10,11 @@ import random
 
 from .adapters.csv_adapter import parse_offers_csv, parse_products_csv
 from .adapters.pdf_adapter import extract_from_pdf
-from .adapters.web_adapter import parse_file as parse_web_file
+from .adapters.web_adapter import (
+    parse_file as parse_web_file,
+    fetch_and_parse_urls,
+    build_search_urls,
+)
 from .adapters.csv_mapped_adapter import parse_unified_csv
 from .ingest import IngestStats, upsert
 from .models import EventLog, SessionLocal, SupplierOffer, create_all
@@ -100,6 +104,72 @@ def fetch_web(
     products, offers = parse_web_file(html, mapping)
     stats: IngestStats = upsert(products, offers)
     rich.print(stats)
+
+
+@app.command("fetch-web-url")
+def fetch_web_url(
+    url: list[str] = typer.Option(
+        ..., help="one or more URLs to fetch", rich_help_panel="Web"
+    ),
+    mapping: Path = typer.Option(
+        ..., exists=True, file_okay=True, dir_okay=False, readable=True
+    ),
+    follow_next: bool = typer.Option(False, help="follow pagination.next links"),
+    max_pages: int = typer.Option(3, min=1, help="max pages to fetch per seed"),
+    delay: float = typer.Option(
+        0.5, min=0.0, help="delay (seconds) between page fetches"
+    ),
+    header: list[str] = typer.Option(
+        None,
+        help='extra HTTP headers (key:value), e.g. "Cookie: a=b"',
+    ),
+) -> None:
+    """Fetch remote pages and upsert parsed products/offers using mapping YAML.
+
+    For dynamic JS sites, consider saving HTML and using fetch-web instead, or add a headless step later.
+    """
+    hdrs: dict[str, str] = {}
+    if header:
+        for h in header:
+            if ":" in h:
+                k, v = h.split(":", 1)
+                hdrs[k.strip()] = v.strip()
+    products, offers = fetch_and_parse_urls(
+        urls=url,
+        mapping_yaml=mapping,
+        follow_next=follow_next,
+        max_pages=max_pages,
+        delay_sec=delay,
+        headers=hdrs,
+    )
+    stats: IngestStats = upsert(products, offers)
+    rich.print(stats)
+
+
+@app.command("search-web")
+def search_web(
+    query: str = typer.Option(..., help="search query to embed in url_template"),
+    mapping: Path = typer.Option(
+        ..., exists=True, file_okay=True, dir_okay=False, readable=True
+    ),
+    follow_next: bool = typer.Option(True, help="follow pagination.next links"),
+    max_pages: int = typer.Option(5, min=1, help="max pages to fetch"),
+    delay: float = typer.Option(
+        0.5, min=0.0, help="delay (seconds) between page fetches"
+    ),
+) -> None:
+    """Search a site using mapping.search.url_template and ingest parsed results."""
+    urls = build_search_urls(query, mapping)
+    products, offers = fetch_and_parse_urls(
+        urls=urls,
+        mapping_yaml=mapping,
+        follow_next=follow_next,
+        max_pages=max_pages,
+        delay_sec=delay,
+        headers=None,
+    )
+    stats: IngestStats = upsert(products, offers)
+    rich.print({"urls": urls, **stats.__dict__})
 
 
 @app.command("ingest-csv-mapped")

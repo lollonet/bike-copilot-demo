@@ -9,6 +9,14 @@ import yaml
 from ..types import OfferInput, ProductInput
 
 
+class PaginationMapping(TypedDict, total=False):
+    next: str  # CSS selector for the "next page" link
+
+
+class SearchMapping(TypedDict, total=False):
+    url_template: str  # e.g. https://shop.example/search?q={q}
+
+
 class WebMapping(TypedDict):
     supplier: str
     root: str
@@ -18,6 +26,8 @@ class WebMapping(TypedDict):
     price: str
     in_stock: NotRequired[str]
     lead_time_days: NotRequired[str]
+    pagination: NotRequired[PaginationMapping]
+    search: NotRequired[SearchMapping]
 
 
 def _load_mapping(path: Path) -> WebMapping:
@@ -100,3 +110,87 @@ def parse_file(
     mapping = _load_mapping(mapping_yaml)
     html = html_path.read_text(encoding="utf-8")
     return parse_html(html, mapping)
+
+
+def fetch_and_parse_urls(
+    urls: list[str],
+    mapping_yaml: Path,
+    follow_next: bool = False,
+    max_pages: int = 1,
+    delay_sec: float = 0.0,
+    headers: dict[str, str] | None = None,
+) -> tuple[list[ProductInput], list[OfferInput]]:
+    """Fetch one or more URLs and parse them using the provided mapping.
+
+    - If follow_next is True and mapping.pagination.next is set, follows next links up to max_pages.
+    - headers can include cookies/auth; keep polite delays via delay_sec.
+    """
+    import httpx
+    import time
+
+    mapping = _load_mapping(mapping_yaml)
+    all_products: list[ProductInput] = []
+    all_offers: list[OfferInput] = []
+    seen_pages: set[str] = set()
+
+    def _fetch(u: str) -> str:
+        with httpx.Client(
+            timeout=10.0, headers=headers or {"User-Agent": "BikeCopilotBot/0.1"}
+        ) as client:
+            r = client.get(u)
+            r.raise_for_status()
+            return r.text
+
+    for seed in urls:
+        if seed in seen_pages:
+            continue
+        seen_pages.add(seed)
+        try:
+            html = _fetch(seed)
+        except Exception:
+            continue
+        p, o = parse_html(html, mapping)
+        all_products.extend(p)
+        all_offers.extend(o)
+
+        if (
+            follow_next
+            and "pagination" in mapping
+            and isinstance(mapping["pagination"], dict)
+        ):
+            next_sel = mapping["pagination"].get("next")  # type: ignore[index]
+            if next_sel:
+                from bs4 import BeautifulSoup
+
+                soup = BeautifulSoup(html, "html.parser")
+                page_count = 1
+                nxt = soup.select_one(next_sel)
+                while nxt is not None and page_count < max_pages:
+                    href = nxt.get("href") if nxt else None
+                    if not href or href in seen_pages:
+                        break
+                    seen_pages.add(href)
+                    time.sleep(max(0.0, delay_sec))
+                    try:
+                        html = _fetch(href)
+                    except Exception:
+                        break
+                    p2, o2 = parse_html(html, mapping)
+                    all_products.extend(p2)
+                    all_offers.extend(o2)
+                    soup = BeautifulSoup(html, "html.parser")
+                    nxt = soup.select_one(next_sel)
+                    page_count += 1
+
+    return all_products, all_offers
+
+
+def build_search_urls(query: str, mapping_yaml: Path) -> list[str]:
+    mapping = _load_mapping(mapping_yaml)
+    s = mapping.get("search")
+    if not s or ("url_template" not in s):
+        raise ValueError("mapping.search.url_template is required for search-web")
+    tmpl = s.get("url_template", "")
+    from urllib.parse import quote_plus
+
+    return [tmpl.format(q=quote_plus(query))]
