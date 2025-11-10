@@ -7,6 +7,7 @@ Quick start
 
 Makefile targets
 - `make status` – ruff fix/format + basedpyright typecheck.
+- `make test` – run pytest with correct env/cache.
 - `make seed` – seed demo CSVs into SQLite.
 - `make api` – run FastAPI on `:8000`.
 - `make ui` – run Gradio UI on `:7860`.

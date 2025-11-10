@@ -11,3 +11,6 @@ seed:
 
 ui:
 	uv run python -m app.ui
+
+test:
+	UV_CACHE_DIR=.uv-cache XDG_CACHE_HOME=.uv-cache PYTHONPATH=. uv run pytest -q
