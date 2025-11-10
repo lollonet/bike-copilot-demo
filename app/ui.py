@@ -192,7 +192,15 @@ def build_interface() -> gr.Blocks:
                     budget = gr.Number(
                         label="Budget massimo (€)",
                         value=None,
-                        info="Filtra offerte con prezzo ≤ budget.",
+                        info="0 = nessun limite; filtra offerte con prezzo ≤ budget.",
+                    )
+                    budget_slider = gr.Slider(
+                        label="Budget (slider)",
+                        minimum=0,
+                        maximum=1000,
+                        step=1,
+                        value=0,
+                        info="Usa lo slider per impostare rapidamente il budget (0 = nessun limite).",
                     )
                 with gr.Accordion("Fornitori", open=False):
                     suppliers = gr.CheckboxGroup(label="Fornitori", choices=[])
@@ -344,26 +352,58 @@ def build_interface() -> gr.Blocks:
                     speed_choices = sorted(list(f.get("speed", {}).keys()))
                     freehub_choices = sorted(list(f.get("freehub", {}).keys()))
                     brake_choices = sorted(list(f.get("brake", {}).keys()))
-                    # axle choices are informative only in tooltip for ora
+                    # axle choices remain free-text for now (tooltip only)
                     rotor_choices = sorted(list(f.get("rotor", {}).keys()))
+
+                    # Coverage gating based on product totals
+                    totals = f.get("totals", {})
+                    prod_total = int(totals.get("products", 0) or 0) or 1
+
+                    def _coverage(counts: dict[str, int]) -> float:
+                        return sum(int(v) for v in (counts or {}).values()) / float(
+                            prod_total
+                        )
+
+                    # Reset value to "" if current selection disappears
+                    speed_val = speed if speed in speed_choices else ""
+                    freehub_val = freehub if freehub in freehub_choices else ""
+                    brake_val = brake if brake in brake_choices else ""
+                    rotor_val = rotor if rotor in rotor_choices else ""
+                    category_choices = sorted(list(f.get("category", {}).keys()))
+                    category_val = category if category in category_choices else ""
+
+                    thr = 0.15
                     speed_upd = gr.update(
-                        choices=[""] + speed_choices, info=(speed_info or None)
+                        choices=[""] + speed_choices,
+                        value=speed_val,
+                        info=(speed_info or None),
+                        interactive=(_coverage(f.get("speed", {})) >= thr),
                     )
                     freehub_upd = gr.update(
-                        choices=[""] + freehub_choices, info=(freehub_info or None)
+                        choices=[""] + freehub_choices,
+                        value=freehub_val,
+                        info=(freehub_info or None),
+                        interactive=(_coverage(f.get("freehub", {})) >= thr),
                     )
                     brake_upd = gr.update(
-                        choices=[""] + brake_choices, info=(brake_info or None)
+                        choices=[""] + brake_choices,
+                        value=brake_val,
+                        info=(brake_info or None),
+                        interactive=(_coverage(f.get("brake", {})) >= thr),
                     )
                     axle_upd = gr.update(info=(axle_info or None))
                     rotor_upd = gr.update(
-                        choices=[""] + rotor_choices, info=(rotor_info or None)
+                        choices=[""] + rotor_choices,
+                        value=rotor_val,
+                        info=(rotor_info or None),
+                        interactive=(_coverage(f.get("rotor", {})) >= thr),
                     )
                     suppliers_upd = gr.update(
                         choices=sorted(list(f.get("supplier", {}).keys()))
                     )
                     category_upd = gr.update(
-                        choices=[""] + sorted(list(f.get("category", {}).keys()))
+                        choices=[""] + category_choices,
+                        value=category_val,
                     )
                     price = f.get("price", {})
                     price_info = None
@@ -373,7 +413,19 @@ def build_interface() -> gr.Blocks:
                         and price.get("min") is not None
                     ):
                         price_info = f"Prezzo min/max: €{float(price['min']):.2f} – €{float(price['max']):.2f}"
+                    # Update number info and slider bounds; keep 0 as 'no limit'
+                    max_val = float(price.get("max") or 0.0)
+                    # If budget is None or 0, keep slider at 0; else clamp in [min,max]
+                    if budget is None or float(budget) <= 0:
+                        slider_val = 0
+                    else:
+                        slider_val = max(min(int(float(budget)), int(max_val)), 0)
                     budget_upd = gr.update(info=price_info)
+                    budget_slider_upd = gr.update(
+                        minimum=0,
+                        maximum=max(100, int(max_val) or 100),
+                        value=slider_val,
+                    )
                 else:
                     speed_upd = gr.update()
                     freehub_upd = gr.update()
@@ -383,6 +435,7 @@ def build_interface() -> gr.Blocks:
                     suppliers_upd = gr.update()
                     category_upd = gr.update()
                     budget_upd = gr.update()
+                    budget_slider_upd = gr.update()
             except Exception:
                 speed_upd = gr.update()
                 freehub_upd = gr.update()
@@ -392,6 +445,7 @@ def build_interface() -> gr.Blocks:
                 suppliers_upd = gr.update()
                 category_upd = gr.update()
                 budget_upd = gr.update()
+                budget_slider_upd = gr.update()
 
             return (
                 rows,
@@ -406,6 +460,7 @@ def build_interface() -> gr.Blocks:
                 suppliers_upd,
                 category_upd,
                 budget_upd,
+                budget_slider_upd,
             )
 
         search_btn.click(
@@ -435,6 +490,7 @@ def build_interface() -> gr.Blocks:
                 suppliers,
                 category,
                 budget,
+                budget_slider,
             ],
         )
 
@@ -446,6 +502,7 @@ def build_interface() -> gr.Blocks:
             axle,
             rotor,
             budget,
+            budget_slider,
             category,
             suppliers,
             in_stock,
@@ -477,6 +534,7 @@ def build_interface() -> gr.Blocks:
                     suppliers,
                     category,
                     budget,
+                    budget_slider,
                 ],
             )
 
@@ -506,11 +564,36 @@ def build_interface() -> gr.Blocks:
                 axle,
                 rotor,
                 budget,
+                budget_slider,
                 results,
                 offer_select,
                 results_state,
                 status,
             ],
+        )
+
+        # Keep slider and number in sync (0 means no budget)
+        def _sync_budget_from_slider(val: float | int | None):
+            try:
+                v = float(val or 0)
+            except Exception:
+                v = 0.0
+            if v <= 0:
+                return gr.update(value=None)
+            return gr.update(value=v)
+
+        def _sync_slider_from_budget(val: float | None):
+            try:
+                v = float(val) if val is not None else 0.0
+            except Exception:
+                v = 0.0
+            return gr.update(value=(0 if v <= 0 else v))
+
+        budget_slider.change(
+            _sync_budget_from_slider, inputs=[budget_slider], outputs=[budget]
+        )
+        budget.change(
+            _sync_slider_from_budget, inputs=[budget], outputs=[budget_slider]
         )
 
         def _on_select(offer_label: str | None, mapping: dict[int, dict[str, Any]]):

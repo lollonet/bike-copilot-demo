@@ -62,7 +62,8 @@ Security
 UI features
 - Ricerca per testo con token (brand/mpn/nome) + budget cap.
 - Filtri dinamici post‑ricerca (facets): Velocità, Corpetto, Freno, Rotore (Axle come info), Fornitori, Categoria; tooltip con conteggi.
-- “Solo in stock”, “Budget massimo” con info min/max da facets.
+- Gating intelligente: i "Filtri tecnici" si abilitano solo se coprono ≥15% dei risultati correnti, evitando filtri fuorvianti.
+- “Solo in stock”, “Budget massimo” con info min/max da facets; campo numerico e slider sincronizzati (0 = nessun limite).
 - Carrello multi‑articolo con Qtà +/- , totali live (Subtotale/IVA/Totale).
 - Preventivo multi‑riga con PDF/HTML; `file_url` se l’API è attiva; fallback locale robusto.
 
