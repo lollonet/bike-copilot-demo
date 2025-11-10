@@ -310,7 +310,11 @@ def build_interface() -> gr.Blocks:
                     "brake": (brake or None),
                     "axle": axle or None,
                     "rotor": (rotor or None),
-                    "budget_max": budget,
+                    "budget_max": (
+                        float(budget)
+                        if (budget is not None and float(budget) > 0)
+                        else None
+                    ),
                     "category": category or None,
                     "suppliers": suppliers_sel or [],
                     "in_stock_only": bool(in_stock_only),

@@ -121,19 +121,21 @@ def search(request: SearchRequest) -> SearchResponse:
             comp, pros, cons = compatibility_score(request, p, synonyms)
             offers.append((o, comp, pros, cons, p.brand, p.mpn))
 
-    # Offer-level filters: suppliers, in_stock, budget
+    # Offer-level filters: suppliers, in_stock, budget (0 treated as no limit)
+    eff_budget = (
+        float(request.budget_max)
+        if (request.budget_max is not None and float(request.budget_max) > 0)
+        else None
+    )
     if request.suppliers and len(request.suppliers) > 0:
         offers = [t for t in offers if t[0].supplier in request.suppliers]
     if request.in_stock_only:
         offers = [t for t in offers if t[0].in_stock]
-    if request.budget_max is not None:
+    if eff_budget is not None:
         offers = [
             t
             for t in offers
-            if (
-                t[0].price is not None
-                and float(t[0].price) <= float(request.budget_max)
-            )
+            if (t[0].price is not None and float(t[0].price) <= eff_budget)
         ]
 
     if not offers:
@@ -197,6 +199,11 @@ def facets(request: SearchRequest) -> FacetsResponse:
     }
     prices: list[float] = []
     offer_total = 0
+    eff_budget = (
+        float(request.budget_max)
+        if (request.budget_max is not None and float(request.budget_max) > 0)
+        else None
+    )
     for p in filtered:
         # Category facet
         if p.category:
@@ -231,9 +238,7 @@ def facets(request: SearchRequest) -> FacetsResponse:
             ):
                 continue
             if o.price is not None:
-                if request.budget_max is None or float(o.price) <= float(
-                    request.budget_max
-                ):
+                if eff_budget is None or float(o.price) <= eff_budget:
                     prices.append(float(o.price))
                     offer_total += 1
             sname = o.supplier
