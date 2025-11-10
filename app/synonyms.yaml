@@ -1,0 +1,16 @@
+freehub:
+  HG: [hg, shimano, hyperglide]
+  XD: [xd]
+  MS: [microspline, ms]
+rotor:
+  CL: [centerlock, cl]
+  6B: [6b, 6-bolt, 6 fori]
+brake:
+  disc: [disc, disco]
+axle:
+  12x148: [boost, 148x12]
+  12x142: [142x12]
+speed:
+  '11': ['11v','11 velocita','11-speed']
+  '12': ['12v','12-speed']
+

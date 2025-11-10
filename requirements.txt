@@ -1,0 +1,13 @@
+fastapi
+uvicorn[standard]
+gradio
+pydantic
+pydantic-settings
+SQLAlchemy
+pandas
+rapidfuzz
+PyYAML
+Jinja2
+pdfkit
+python-multipart
+httpx

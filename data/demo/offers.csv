@@ -1,0 +1,6 @@
+brand,mpn,supplier,price,in_stock,lead_time_days
+Shimano,CN-HG601,FornitoreA,24.90,1,1
+Shimano,CN-HG601,FornitoreB,23.50,0,3
+SunRace,CSRX1,FornitoreC,21.00,1,2
+SRAM,PG-1230,FornitoreA,89.00,1,2
+Shimano,CS-HG700,FornitoreD,66.00,0,4

@@ -1,0 +1,14 @@
+[Unit]
+Description=Bike Copilot Demo
+After=network.target
+
+[Service]
+WorkingDirectory=/opt/bike-copilot-demo
+ExecStart=/opt/bike-copilot-demo/.venv/bin/uvicorn app.api:app --host 0.0.0.0 --port 8000
+Restart=always
+User=www-data
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=multi-user.target
+
