@@ -65,6 +65,14 @@ Web Ingest (remote pages)
   - `search.url_template`: e.g. `https://shop.example/search?q={q}`
   - For auth/cookies: pass `--header "Cookie: a=b"` (permitted sites only)
 
+WooCommerce example (Cicli Montanini)
+- Mapping provided: `providers/web-ciclimontanini.yaml`
+- Typical usage:
+  - `uv run python -m app.cli search-web --query "catena 11v" --mapping providers/web-ciclimontanini.yaml --max-pages 2 --delay 1.0`
+- Notes:
+  - Listing pages often lack MPN; the adapter follows each product link and parses detail selectors (sku/price/stock) to ensure `brand+mpn` for dedupe.
+  - Keep a small `--delay` and modest `--max-pages`; respect site TOS/robots. If blocked, pass a browser Cookie via `--header`.
+
 Security
 - Basic Auth guards `/quote`, `/kpi/*`, and `/files/*` when `APP_BASIC_USER` and `APP_BASIC_PASS` are set.
 - `/files/*` serves only `.html` and `.pdf` from `APP_OUT_DIR`.

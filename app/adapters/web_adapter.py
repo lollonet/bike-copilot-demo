@@ -28,6 +28,8 @@ class WebMapping(TypedDict):
     lead_time_days: NotRequired[str]
     pagination: NotRequired[PaginationMapping]
     search: NotRequired[SearchMapping]
+    item_link: NotRequired[str]
+    detail: NotRequired[dict[str, str]]
 
 
 def _load_mapping(path: Path) -> WebMapping:
@@ -104,6 +106,71 @@ def parse_html(
     return products, offers
 
 
+def _abs_url(base_url: str, href: str | None) -> str | None:
+    if not href:
+        return None
+    from urllib.parse import urljoin
+
+    return urljoin(base_url, href)
+
+
+def parse_detail_html(
+    html: str, mapping: WebMapping
+) -> tuple[ProductInput | None, OfferInput | None]:
+    detail = mapping.get("detail") or {}
+    soup = BeautifulSoup(html, "html.parser")
+    scope = soup
+    root_sel = detail.get("root")
+    if root_sel:
+        root = soup.select_one(root_sel)
+        if root is not None:
+            scope = root
+
+    def pick(key: str) -> str:
+        sel = detail.get(key)
+        if not sel:
+            return ""
+        el = scope.select_one(sel)
+        return el.get_text(strip=True) if el else ""
+
+    brand = pick("brand")
+    name = pick("name")
+    mpn = pick("mpn")
+    price_s = pick("price")
+    in_stock_s = pick("in_stock")
+    lead_s = pick("lead_time_days")
+
+    if not brand and name:
+        brand = name.split()[0]
+
+    if not brand or not mpn or not price_s:
+        return None, None
+
+    in_stock = _to_bool(in_stock_s) if in_stock_s else True
+    lead = int(lead_s) if (lead_s and lead_s.isdigit()) else None
+
+    p = ProductInput(
+        brand=brand,
+        mpn=mpn,
+        ean=None,
+        name=name or f"{brand} {mpn}",
+        speed=None,
+        brake=None,
+        axle=None,
+        rotor=None,
+        freehub=None,
+    )
+    o = OfferInput(
+        brand=brand,
+        mpn=mpn,
+        supplier=mapping["supplier"],
+        price=_to_price(price_s),
+        in_stock=in_stock,
+        lead_time_days=lead,
+    )
+    return p, o
+
+
 def parse_file(
     html_path: Path, mapping_yaml: Path
 ) -> tuple[list[ProductInput], list[OfferInput]]:
@@ -149,9 +216,41 @@ def fetch_and_parse_urls(
             html = _fetch(seed)
         except Exception:
             continue
-        p, o = parse_html(html, mapping)
-        all_products.extend(p)
-        all_offers.extend(o)
+        # Prefer detail follow if configured (to ensure MPN presence)
+        item_link_sel = mapping.get("item_link")
+        has_detail = bool(mapping.get("detail"))
+        if item_link_sel and has_detail:
+            soup = BeautifulSoup(html, "html.parser")
+            rows = soup.select(mapping["root"])  # type: ignore[index]
+            for r in rows:
+                a = r.select_one(item_link_sel)
+                href_attr = a.get("href") if a else None
+                href = _abs_url(seed, str(href_attr) if href_attr is not None else None)
+                if not href or href in seen_pages:
+                    continue
+                seen_pages.add(href)
+                time.sleep(max(0.0, delay_sec))
+                try:
+                    dhtml = _fetch(href)
+                except Exception:
+                    continue
+                p1, o1 = parse_detail_html(dhtml, mapping)
+                if p1 and o1:
+                    # Deduplicate by (brand, mpn)
+                    if not any(
+                        (pp.brand, pp.mpn) == (p1.brand, p1.mpn) for pp in all_products
+                    ):
+                        all_products.append(p1)
+                    if not any(
+                        (oo.brand, oo.mpn, oo.supplier)
+                        == (o1.brand, o1.mpn, o1.supplier)
+                        for oo in all_offers
+                    ):
+                        all_offers.append(o1)
+        else:
+            p, o = parse_html(html, mapping)
+            all_products.extend(p)
+            all_offers.extend(o)
 
         if (
             follow_next
@@ -160,13 +259,12 @@ def fetch_and_parse_urls(
         ):
             next_sel = mapping["pagination"].get("next")  # type: ignore[index]
             if next_sel:
-                from bs4 import BeautifulSoup
-
                 soup = BeautifulSoup(html, "html.parser")
                 page_count = 1
                 nxt = soup.select_one(next_sel)
                 while nxt is not None and page_count < max_pages:
-                    href = nxt.get("href") if nxt else None
+                    href_attr = nxt.get("href") if nxt else None
+                    href = str(href_attr) if href_attr is not None else None
                     if not href or href in seen_pages:
                         break
                     seen_pages.add(href)
@@ -175,9 +273,41 @@ def fetch_and_parse_urls(
                         html = _fetch(href)
                     except Exception:
                         break
-                    p2, o2 = parse_html(html, mapping)
-                    all_products.extend(p2)
-                    all_offers.extend(o2)
+                    if item_link_sel and has_detail:
+                        soup = BeautifulSoup(html, "html.parser")
+                        rows = soup.select(mapping["root"])  # type: ignore[index]
+                        for r in rows:
+                            a = r.select_one(item_link_sel)
+                            href_attr2 = a.get("href") if a else None
+                            href2 = _abs_url(
+                                href,
+                                str(href_attr2) if href_attr2 is not None else None,
+                            )
+                            if not href2 or href2 in seen_pages:
+                                continue
+                            seen_pages.add(href2)
+                            time.sleep(max(0.0, delay_sec))
+                            try:
+                                dhtml = _fetch(href2)
+                            except Exception:
+                                continue
+                            p1, o1 = parse_detail_html(dhtml, mapping)
+                            if p1 and o1:
+                                if not any(
+                                    (pp.brand, pp.mpn) == (p1.brand, p1.mpn)
+                                    for pp in all_products
+                                ):
+                                    all_products.append(p1)
+                                if not any(
+                                    (oo.brand, oo.mpn, oo.supplier)
+                                    == (o1.brand, o1.mpn, o1.supplier)
+                                    for oo in all_offers
+                                ):
+                                    all_offers.append(o1)
+                    else:
+                        p2, o2 = parse_html(html, mapping)
+                        all_products.extend(p2)
+                        all_offers.extend(o2)
                     soup = BeautifulSoup(html, "html.parser")
                     nxt = soup.select_one(next_sel)
                     page_count += 1
