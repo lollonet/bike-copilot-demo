@@ -15,4 +15,5 @@ detail:
   brand: "meta[property='og:title']"
   mpn: "meta[property='og:description']"
   in_stock: "meta[property='og:availability']"
+  category: "#breadcrumb .breadcrumb li a:last-child"
   lead_time_days: ""

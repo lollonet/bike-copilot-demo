@@ -175,11 +175,15 @@ def parse_detail_html(
     name = pick("name").strip()
     mpn = pick("mpn").strip()
     # Price: support meta content or HTML amounts
-    price_s = pick("price")
-    if not price_s:
-        price_sel = detail.get("price") or ""
-        price_el = scope.select_one(price_sel) if price_sel else None
-        price_s = _price_text(price_el)
+    price_s = ""
+    price_sel = detail.get("price") or ""
+    price_el = scope.select_one(price_sel) if price_sel else None
+    if price_el is not None:
+        # If <meta>, use its content; otherwise parse the container via _price_text
+        if getattr(price_el, "name", "").lower() == "meta":
+            price_s = str(price_el.get("content") or "")
+        else:
+            price_s = _price_text(price_el)
     in_stock_s = pick("in_stock")
     lead_s = pick("lead_time_days")
 
@@ -207,6 +211,15 @@ def parse_detail_html(
 
     mpn = mpn.strip()
     category = pick("category").strip()
+    # Prefer breadcrumb category when available
+    trail = soup.select("ol.breadcrumb li a, #breadcrumb .breadcrumb li a")
+    for a in reversed(trail):
+        href = str(a.get("href") or "")
+        if "/category/" in href:
+            ct = a.get_text(strip=True)
+            if ct:
+                category = ct
+                break
 
     if not brand or not mpn or not price_s:
         return None, None

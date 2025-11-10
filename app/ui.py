@@ -415,6 +415,12 @@ def build_interface() -> gr.Blocks:
                     category_upd = gr.update(
                         choices=[""] + category_choices,
                         value=category_val,
+                        interactive=bool(category_choices),
+                        info=(
+                            None
+                            if category_choices
+                            else "Nessuna categoria nei risultati"
+                        ),
                     )
                     price = f.get("price", {})
                     price_info = None

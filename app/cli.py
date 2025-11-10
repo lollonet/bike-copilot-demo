@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import rich
+from pydantic import BaseModel
 import typer
 from rich.table import Table
 import os
@@ -18,7 +19,7 @@ from .adapters.web_adapter import (
 )
 from .adapters.csv_mapped_adapter import parse_unified_csv
 from .ingest import IngestStats, upsert
-from .models import EventLog, SessionLocal, SupplierOffer, create_all
+from .models import EventLog, SessionLocal, SupplierOffer, Product, create_all
 from .quote import render_quote
 from .search import search
 from .types import Brake, Freehub, QuoteResponse, Rotor, SearchRequest
@@ -48,6 +49,96 @@ def _offer_id_completions(incomplete: str) -> list[str]:
 def _init() -> None:
     """Ensure DB is ready."""
     create_all()
+
+
+class ExportRow(BaseModel):
+    brand: str
+    mpn: str
+    name: str
+    category: str | None = None
+    supplier: str
+    price: float
+    in_stock: bool
+    lead_time_days: int | None = None
+
+
+def _escape_md(text: str) -> str:
+    return text.replace("|", "\\|")
+
+
+@app.command("dump-md")
+def dump_md(
+    limit: int | None = typer.Option(None, help="Max rows; omit for all"),
+    supplier: str | None = typer.Option(None, help="Filter by supplier"),
+    brand: str | None = typer.Option(None, help="Filter by brand"),
+    category: str | None = typer.Option(None, help="Filter by category"),
+) -> None:
+    """Dump joined product+offer rows as a Markdown table for inspection."""
+    from sqlalchemy import asc
+
+    with SessionLocal() as db:
+        q = db.query(
+            SupplierOffer,
+            SupplierOffer.supplier,
+            SupplierOffer.price,
+            SupplierOffer.in_stock,
+            SupplierOffer.lead_time_days,
+            Product.brand,
+            Product.mpn,
+            Product.name,
+            Product.category,
+        ).join(Product, SupplierOffer.product_id == Product.id)
+        if supplier:
+            q = q.filter(SupplierOffer.supplier == supplier)
+        if brand:
+            q = q.filter(Product.brand == brand)
+        if category:
+            q = q.filter(Product.category == category)
+        q = q.order_by(
+            asc(Product.brand), asc(Product.mpn), asc(SupplierOffer.supplier)
+        )
+        if isinstance(limit, int) and limit > 0:
+            q = q.limit(limit)
+        rows = q.all()
+
+    items: list[ExportRow] = []
+    for _offer, sup, price, in_stock, lead, br, mpn, name, cat in rows:
+        items.append(
+            ExportRow(
+                brand=str(br or ""),
+                mpn=str(mpn or ""),
+                name=str(name or ""),
+                category=str(cat) if cat is not None else None,
+                supplier=str(sup or ""),
+                price=float(price or 0.0),
+                in_stock=bool(in_stock),
+                lead_time_days=int(lead) if lead is not None else None,
+            )
+        )
+
+    # Build Markdown table
+    header = "| brand | mpn | name | category | supplier | price | in_stock | lead_time_days |"
+    sep = "|---|---|---|---|---|---:|---:|---:|"
+    lines: list[str] = [header, sep]
+    for it in items:
+        lines.append(
+            "| "
+            + " | ".join(
+                [
+                    _escape_md(it.brand),
+                    _escape_md(it.mpn),
+                    _escape_md(it.name),
+                    _escape_md(it.category or ""),
+                    _escape_md(it.supplier),
+                    f"{it.price:.2f}",
+                    ("yes" if it.in_stock else "no"),
+                    (str(it.lead_time_days) if it.lead_time_days is not None else ""),
+                ]
+            )
+            + " |"
+        )
+
+    print("\n".join(lines))
 
 
 @app.command("ingest-csv")
