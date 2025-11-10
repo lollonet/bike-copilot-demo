@@ -9,6 +9,7 @@ from rich.table import Table
 from .adapters.csv_adapter import parse_offers_csv, parse_products_csv
 from .adapters.pdf_adapter import extract_from_pdf
 from .adapters.web_adapter import parse_file as parse_web_file
+from .adapters.csv_mapped_adapter import parse_unified_csv
 from .ingest import IngestStats, upsert
 from .models import EventLog, SessionLocal, SupplierOffer, create_all
 from .quote import render_quote
@@ -95,6 +96,21 @@ def fetch_web(
 ) -> None:
     """Parse a local HTML file with a mapping YAML and upsert results."""
     products, offers = parse_web_file(html, mapping)
+    stats: IngestStats = upsert(products, offers)
+    rich.print(stats)
+
+
+@app.command("ingest-csv-mapped")
+def ingest_csv_mapped(
+    csv: Path = typer.Option(
+        ..., exists=True, file_okay=True, dir_okay=False, readable=True
+    ),
+    mapping: Path = typer.Option(
+        ..., exists=True, file_okay=True, dir_okay=False, readable=True
+    ),
+) -> None:
+    """Ingest a single CSV using a mapping YAML to canonical fields."""
+    products, offers = parse_unified_csv(csv, mapping)
     stats: IngestStats = upsert(products, offers)
     rich.print(stats)
 

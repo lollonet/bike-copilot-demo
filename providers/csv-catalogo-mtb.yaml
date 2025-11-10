@@ -1,0 +1,12 @@
+supplier: CatalogoMTB
+delimiter: ";"
+columns:
+  mpn: Codice
+  categoria: Categoria
+  brand: Categoria
+  name: Descrizione
+  price: Prezzo
+defaults:
+  in_stock: true
+  lead_time_days: null
+

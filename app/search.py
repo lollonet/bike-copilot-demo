@@ -105,6 +105,17 @@ def search(request: SearchRequest) -> SearchResponse:
                 comp, pros, cons = compatibility_score(request, p, synonyms)
                 offers.append((o, comp, pros, cons))
 
+        # Budget filter (if provided)
+        if request.budget_max is not None:
+            offers = [
+                t
+                for t in offers
+                if (
+                    t[0].price is not None
+                    and float(t[0].price) <= float(request.budget_max)
+                )
+            ]
+
         if not offers:
             return SearchResponse(items=[])
 

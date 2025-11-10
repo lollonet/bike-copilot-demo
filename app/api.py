@@ -161,6 +161,7 @@ def api_quote(
         )
         from urllib.parse import urljoin
         from pathlib import Path
+
         file_url = urljoin(str(request.base_url), f"files/{Path(html_path).name}")
         return QuoteResponse(
             content_type="application/pdf" if pdf_path else "text/html",
