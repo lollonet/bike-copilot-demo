@@ -139,7 +139,14 @@ def _create_quote(
 
 
 def build_interface() -> gr.Blocks:
-    with gr.Blocks(title="Bike Copilot Demo") as demo:
+    css = """
+    #filters-row { gap: 8px; }
+    @media (max-width: 980px){
+      #filters-row { flex-wrap: wrap; }
+      #results-col { flex: 1 1 100% !important; }
+    }
+    """
+    with gr.Blocks(title="Bike Copilot Demo", css=css) as demo:
         gr.Markdown("""
         ## Bike Copilot — Ricerca e Preventivo
         Cerca un componente, confronta le offerte e genera un preventivo in 1 click.
@@ -161,7 +168,7 @@ def build_interface() -> gr.Blocks:
             clear_btn = gr.Button("Pulisci")
 
         # Filtri principali sotto la ricerca: Categoria, Fornitori, Stock, Budget
-        with gr.Row():
+        with gr.Row(elem_id="filters-row"):
             category = gr.Dropdown(label="Categoria", choices=[""], value="", scale=1)
             suppliers = gr.CheckboxGroup(label="Fornitori", choices=[], scale=2)
             in_stock = gr.Checkbox(label="Solo in stock", value=False)
@@ -205,7 +212,7 @@ def build_interface() -> gr.Blocks:
                     # Pulsanti già definiti in alto; solo reminder visuale
                     pass
                 status = gr.Markdown(visible=True)
-            with gr.Column(scale=3):
+            with gr.Column(scale=3, elem_id="results-col"):
                 gr.Markdown("### Risultati")
                 results = gr.Dataframe(
                     headers=[

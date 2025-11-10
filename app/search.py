@@ -204,10 +204,25 @@ def facets(request: SearchRequest) -> FacetsResponse:
         if (request.budget_max is not None and float(request.budget_max) > 0)
         else None
     )
+
+    def _canon_category(value: str | None) -> str | None:
+        if value is None:
+            return None
+        t = " ".join(str(value).strip().split())
+        if not t:
+            return None
+        # Title-case generic labels; keep common acronyms uppercased
+        cap = t.title()
+        for ac in ("MTB", "BMX", "E-BIKE", "Ebike", "CX"):
+            cap = cap.replace(ac.title(), ac)
+        return cap
+
     for p in filtered:
         # Category facet
         if p.category:
-            keyc = str(p.category)
+            keyc = _canon_category(p.category)
+            if keyc is None:
+                keyc = str(p.category)
             counts["category"][keyc] = counts["category"].get(keyc, 0) + 1
 
         # Product-level facet counts (canonicalized)
