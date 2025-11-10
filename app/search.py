@@ -83,6 +83,8 @@ def _prefilter_products(request: SearchRequest) -> list[Product]:
                 if t not in hay:
                     ok = False
                     break
+        if request.category and (p.category or "") != request.category:
+            ok = False
         if request.speed and apply_synonyms(
             request.speed, "speed", synonyms
         ) != apply_synonyms(p.speed, "speed", synonyms):
