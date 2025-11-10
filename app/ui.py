@@ -25,6 +25,9 @@ def _do_search(
     axle: str,
     rotor: str,
     budget: float | None,
+    category: str | None,
+    suppliers_sel: list[str] | None,
+    in_stock_only: bool | None,
 ):
     req = SearchRequest(
         query_text=(query or None),
@@ -34,6 +37,9 @@ def _do_search(
         axle=(axle or None),
         rotor=(Rotor(rotor) if rotor else None),
         budget_max=budget,
+        category=(category or None),
+        suppliers=(suppliers_sel or []),
+        in_stock_only=bool(in_stock_only),
     )
     res = search(req)
     rows = []
@@ -150,6 +156,9 @@ def build_interface() -> gr.Blocks:
                     placeholder="Es. cassetta 11v HG 11-32, catena CN-HG601",
                     info="Parole chiave libere: marca, MPN, specifiche.",
                 )
+                with gr.Row():
+                    category = gr.Dropdown(label="Categoria", choices=[""], value="")
+                    in_stock = gr.Checkbox(label="Solo in stock", value=False)
                 with gr.Accordion("Filtri tecnici", open=False):
                     speed = gr.Dropdown(
                         choices=["", "11", "12"],
@@ -185,6 +194,8 @@ def build_interface() -> gr.Blocks:
                         value=None,
                         info="Filtra offerte con prezzo ≤ budget.",
                     )
+                with gr.Accordion("Fornitori", open=False):
+                    suppliers = gr.CheckboxGroup(label="Fornitori", choices=[])
                 with gr.Row():
                     search_btn = gr.Button("Cerca", variant="primary")
                     clear_btn = gr.Button("Pulisci")
@@ -263,9 +274,29 @@ def build_interface() -> gr.Blocks:
                     label="URL file (se API attiva)", interactive=False
                 )
 
-        def _on_search(query, speed, freehub, brake, axle, rotor, budget):
+        def _on_search(
+            query,
+            speed,
+            freehub,
+            brake,
+            axle,
+            rotor,
+            budget,
+            category,
+            suppliers_sel,
+            in_stock_only,
+        ):
             rows, options, mapping, msg = _do_search(
-                query, speed, freehub, brake, axle, rotor, budget
+                query,
+                speed,
+                freehub,
+                brake,
+                axle,
+                rotor,
+                budget,
+                category,
+                suppliers_sel,
+                in_stock_only,
             )
             labels = [opt[0] for opt in options]
             default_label = labels[0] if labels else None
@@ -280,6 +311,9 @@ def build_interface() -> gr.Blocks:
                     "axle": axle or None,
                     "rotor": (rotor or None),
                     "budget_max": budget,
+                    "category": category or None,
+                    "suppliers": suppliers_sel or [],
+                    "in_stock_only": bool(in_stock_only),
                 }
                 r = httpx.post(
                     f"{API_BASE}/facets", json=payload, auth=auth, timeout=10
@@ -321,18 +355,39 @@ def build_interface() -> gr.Blocks:
                     rotor_upd = gr.update(
                         choices=[""] + rotor_choices, info=(rotor_info or None)
                     )
+                    suppliers_upd = gr.update(
+                        choices=sorted(list(f.get("supplier", {}).keys()))
+                    )
+                    category_upd = gr.update(
+                        choices=[""] + sorted(list(f.get("category", {}).keys()))
+                    )
+                    price = f.get("price", {})
+                    price_info = None
+                    if (
+                        price
+                        and price.get("max") is not None
+                        and price.get("min") is not None
+                    ):
+                        price_info = f"Prezzo min/max: €{float(price['min']):.2f} – €{float(price['max']):.2f}"
+                    budget_upd = gr.update(info=price_info)
                 else:
                     speed_upd = gr.update()
                     freehub_upd = gr.update()
                     brake_upd = gr.update()
                     axle_upd = gr.update()
                     rotor_upd = gr.update()
+                    suppliers_upd = gr.update()
+                    category_upd = gr.update()
+                    budget_upd = gr.update()
             except Exception:
                 speed_upd = gr.update()
                 freehub_upd = gr.update()
                 brake_upd = gr.update()
                 axle_upd = gr.update()
                 rotor_upd = gr.update()
+                suppliers_upd = gr.update()
+                category_upd = gr.update()
+                budget_upd = gr.update()
 
             return (
                 rows,
@@ -344,11 +399,25 @@ def build_interface() -> gr.Blocks:
                 brake_upd,
                 axle_upd,
                 rotor_upd,
+                suppliers_upd,
+                category_upd,
+                budget_upd,
             )
 
         search_btn.click(
             _on_search,
-            inputs=[query, speed, freehub, brake, axle, rotor, budget],
+            inputs=[
+                query,
+                speed,
+                freehub,
+                brake,
+                axle,
+                rotor,
+                budget,
+                category,
+                suppliers,
+                in_stock,
+            ],
             outputs=[
                 results,
                 offer_select,
@@ -359,8 +428,53 @@ def build_interface() -> gr.Blocks:
                 brake,
                 axle,
                 rotor,
+                suppliers,
+                category,
+                budget,
             ],
         )
+
+        for ctrl in [
+            query,
+            speed,
+            freehub,
+            brake,
+            axle,
+            rotor,
+            budget,
+            category,
+            suppliers,
+            in_stock,
+        ]:
+            ctrl.change(
+                _on_search,
+                inputs=[
+                    query,
+                    speed,
+                    freehub,
+                    brake,
+                    axle,
+                    rotor,
+                    budget,
+                    category,
+                    suppliers,
+                    in_stock,
+                ],
+                outputs=[
+                    results,
+                    offer_select,
+                    results_state,
+                    status,
+                    speed,
+                    freehub,
+                    brake,
+                    axle,
+                    rotor,
+                    suppliers,
+                    category,
+                    budget,
+                ],
+            )
 
         def _on_clear():
             return (
