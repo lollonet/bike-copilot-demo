@@ -5,19 +5,22 @@ Local demo app to ingest supplier lists (CSV now; PDF/web later) into SQLite, se
 
 ## components
 - Ingress
-  - API: FastAPI (`/health`, `/search`, `/quote` planned, `/kpi` planned)
-  - UI: Gradio (planned) for one‑click search and quote
+  - API: FastAPI (`/health`, `/search`, `/quote`, `/files/{name}`, `/kpi/today`)
+  - CLI: Typer (`app.cli`) with shell autocomplete
+  - UI: Gradio (`app.ui`) for one‑click search and quote
 - Services
-  - Ingest Orchestrator → calls provider adapters and upserts
+  - Ingest Orchestrator → calls provider adapters and upserts with idempotency
   - Search/Ranking → compatibility + price/stock/lead score
   - Quote → HTML→PDF via wkhtmltopdf/pdfkit (HTML fallback)
-  - KPI/Logging → `event_log` table and simple counters
+  - KPI/Logging → `event_log` counters and daily KPIs
 - Adapters (provider boundary)
   - CSV Adapter (present)
-  - PDF Table Adapter (planned)
+  - PDF Table Adapter (present; pdfplumber + mapping YAML)
   - Web Adapter (planned; API preferred over scraping)
 - Persistence
-  - SQLite with WAL: `product`, `supplier_offer`, `event_log` (plus staging planned)
+  - SQLite with WAL: `product`, `supplier_offer` (unique per product+supplier), `event_log`
+  - Staging: `raw_ingest(provider, kind, uri, content_hash, stored_path)`
+  - History: `price_history(offer_id, price, ts, source_hash)`
   - Files: out/ for quote artifacts
 
 ## boundaries & contracts
@@ -69,22 +72,26 @@ class OfferInput(BaseModel):
 
 ### Data model (SQLite)
 - product(id, brand, mpn, ean, name, speed, brake, axle, rotor, freehub)
-- supplier_offer(id, product_id, supplier, price, in_stock, lead_time_days, updated_at, currency, extra)
+- supplier_offer(id, product_id, supplier, price, in_stock, lead_time_days, updated_at, currency, extra, UNIQUE(product_id, supplier))
 - event_log(id, ts, type, payload)
-- Indexes: product(ean), product(brand, mpn), supplier_offer(product_id)
+- raw_ingest(id, ts, provider, kind, uri, content_hash, stored_path)
+- price_history(id, ts, offer_id, price, source_hash)
+- Indexes: product(ean), product(brand, mpn), supplier_offer(product_id), raw_ingest(content_hash)
 
 ## flows
-- Ingest: adapter emits `ProductInput`/`OfferInput` → upsert (prefer EAN, fallback brand+mpn) → new `supplier_offer` rows.
+- Ingest (CSV/PDF): adapter emits `ProductInput`/`OfferInput` → stage file (`raw_ingest`) → upsert (prefer EAN, fallback brand+mpn) → offer upsert (unique per product+supplier) → on price change add `price_history`.
 - Search: filter by requested specs → compute compatibility → score: 0.35 avail + 0.25 comp + 0.20 lead + 0.20 price_norm → top‑3.
 - Quote: render Jinja2 HTML, optionally pdfkit→PDF; store under `out/` and return paths.
-- KPI: log `search` and `quote_created` into `event_log`; `/kpi/today` aggregates.
+- KPI: log `search` and `quote_created` into `event_log`; `/kpi/today` aggregates by day.
+- Files: `/files/{name}` serves only `.html`/`.pdf` from `out/`; Basic Auth enforced when configured.
 
 ## failure modes & handling
 - Missing wkhtmltopdf: Quote returns HTML only with clear `content_type`.
 - DB locked: WAL + `busy_timeout`, serialize ingest vs. live demo.
 - CSV/PDF schema drift: per‑provider mapping YAML; validation with explicit problems.
 - Parser errors / network: retries with capped backoff (base 250ms, factor 2, cap 8s, attempts 3).
-- Auth: Basic Auth only on `/quote` and `/kpi/*`; credentials via `.env` or environment.
+- Auth: Basic Auth on `/quote`, `/kpi/*`, and `/files/*`; credentials via env.
+- File serving: deny traversal, restrict to `.html`/`.pdf` only.
 
 ## configuration
 - Environment
@@ -92,9 +99,13 @@ class OfferInput(BaseModel):
   - `APP_OUT_DIR` (default `out`)
   - `APP_PREFER_IN_STOCK` (default `1`)
   - `APP_SYNONYMS` (default `app/synonyms.yaml`)
+  - `APP_BASIC_USER`, `APP_BASIC_PASS` (enable Basic Auth)
+  - `APP_VAT` (VAT rate used in quotes, e.g., `0.22`)
 - Files
   - `app/synonyms.yaml` for canonicalization
-  - Per‑provider mapping YAML (planned under `providers/`)
+  - Per‑provider mapping YAML under `providers/`
+- Systemd
+  - Service reads `/etc/default/bike-copilot-demo` via `EnvironmentFile`
 - Precedence: run‑level flags → per‑agent settings → code defaults → env
 
 ## testing
@@ -103,9 +114,11 @@ class OfferInput(BaseModel):
   - Compatibility filter and scoring (stock wins ties)
   - API `/search` happy path via TestClient
 - Quote tests
-  - HTML creation always; PDF only if wkhtmltopdf present
+  - HTML creation always; PDF when wkhtmltopdf present
 - Ingest tests
-  - CSV adapter: valid/invalid rows; idempotent upsert; EAN preferred
+  - CSV/PDF adapters: valid/invalid rows; idempotent upsert; price change history
+- CLI tests
+  - `search-cli` output shape; `quote-cli` artifact exists
 - Coverage target: ≥ 85% line and branch (CONTROL.yaml)
 
 ## logging & errors
@@ -115,7 +128,7 @@ class OfferInput(BaseModel):
 
 ## evidence
 - Vendor docs (initial list; fill versions after .venv audit):
-  - FastAPI, Pydantic v2, SQLAlchemy 2.x, pandas, rapidfuzz, PyYAML, Jinja2, pdfkit/wkhtmltopdf, Gradio, httpx
+  - FastAPI, Pydantic v2, SQLAlchemy 2.x, pandas, rapidfuzz, PyYAML, Jinja2, pdfkit/wkhtmltopdf, Gradio, httpx, pdfplumber, Typer, Rich
 - .venv audit (to run after `uv pip install -r requirements.txt`):
   - List packages/versions: `uv run python -c "import importlib, pkgutil; print(sorted([(m.name) for m in pkgutil.iter_modules()]))"`
   - Capture versions: `uv run python - <<'PY'\nimport fastapi, pydantic, sqlalchemy, pandas, rapidfuzz, yaml, jinja2, httpx\nprint({'fastapi': fastapi.__version__, 'pydantic': pydantic.__version__, 'sqlalchemy': sqlalchemy.__version__})\nPY`
@@ -138,4 +151,3 @@ class OfferInput(BaseModel):
 - Run API: `make api`
 - Seed demo: `make seed`
 - Systemd example: `deploy/bike-copilot.service` (ensure user has write access to `out/`).
-

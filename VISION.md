@@ -31,8 +31,8 @@ Risks & Mitigations
 - Legal/ToS: prefer official files/APIs; scrape only with permission and etiquette.
 
 Milestones
-- M1 Demo‑Lite (CSV) — search, top‑3, quote HTML/PDF, KPI basics.
-- M2 PDF Ingest — add PdfTable adapter + staging with provenance.
-- M3 Web Adapter — provider fetcher with cache and rate limits.
-- M4 Hardening — auth for /quote,/kpi; systemd deployment path; tests to 85%.
-
+- M1 Demo‑Lite (CSV) — DONE: search, top‑3, quote HTML/PDF, KPI basics, CLI + UI.
+- M2 PDF Ingest — DONE: pdfplumber adapter with mapping YAML, staging.
+- M2.5 Price History — DONE: unique offer upsert and price history table.
+- M3 Web Adapter — NEXT: provider fetcher with cache and selectors in YAML.
+- M4 Hardening — PARTIAL: auth on /quote,/kpi,/files; systemd env; cron. Increase tests and coverage to ≥ 85%.
