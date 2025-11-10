@@ -55,6 +55,16 @@ Web Ingest (HTML mapping)
 - Example: `uv run python -m app.cli fetch-web --html providers/html/example.html --mapping providers/web-example.yaml`
 - Mapping YAML defines CSS selectors for `root`, `brand`, `mpn`, `name`, `price` (and optional `in_stock`, `lead_time_days`).
 
+Web Ingest (remote pages)
+- Fetch one or more URLs and upsert:
+  - `uv run python -m app.cli fetch-web-url --url https://shop.example/cassettes?page=1 --mapping providers/web-example.yaml --follow-next --max-pages 3`
+- Site search via URL template in mapping:
+  - `uv run python -m app.cli search-web --query "catena 11v" --mapping providers/web-example.yaml`
+- Mapping YAML extra keys:
+  - `pagination.next`: CSS selector for the “next page” link
+  - `search.url_template`: e.g. `https://shop.example/search?q={q}`
+  - For auth/cookies: pass `--header "Cookie: a=b"` (permitted sites only)
+
 Security
 - Basic Auth guards `/quote`, `/kpi/*`, and `/files/*` when `APP_BASIC_USER` and `APP_BASIC_PASS` are set.
 - `/files/*` serves only `.html` and `.pdf` from `APP_OUT_DIR`.
