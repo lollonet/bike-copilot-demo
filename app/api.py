@@ -13,8 +13,15 @@ from sqlalchemy import select
 
 from .config import settings
 from .models import EventLog, SessionLocal, SupplierOffer, create_all
-from .search import search
-from .types import Problem, QuoteRequest, QuoteResponse, SearchRequest, SearchResponse
+from .search import search, facets as compute_facets
+from .types import (
+    Problem,
+    QuoteRequest,
+    QuoteResponse,
+    SearchRequest,
+    SearchResponse,
+    FacetsResponse,
+)
 from .logging_utils import log_event
 
 
@@ -76,6 +83,23 @@ def api_search(req: SearchRequest, request: Request) -> SearchResponse:
         message="search completed",
         trace_id=getattr(request.state, "trace_id", None),
         extra={"results": len(res.items)},
+    )
+    return res
+
+
+@app.post("/facets", response_model=FacetsResponse, responses={400: {"model": Problem}})
+def api_facets(req: SearchRequest, request: Request) -> FacetsResponse:
+    res = compute_facets(req)
+    log_event(
+        "INFO",
+        op="facets",
+        kind="api",
+        message="facets computed",
+        trace_id=getattr(request.state, "trace_id", None),
+        extra={
+            "products": res.totals.get("products", 0),
+            "offers": res.totals.get("offers", 0),
+        },
     )
     return res
 

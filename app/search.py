@@ -3,10 +3,11 @@ from __future__ import annotations
 
 import yaml
 from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 
 from .config import settings
 from .models import EventLog, Product, SessionLocal, SupplierOffer
-from .types import OfferItem, SearchRequest, SearchResponse
+from .types import OfferItem, SearchRequest, SearchResponse, FacetsResponse
 
 
 def _load_synonyms() -> dict[str, dict[str, list[str]]]:
@@ -65,112 +66,192 @@ def final_score(offer: SupplierOffer, comp_score: int, min_price: float) -> floa
     return 0.35 * avail + 0.25 * comp + 0.20 * lead + 0.20 * price_norm
 
 
-def search(request: SearchRequest) -> SearchResponse:
+def _prefilter_products(request: SearchRequest) -> list[Product]:
     synonyms = _load_synonyms()
     with SessionLocal() as db:
-        q = select(Product)
-        products = db.scalars(q).all()
+        products = db.scalars(
+            select(Product).options(selectinload(Product.offers))
+        ).all()
+    filtered: list[Product] = []
+    qtext = (request.query_text or "").strip().lower()
+    tokens = [t for t in qtext.split() if t]
+    for p in products:
+        ok = True
+        if tokens:
+            hay = f"{p.brand or ''} {p.mpn or ''} {p.name or ''}".lower()
+            for t in tokens:
+                if t not in hay:
+                    ok = False
+                    break
+        if request.speed and apply_synonyms(
+            request.speed, "speed", synonyms
+        ) != apply_synonyms(p.speed, "speed", synonyms):
+            ok = False
+        if request.freehub and apply_synonyms(
+            request.freehub.value, "freehub", synonyms
+        ) != apply_synonyms(p.freehub, "freehub", synonyms):
+            ok = False
+        if request.brake and apply_synonyms(
+            request.brake.value, "brake", synonyms
+        ) != apply_synonyms(p.brake, "brake", synonyms):
+            ok = False
+        if request.axle and apply_synonyms(
+            request.axle, "axle", synonyms
+        ) != apply_synonyms(p.axle, "axle", synonyms):
+            ok = False
+        if request.rotor and apply_synonyms(
+            request.rotor.value, "rotor", synonyms
+        ) != apply_synonyms(p.rotor, "rotor", synonyms):
+            ok = False
+        if ok:
+            filtered.append(p)
+    return filtered
 
-        # Pre-filter on requested fields and optional text tokens
-        filtered: list[Product] = []
-        qtext = (request.query_text or "").strip().lower()
-        tokens = [t for t in qtext.split() if t]
-        for p in products:
-            ok = True
-            if tokens:
-                hay = f"{p.brand or ''} {p.mpn or ''} {p.name or ''}".lower()
-                for t in tokens:
-                    if t not in hay:
-                        ok = False
-                        break
-            if request.speed and apply_synonyms(
-                request.speed, "speed", synonyms
-            ) != apply_synonyms(p.speed, "speed", synonyms):
-                ok = False
-            if request.freehub and apply_synonyms(
-                request.freehub.value, "freehub", synonyms
-            ) != apply_synonyms(p.freehub, "freehub", synonyms):
-                ok = False
-            if request.brake and apply_synonyms(
-                request.brake.value, "brake", synonyms
-            ) != apply_synonyms(p.brake, "brake", synonyms):
-                ok = False
-            if request.axle and apply_synonyms(
-                request.axle, "axle", synonyms
-            ) != apply_synonyms(p.axle, "axle", synonyms):
-                ok = False
-            if request.rotor and apply_synonyms(
-                request.rotor.value, "rotor", synonyms
-            ) != apply_synonyms(p.rotor, "rotor", synonyms):
-                ok = False
-            if ok:
-                filtered.append(p)
 
-        # Gather offers
-        offers: list[tuple[SupplierOffer, int, list[str], list[str]]] = []
-        for p in filtered:
-            for o in p.offers:
-                comp, pros, cons = compatibility_score(request, p, synonyms)
-                offers.append((o, comp, pros, cons))
+def search(request: SearchRequest) -> SearchResponse:
+    synonyms = _load_synonyms()
+    filtered = _prefilter_products(request)
 
-        # Budget filter (if provided)
-        if request.budget_max is not None:
-            offers = [
-                t
-                for t in offers
-                if (
-                    t[0].price is not None
-                    and float(t[0].price) <= float(request.budget_max)
-                )
-            ]
+    # Gather offers
+    offers: list[tuple[SupplierOffer, int, list[str], list[str], str, str]] = []
+    for p in filtered:
+        for o in p.offers:
+            comp, pros, cons = compatibility_score(request, p, synonyms)
+            offers.append((o, comp, pros, cons, p.brand, p.mpn))
 
-        if not offers:
-            return SearchResponse(items=[])
-
-        min_price = min(o.price for (o, _c, _p, _cn) in offers if o.price is not None)
-        ranked = sorted(
-            offers,
-            key=lambda t: final_score(t[0], t[1], min_price),
-            reverse=True,
-        )
-        top3 = ranked[:3]
-        items = [
-            OfferItem(
-                id=o.id,
-                brand=o.product.brand,
-                mpn=o.product.mpn,
-                supplier=o.supplier,
-                price=float(o.price),
-                in_stock=bool(o.in_stock),
-                lead_time_days=o.lead_time_days,
-                score=final_score(o, comp, min_price),
-                pros=pros,
-                cons=cons,
+    # Offer-level filters: suppliers, in_stock, budget
+    if request.suppliers and len(request.suppliers) > 0:
+        offers = [t for t in offers if t[0].supplier in request.suppliers]
+    if request.in_stock_only:
+        offers = [t for t in offers if t[0].in_stock]
+    if request.budget_max is not None:
+        offers = [
+            t
+            for t in offers
+            if (
+                t[0].price is not None
+                and float(t[0].price) <= float(request.budget_max)
             )
-            for (o, comp, pros, cons) in top3
         ]
-        # Log event
-        with SessionLocal() as log_db:
-            log_db.add(
-                EventLog(
-                    type="search",
-                    payload={
-                        "filters": {
-                            "speed": request.speed,
-                            "freehub": request.freehub.value
-                            if request.freehub
-                            else None,
-                            "brake": request.brake.value if request.brake else None,
-                            "axle": request.axle,
-                            "rotor": request.rotor.value if request.rotor else None,
-                            "budget_max": request.budget_max,
-                        },
-                        "results": len(items),
+
+    if not offers:
+        return SearchResponse(items=[])
+
+    min_price = min(
+        o.price for (o, _c, _p, _cn, _b, _m) in offers if o.price is not None
+    )
+    ranked = sorted(
+        offers, key=lambda t: final_score(t[0], t[1], min_price), reverse=True
+    )
+    top3 = ranked[:3]
+    items = [
+        OfferItem(
+            id=o.id,
+            brand=brand,
+            mpn=mpn,
+            supplier=o.supplier,
+            price=float(o.price),
+            in_stock=bool(o.in_stock),
+            lead_time_days=o.lead_time_days,
+            score=final_score(o, comp, min_price),
+            pros=pros,
+            cons=cons,
+        )
+        for (o, comp, pros, cons, brand, mpn) in top3
+    ]
+    # Log event
+    with SessionLocal() as log_db:
+        log_db.add(
+            EventLog(
+                type="search",
+                payload={
+                    "filters": {
+                        "speed": request.speed,
+                        "freehub": request.freehub.value if request.freehub else None,
+                        "brake": request.brake.value if request.brake else None,
+                        "axle": request.axle,
+                        "rotor": request.rotor.value if request.rotor else None,
+                        "budget_max": request.budget_max,
                     },
-                )
+                    "results": len(items),
+                },
             )
-            log_db.commit()
-        return SearchResponse(items=items)
+        )
+        log_db.commit()
+    return SearchResponse(items=items)
+
+
+def facets(request: SearchRequest) -> FacetsResponse:
+    synonyms = _load_synonyms()
+    filtered = _prefilter_products(request)
+    counts = {
+        "speed": {},
+        "freehub": {},
+        "brake": {},
+        "axle": {},
+        "rotor": {},
+        "supplier": {},
+        "category": {},
+    }
+    prices: list[float] = []
+    offer_total = 0
+    for p in filtered:
+        # Category facet
+        if p.category:
+            keyc = str(p.category)
+            counts["category"][keyc] = counts["category"].get(keyc, 0) + 1
+
+        # Product-level facet counts (canonicalized)
+        def bump(cat: str, value: str | None) -> None:
+            if value is None:
+                return
+            canon = apply_synonyms(value, cat, synonyms)
+            if canon is None:
+                return
+            d = counts[cat]
+            key = str(canon)
+            d[key] = d.get(key, 0) + 1
+
+        bump("speed", p.speed)
+        bump("freehub", p.freehub)
+        bump("brake", p.brake)
+        bump("axle", p.axle)
+        bump("rotor", p.rotor)
+        # Offer-level data for price range
+        for o in p.offers:
+            # Apply supplier/in_stock filters for offer-level facets
+            if request.in_stock_only and not o.in_stock:
+                continue
+            if (
+                request.suppliers
+                and len(request.suppliers) > 0
+                and o.supplier not in request.suppliers
+            ):
+                continue
+            if o.price is not None:
+                if request.budget_max is None or float(o.price) <= float(
+                    request.budget_max
+                ):
+                    prices.append(float(o.price))
+                    offer_total += 1
+            sname = o.supplier
+            counts["supplier"][sname] = counts["supplier"].get(sname, 0) + 1
+
+    price_info = {
+        "min": (min(prices) if prices else None),
+        "max": (max(prices) if prices else None),
+    }
+    return FacetsResponse(
+        speed=counts["speed"],
+        freehub=counts["freehub"],
+        brake=counts["brake"],
+        axle=counts["axle"],
+        rotor=counts["rotor"],
+        supplier=counts["supplier"],
+        category=counts["category"],
+        price=price_info,
+        totals={"products": len(filtered), "offers": offer_total},
+    )
 
 
 def dry_run() -> None:

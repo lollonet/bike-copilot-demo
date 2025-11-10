@@ -58,6 +58,7 @@ class Product(Base):
     mpn: Mapped[str] = mapped_column(String(100), index=True)
     ean: Mapped[str | None] = mapped_column(String(32), unique=False, index=True)
     name: Mapped[str] = mapped_column(String(200))
+    category: Mapped[str | None] = mapped_column(String(100), index=True)
     speed: Mapped[str | None] = mapped_column(String(10))
     brake: Mapped[str | None] = mapped_column(String(20))
     axle: Mapped[str | None] = mapped_column(String(20))
@@ -109,6 +110,22 @@ class EventLog(Base):
 
 def create_all() -> None:
     engine = get_engine()
+    # Lightweight migration for SQLite: add missing columns if needed
+    if settings.db_url.startswith("sqlite"):
+        with engine.connect() as conn:
+            try:
+                cols = [
+                    row[1]
+                    for row in conn.exec_driver_sql(
+                        "PRAGMA table_info(product)"
+                    ).fetchall()
+                ]
+                if cols and "category" not in cols:
+                    conn.exec_driver_sql(
+                        "ALTER TABLE product ADD COLUMN category VARCHAR(100)"
+                    )
+            except Exception:
+                pass
     Base.metadata.create_all(engine)
 
 

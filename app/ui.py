@@ -269,17 +269,97 @@ def build_interface() -> gr.Blocks:
             )
             labels = [opt[0] for opt in options]
             default_label = labels[0] if labels else None
+            # Fetch facets from API to refresh filter options/info
+            try:
+                auth = (API_USER, API_PASS) if API_USER and API_PASS else None
+                payload = {
+                    "query_text": query or None,
+                    "speed": speed or None,
+                    "freehub": (freehub or None),
+                    "brake": (brake or None),
+                    "axle": axle or None,
+                    "rotor": (rotor or None),
+                    "budget_max": budget,
+                }
+                r = httpx.post(
+                    f"{API_BASE}/facets", json=payload, auth=auth, timeout=10
+                )
+                if r.status_code == 200:
+                    f = r.json()
+                    # Build info strings
+                    speed_info = ", ".join(
+                        [f"{k} ({v})" for k, v in sorted(f.get("speed", {}).items())]
+                    )
+                    freehub_info = ", ".join(
+                        [f"{k} ({v})" for k, v in sorted(f.get("freehub", {}).items())]
+                    )
+                    brake_info = ", ".join(
+                        [f"{k} ({v})" for k, v in sorted(f.get("brake", {}).items())]
+                    )
+                    axle_info = ", ".join(
+                        [f"{k} ({v})" for k, v in sorted(f.get("axle", {}).items())]
+                    )
+                    rotor_info = ", ".join(
+                        [f"{k} ({v})" for k, v in sorted(f.get("rotor", {}).items())]
+                    )
+                    # Choices are only keys with count>0 to avoid dead filters
+                    speed_choices = sorted(list(f.get("speed", {}).keys()))
+                    freehub_choices = sorted(list(f.get("freehub", {}).keys()))
+                    brake_choices = sorted(list(f.get("brake", {}).keys()))
+                    # axle choices are informative only in tooltip for ora
+                    rotor_choices = sorted(list(f.get("rotor", {}).keys()))
+                    speed_upd = gr.update(
+                        choices=[""] + speed_choices, info=(speed_info or None)
+                    )
+                    freehub_upd = gr.update(
+                        choices=[""] + freehub_choices, info=(freehub_info or None)
+                    )
+                    brake_upd = gr.update(
+                        choices=[""] + brake_choices, info=(brake_info or None)
+                    )
+                    axle_upd = gr.update(info=(axle_info or None))
+                    rotor_upd = gr.update(
+                        choices=[""] + rotor_choices, info=(rotor_info or None)
+                    )
+                else:
+                    speed_upd = gr.update()
+                    freehub_upd = gr.update()
+                    brake_upd = gr.update()
+                    axle_upd = gr.update()
+                    rotor_upd = gr.update()
+            except Exception:
+                speed_upd = gr.update()
+                freehub_upd = gr.update()
+                brake_upd = gr.update()
+                axle_upd = gr.update()
+                rotor_upd = gr.update()
+
             return (
                 rows,
                 gr.update(choices=labels, value=default_label),
                 {k: v for k, v in mapping.items()},
                 msg,
+                speed_upd,
+                freehub_upd,
+                brake_upd,
+                axle_upd,
+                rotor_upd,
             )
 
         search_btn.click(
             _on_search,
             inputs=[query, speed, freehub, brake, axle, rotor, budget],
-            outputs=[results, offer_select, results_state, status],
+            outputs=[
+                results,
+                offer_select,
+                results_state,
+                status,
+                speed,
+                freehub,
+                brake,
+                axle,
+                rotor,
+            ],
         )
 
         def _on_clear():

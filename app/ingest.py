@@ -46,6 +46,7 @@ def upsert(core: list[ProductInput], offers: list[OfferInput]) -> IngestStats:
                     mpn=p.mpn,
                     ean=p.ean,
                     name=p.name,
+                    category=p.category,
                     speed=p.speed,
                     brake=p.brake,
                     axle=p.axle,
@@ -61,6 +62,7 @@ def upsert(core: list[ProductInput], offers: list[OfferInput]) -> IngestStats:
                 )
             else:
                 existing.name = p.name or existing.name
+                existing.category = p.category or existing.category
                 existing.speed = p.speed or existing.speed
                 existing.brake = p.brake or existing.brake
                 existing.axle = p.axle or existing.axle

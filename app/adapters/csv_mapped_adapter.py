@@ -32,7 +32,7 @@ def parse_unified_csv(
     df = df.dropna(how="all")
     # If header row wasn't detected (e.g., file starts with delimiter-only row),
     # detect if first data row contains our expected column names and promote it to header.
-    expected_headers = set(cols.values())
+    expected_headers = set(v for v in cols.values() if v)
     if not expected_headers.issubset(set(df.columns)) and len(df) > 0:
         first = [str(x).strip() for x in list(df.iloc[0].values)]
         if expected_headers.issubset(set(first)):
@@ -53,11 +53,11 @@ def parse_unified_csv(
     products: list[ProductInput] = []
     offers: list[OfferInput] = []
     for r in df.to_dict(orient="records"):
+        category = get_val(r, "category") or get_val(r, "categoria")
         brand = (
             get_val(r, "brand")
-            or get_val(r, "categoria")
             or mapping.get("brand_default")
-            or "Generic"
+            or (category or "Generic")
         )
         mpn = get_val(r, "mpn") or ""
         name = get_val(r, "name") or f"{brand} {mpn}".strip()
@@ -77,6 +77,7 @@ def parse_unified_csv(
                 mpn=mpn,
                 ean=None,
                 name=name,
+                category=category,
                 speed=None,
                 brake=None,
                 axle=None,

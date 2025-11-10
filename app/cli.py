@@ -5,6 +5,8 @@ from pathlib import Path
 import rich
 import typer
 from rich.table import Table
+import os
+import random
 
 from .adapters.csv_adapter import parse_offers_csv, parse_products_csv
 from .adapters.pdf_adapter import extract_from_pdf
@@ -113,6 +115,132 @@ def ingest_csv_mapped(
     products, offers = parse_unified_csv(csv, mapping)
     stats: IngestStats = upsert(products, offers)
     rich.print(stats)
+
+
+@app.command("reset-db")
+def reset_db() -> None:
+    """Delete local SQLite database and recreate tables."""
+    from .config import settings
+
+    url = settings.db_url
+    if url.startswith("sqlite"):
+        path = url.split("///")[-1]
+        for p in [path, f"{path}-shm", f"{path}-wal"]:
+            try:
+                if os.path.exists(p):
+                    os.remove(p)
+            except Exception:
+                pass
+    # Recreate
+    create_all()
+    rich.print({"db": "reset", "url": url})
+
+
+@app.command("ingest-csv-synth")
+def ingest_csv_synth(
+    csv: Path = typer.Option(
+        ..., exists=True, file_okay=True, dir_okay=False, readable=True
+    ),
+    mapping: Path = typer.Option(
+        ..., exists=True, file_okay=True, dir_okay=False, readable=True
+    ),
+    suppliers: int = typer.Option(
+        3, min=1, help="number of synthetic suppliers per product (approx)"
+    ),
+    coverage: float = typer.Option(
+        0.6, min=0.0, max=1.0, help="fraction of products that get extra suppliers"
+    ),
+    jitter: float = typer.Option(
+        0.12, min=0.0, max=0.5, help="max price variation +/- as fraction"
+    ),
+) -> None:
+    """Ingest CSV and synthesize duplicate offers across multiple suppliers."""
+    from .types import OfferInput
+
+    base_products, base_offers = parse_unified_csv(csv, mapping)
+
+    # Upsert base rows first
+    stats = upsert(base_products, base_offers)
+
+    # Generate synthetic suppliers
+    supplier_names = [
+        "BiciPro",
+        "RideLabs",
+        "PedalX",
+        "Velocita",
+        "GearHub",
+        "TrailWorks",
+        "WheelHouse",
+        "ChainLine",
+    ]
+    rng = random.Random(42)
+
+    # Build grouped products by (brand, mpn)
+    grouped: dict[tuple[str, str], dict[str, str | float]] = {}
+    for o in base_offers:
+        key = (o.brand, o.mpn)
+        grouped[key] = {"price": o.price}
+
+    extra_offers: list[OfferInput] = []
+    for (brand, mpn), info in grouped.items():
+        if rng.random() > coverage:
+            continue
+        base_price = float(info.get("price", 0.0)) or 0.0
+        if base_price <= 0:
+            continue
+        k = max(0, suppliers - 1)  # extra suppliers beyond the base
+        chosen = rng.sample(supplier_names, k=min(k, len(supplier_names)))
+        for sup in chosen:
+            delta = rng.uniform(-jitter, jitter)
+            price = round(base_price * (1.0 + delta), 2)
+            in_stock = rng.random() < 0.7
+            lead = rng.randint(0, 5)
+            extra_offers.append(
+                OfferInput(
+                    brand=brand,
+                    mpn=mpn,
+                    supplier=sup,
+                    price=price,
+                    in_stock=in_stock,
+                    lead_time_days=lead,
+                )
+            )
+
+    if extra_offers:
+        stats2 = upsert([], extra_offers)
+        stats = IngestStats(
+            products_new=stats.products_new,
+            products_updated=stats.products_updated,
+            offers_upserted=stats.offers_upserted + stats2.offers_upserted,
+            offers_skipped=stats.offers_skipped + stats2.offers_skipped,
+        )
+
+    # Summary
+    from sqlalchemy import func
+
+    with SessionLocal() as db:
+        prod_count = (
+            db.query(func.count(SupplierOffer.product_id.distinct())).scalar() or 0
+        )
+        offer_count = db.query(func.count(SupplierOffer.id)).scalar() or 0
+        sup_count = (
+            db.query(func.count(SupplierOffer.supplier.distinct())).scalar() or 0
+        )
+        in_stock = (
+            db.query(func.count(SupplierOffer.id))
+            .filter(SupplierOffer.in_stock)
+            .scalar()
+            or 0
+        )
+    rich.print(
+        {
+            "products": prod_count,
+            "offers": offer_count,
+            "suppliers": sup_count,
+            "in_stock_offers": in_stock,
+            "ingest": stats.__dict__,
+        }
+    )
 
 
 @app.command()

@@ -35,6 +35,9 @@ class SearchRequest(BaseModel):
     axle: str | None = None
     rotor: Rotor | None = None
     budget_max: float | None = None
+    category: str | None = None
+    suppliers: list[str] | None = None
+    in_stock_only: bool | None = None
 
 
 class OfferItem(BaseModel):
@@ -74,12 +77,25 @@ class QuoteResponse(BaseModel):
     file_url: str | None = None
 
 
+class FacetsResponse(BaseModel):
+    speed: dict[str, int]
+    freehub: dict[str, int]
+    brake: dict[str, int]
+    axle: dict[str, int]
+    rotor: dict[str, int]
+    supplier: dict[str, int]
+    category: dict[str, int]
+    price: dict[str, float | None]
+    totals: dict[str, int]
+
+
 # Internal ingest boundary (provider adapters → ingest orchestrator)
 class ProductInput(BaseModel):
     brand: str
     mpn: str
     ean: str | None = None
     name: str
+    category: str | None = None
     speed: str | None = None
     brake: str | None = None
     axle: str | None = None
