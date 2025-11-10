@@ -1,0 +1,14 @@
+# env & caches
+.venv/
+.uv-cache/
+__pycache__/
+*.pyc
+
+# local state
+app.db*
+out/
+.api_pid
+.ui_pid
+
+# OS
+.DS_Store
