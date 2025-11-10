@@ -8,7 +8,7 @@ import secrets
 from fastapi import Depends, FastAPI, HTTPException, Request
 from typing import Mapping
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from sqlalchemy import select
 
 from .config import settings
@@ -21,13 +21,13 @@ from .logging_utils import log_event
 
 app = FastAPI(title="Bike Copilot Demo")
 
-_basic = HTTPBasic()
+_basic = HTTPBasic(auto_error=False)
 
 
-def require_auth(creds: HTTPBasicCredentials = Depends(_basic)) -> None:
+def require_auth(creds: HTTPBasicCredentials | None = Depends(_basic)) -> None:
     # If creds configured, enforce; otherwise allow (demo default)
     if settings.basic_user and settings.basic_pass:
-        if not (
+        if not creds or not (
             secrets.compare_digest(creds.username, settings.basic_user)
             and secrets.compare_digest(creds.password, settings.basic_pass)
         ):
@@ -93,6 +93,17 @@ def serve_file(name: str, _: None = Depends(require_auth)) -> FileResponse:
     return FileResponse(str(p))
 
 
+@app.head("/files/{name:path}")
+def head_file(name: str, _: None = Depends(require_auth)) -> Response:
+    from pathlib import Path
+
+    allowed = {".html", ".pdf"}
+    p = Path(settings.out_dir) / name
+    if not p.is_file() or p.suffix.lower() not in allowed:
+        raise HTTPException(status_code=404, detail="Not found")
+    return Response(status_code=200)
+
+
 @app.post("/quote", response_model=QuoteResponse, responses={400: {"model": Problem}})
 def api_quote(
     req: QuoteRequest, request: Request, _: None = Depends(require_auth)
@@ -148,10 +159,14 @@ def api_quote(
             trace_id=getattr(request.state, "trace_id", None),
             extra={"offer_id": offer.id, "pdf": bool(pdf_path)},
         )
+        from urllib.parse import urljoin
+        from pathlib import Path
+        file_url = urljoin(str(request.base_url), f"files/{Path(html_path).name}")
         return QuoteResponse(
             content_type="application/pdf" if pdf_path else "text/html",
             html_path=html_path,
             pdf_path=pdf_path,
+            file_url=file_url,
         )
 
 

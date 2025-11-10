@@ -67,6 +67,7 @@ class QuoteResponse(BaseModel):
     content_type: str
     html_path: str
     pdf_path: str | None = None
+    file_url: str | None = None
 
 
 # Internal ingest boundary (provider adapters → ingest orchestrator)
