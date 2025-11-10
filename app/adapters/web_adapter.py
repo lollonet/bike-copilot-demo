@@ -169,12 +169,15 @@ def parse_detail_html(
             return str(val) if val is not None else ""
         return el.get_text(strip=True)
 
-    brand = pick("brand")
-    name = pick("name")
-    mpn = pick("mpn")
-    price_sel = detail.get("price") or ""
-    price_el = scope.select_one(price_sel) if price_sel else None
-    price_s = _price_text(price_el)
+    brand = pick("brand").strip()
+    name = pick("name").strip()
+    mpn = pick("mpn").strip()
+    # Price: support meta content or HTML amounts
+    price_s = pick("price")
+    if not price_s:
+        price_sel = detail.get("price") or ""
+        price_el = scope.select_one(price_sel) if price_sel else None
+        price_s = _price_text(price_el)
     in_stock_s = pick("in_stock")
     lead_s = pick("lead_time_days")
 
@@ -189,8 +192,18 @@ def parse_detail_html(
 
         m = re.search(r"\bCOD[:\s]+([\w\-\./]+)", meta_text, flags=re.IGNORECASE)
         if m:
-            mpn = m.group(1)
+            mpn = m.group(1).strip()
+    # Fallback 2: if still missing, parse product id from og:url (/product/<id>/...)
+    if not mpn:
+        url_meta = scope.select_one("meta[property='og:url']")
+        if url_meta and url_meta.get("content"):
+            import re
 
+            mm = re.search(r"/product/(\d+)/", str(url_meta.get("content")))
+            if mm:
+                mpn = mm.group(1)
+
+    mpn = mpn.strip()
     if not brand or not mpn or not price_s:
         return None, None
 

@@ -88,7 +88,9 @@ Security
 
 UI features
 - Ricerca per testo con token (brand/mpn/nome) + budget cap.
-- Filtri dinamici post‑ricerca (facets): Velocità, Corpetto, Freno, Rotore (Axle come info), Fornitori, Categoria; tooltip con conteggi.
+- Ricerca full‑width in alto; sotto, filtri primari: Categoria e Fornitori.
+- Filtri dinamici post‑ricerca (facets): Velocità, Corpetto, Freno, Rotore, Axle.
+- “Albero filtri”: dopo la prima ricerca compaiono radio per ciascun facet; scegli un valore per applicarlo al filtro.
 - Gating intelligente: i "Filtri tecnici" si abilitano solo se coprono ≥15% dei risultati correnti, evitando filtri fuorvianti.
 - “Solo in stock”, “Budget massimo” con info min/max da facets; campo numerico e slider sincronizzati (0 = nessun limite).
 - Ricerca non parte ad ogni tasto: premi Invio nella casella di testo o il pulsante "Cerca"; i filtri invece aggiornano automaticamente i risultati.

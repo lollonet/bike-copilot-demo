@@ -148,16 +148,27 @@ def build_interface() -> gr.Blocks:
         results_state = gr.State({})
         cart_state = gr.State({})
 
+        # Ricerca in alto a tutta larghezza
+        gr.Markdown("### Ricerca")
+        with gr.Row():
+            query = gr.Textbox(
+                label="Ricerca (testo libero)",
+                placeholder="Es. cassetta 11v HG 11-32, catena CN-HG601",
+                info="Parole chiave libere: marca, MPN, specifiche.",
+                scale=3,
+            )
+            search_btn = gr.Button("Cerca", variant="primary")
+            clear_btn = gr.Button("Pulisci")
+
+        # Filtri principali sotto la ricerca: Categoria e Fornitori
+        with gr.Row():
+            category = gr.Dropdown(label="Categoria", choices=[""], value="", scale=1)
+            suppliers = gr.CheckboxGroup(label="Fornitori", choices=[], scale=2)
+
         with gr.Row():
             with gr.Column(scale=1):
-                gr.Markdown("### Ricerca")
-                query = gr.Textbox(
-                    label="Ricerca (testo libero)",
-                    placeholder="Es. cassetta 11v HG 11-32, catena CN-HG601",
-                    info="Parole chiave libere: marca, MPN, specifiche.",
-                )
+                gr.Markdown("### Pannello filtri")
                 with gr.Row():
-                    category = gr.Dropdown(label="Categoria", choices=[""], value="")
                     in_stock = gr.Checkbox(label="Solo in stock", value=False)
                 with gr.Accordion("Filtri tecnici", open=False):
                     speed = gr.Dropdown(
@@ -202,11 +213,22 @@ def build_interface() -> gr.Blocks:
                         value=0,
                         info="Usa lo slider per impostare rapidamente il budget (0 = nessun limite).",
                     )
-                with gr.Accordion("Fornitori", open=False):
-                    suppliers = gr.CheckboxGroup(label="Fornitori", choices=[])
+                # Albero filtri (si popola dopo la ricerca)
+                with gr.Accordion("Albero filtri (post-ricerca)", open=False):
+                    facet_speed = gr.Radio(
+                        label="Velocità", choices=[], interactive=True
+                    )
+                    facet_freehub = gr.Radio(
+                        label="Corpetto", choices=[], interactive=True
+                    )
+                    facet_brake = gr.Radio(label="Freno", choices=[], interactive=True)
+                    facet_rotor = gr.Radio(label="Rotore", choices=[], interactive=True)
+                    facet_axle = gr.Radio(
+                        label="Asse (Axle)", choices=[], interactive=True
+                    )
                 with gr.Row():
-                    search_btn = gr.Button("Cerca", variant="primary")
-                    clear_btn = gr.Button("Pulisci")
+                    # Pulsanti già definiti in alto; solo reminder visuale
+                    pass
                 status = gr.Markdown(visible=True)
             with gr.Column(scale=2):
                 gr.Markdown("### Risultati")
@@ -440,6 +462,40 @@ def build_interface() -> gr.Blocks:
                         maximum=max(100, int(max_val) or 100),
                         value=slider_val,
                     )
+                    # Facet tree radios (choices + enablement)
+                    cov_speed = _coverage(f.get("speed", {}))
+                    cov_freehub = _coverage(f.get("freehub", {}))
+                    cov_brake = _coverage(f.get("brake", {}))
+                    cov_rotor = _coverage(f.get("rotor", {}))
+                    facet_speed_upd = gr.update(
+                        choices=speed_choices,
+                        value=None,
+                        interactive=(cov_speed >= thr),
+                        info=_annotate(speed_info or None, cov_speed),
+                    )
+                    facet_freehub_upd = gr.update(
+                        choices=freehub_choices,
+                        value=None,
+                        interactive=(cov_freehub >= thr),
+                        info=_annotate(freehub_info or None, cov_freehub),
+                    )
+                    facet_brake_upd = gr.update(
+                        choices=brake_choices,
+                        value=None,
+                        interactive=(cov_brake >= thr),
+                        info=_annotate(brake_info or None, cov_brake),
+                    )
+                    facet_rotor_upd = gr.update(
+                        choices=rotor_choices,
+                        value=None,
+                        interactive=(cov_rotor >= thr),
+                        info=_annotate(rotor_info or None, cov_rotor),
+                    )
+                    facet_axle_upd = gr.update(
+                        choices=sorted(list(f.get("axle", {}).keys())),
+                        value=None,
+                        info=axle_info or None,
+                    )
                 else:
                     speed_upd = gr.update()
                     freehub_upd = gr.update()
@@ -450,6 +506,11 @@ def build_interface() -> gr.Blocks:
                     category_upd = gr.update()
                     budget_upd = gr.update()
                     budget_slider_upd = gr.update()
+                    facet_speed_upd = gr.update()
+                    facet_freehub_upd = gr.update()
+                    facet_brake_upd = gr.update()
+                    facet_rotor_upd = gr.update()
+                    facet_axle_upd = gr.update()
             except Exception:
                 speed_upd = gr.update()
                 freehub_upd = gr.update()
@@ -460,6 +521,11 @@ def build_interface() -> gr.Blocks:
                 category_upd = gr.update()
                 budget_upd = gr.update()
                 budget_slider_upd = gr.update()
+                facet_speed_upd = gr.update()
+                facet_freehub_upd = gr.update()
+                facet_brake_upd = gr.update()
+                facet_rotor_upd = gr.update()
+                facet_axle_upd = gr.update()
 
             return (
                 rows,
@@ -475,6 +541,11 @@ def build_interface() -> gr.Blocks:
                 category_upd,
                 budget_upd,
                 budget_slider_upd,
+                facet_speed_upd,
+                facet_freehub_upd,
+                facet_brake_upd,
+                facet_rotor_upd,
+                facet_axle_upd,
             )
 
         search_btn.click(
@@ -505,6 +576,11 @@ def build_interface() -> gr.Blocks:
                 category,
                 budget,
                 budget_slider,
+                facet_speed,
+                facet_freehub,
+                facet_brake,
+                facet_rotor,
+                facet_axle,
             ],
         )
 
@@ -548,6 +624,11 @@ def build_interface() -> gr.Blocks:
                     category,
                     budget,
                     budget_slider,
+                    facet_speed,
+                    facet_freehub,
+                    facet_brake,
+                    facet_rotor,
+                    facet_axle,
                 ],
             )
 
@@ -580,6 +661,11 @@ def build_interface() -> gr.Blocks:
                 category,
                 budget,
                 budget_slider,
+                facet_speed,
+                facet_freehub,
+                facet_brake,
+                facet_rotor,
+                facet_axle,
             ],
         )
 
@@ -614,8 +700,25 @@ def build_interface() -> gr.Blocks:
                 offer_select,
                 results_state,
                 status,
+                facet_speed,
+                facet_freehub,
+                facet_brake,
+                facet_rotor,
+                facet_axle,
             ],
         )
+
+        # Facet tree interactions: pick → set corresponding control, then the .change handler triggers search
+        def _pick(val: str | None):
+            if not val:
+                return gr.update()
+            return gr.update(value=val)
+
+        facet_speed.change(_pick, inputs=[facet_speed], outputs=[speed])
+        facet_freehub.change(_pick, inputs=[facet_freehub], outputs=[freehub])
+        facet_brake.change(_pick, inputs=[facet_brake], outputs=[brake])
+        facet_rotor.change(_pick, inputs=[facet_rotor], outputs=[rotor])
+        facet_axle.change(_pick, inputs=[facet_axle], outputs=[axle])
 
         # Keep slider and number in sync (0 means no budget)
         def _sync_budget_from_slider(val: float | int | None):
