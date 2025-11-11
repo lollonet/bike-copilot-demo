@@ -13,4 +13,4 @@ REQ: REQ-###  | ADR: ADR-###
 - [ ] Session log attached: .codepilot/sessions/<id>.md
 - [ ] `bash scripts/status.sh` run locally (or `--fix`)
 - [ ] Docs synced to codebase (Runbook 05); spec_lint and traceability pass
-- [ ] Commento post‑push con `@codex review` per trigger autocheck
+- [ ] Commento post‑push con `@codex review` (obbligatorio se il PR cambia codice)
