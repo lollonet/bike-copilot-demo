@@ -624,17 +624,23 @@ def build_interface() -> gr.Blocks:
 
         def _on_clear():
             return (
-                "",
-                "",
-                "",
-                "",
-                "",
-                "",
-                None,
-                [],
-                gr.update(choices=[], value=None),
-                {},
-                "",
+                "",  # query
+                gr.update(value=""),  # speed
+                gr.update(value=""),  # freehub
+                gr.update(value=""),  # brake
+                gr.update(value=""),  # axle
+                gr.update(value=""),  # rotor
+                gr.update(value=None),  # budget number
+                gr.update(value=0),  # budget slider
+                [],  # results
+                gr.update(choices=[], value=None),  # offer_select
+                {},  # results_state
+                "",  # status
+                gr.update(choices=[], value=None),  # facet_speed
+                gr.update(choices=[], value=None),  # facet_freehub
+                gr.update(choices=[], value=None),  # facet_brake
+                gr.update(choices=[], value=None),  # facet_rotor
+                gr.update(choices=[], value=None),  # facet_axle
             )
 
         clear_btn.click(

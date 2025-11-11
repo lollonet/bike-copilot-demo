@@ -12,6 +12,45 @@ from .models import EventLog, Product, SessionLocal, SupplierOffer
 from .types import OfferItem, SearchRequest, SearchResponse, FacetsResponse
 
 
+_CATEGORY_SYNONYMS: dict[str, str] = {}
+
+
+def _load_category_synonyms() -> dict[str, str]:
+    global _CATEGORY_SYNONYMS
+    if _CATEGORY_SYNONYMS:
+        return _CATEGORY_SYNONYMS
+    mapping: dict[str, str] = {}
+    try:
+        if os.path.exists(settings.category_synonyms_path):
+            with open(settings.category_synonyms_path, "r", encoding="utf-8") as cf:
+                data = yaml.safe_load(cf) or {}
+                for canon, aliases in data.items():
+                    mapping[str(canon).lower().strip()] = str(canon)
+                    for a in (aliases or []):
+                        mapping[str(a).lower().strip()] = str(canon)
+    except Exception:
+        mapping = {}
+    _CATEGORY_SYNONYMS = mapping
+    return _CATEGORY_SYNONYMS
+
+
+def canon_category(value: str | None) -> str | None:
+    """Canonicalize category labels using synonyms map and stable casing."""
+    if value is None:
+        return None
+    t = " ".join(str(value).strip().split())
+    if not t:
+        return None
+    low = t.lower()
+    syn = _load_category_synonyms()
+    if low in syn:
+        return syn[low]
+    cap = t.title()
+    for ac in ("MTB", "BMX", "E-BIKE", "Ebike", "CX"):
+        cap = cap.replace(ac.title(), ac)
+    return cap
+
+
 def _load_synonyms() -> dict[str, dict[str, list[str]]]:
     with open(settings.synonyms_path, "r", encoding="utf-8") as f:
         data: dict[str, dict[str, list[str]]] = yaml.safe_load(f) or {}
@@ -85,7 +124,10 @@ def _prefilter_products(request: SearchRequest) -> list[Product]:
                 if t not in hay:
                     ok = False
                     break
-        if request.category and (p.category or "") != request.category:
+        # Category comparison uses canonical form to match facet labels
+        if request.category and canon_category(p.category) != canon_category(
+            request.category
+        ):
             ok = False
         if request.speed and apply_synonyms(
             request.speed, "speed", synonyms
@@ -207,39 +249,10 @@ def facets(request: SearchRequest) -> FacetsResponse:
         else None
     )
 
-    # Load category synonyms once
-    _cat_syn: dict[str, str] = {}
-    try:
-        if os.path.exists(settings.category_synonyms_path):
-            with open(settings.category_synonyms_path, "r", encoding="utf-8") as cf:
-                data = yaml.safe_load(cf) or {}
-                # expect mapping canonical -> [aliases]
-                for canon, aliases in data.items():
-                    _cat_syn[str(canon).lower().strip()] = canon
-                    for a in (aliases or []):
-                        _cat_syn[str(a).lower().strip()] = canon
-    except Exception:
-        _cat_syn = {}
-
-    def _canon_category(value: str | None) -> str | None:
-        if value is None:
-            return None
-        t = " ".join(str(value).strip().split())
-        low = t.lower()
-        if low in _cat_syn:
-            return _cat_syn[low]
-        if not t:
-            return None
-        # Title-case generic labels; keep common acronyms uppercased
-        cap = t.title()
-        for ac in ("MTB", "BMX", "E-BIKE", "Ebike", "CX"):
-            cap = cap.replace(ac.title(), ac)
-        return cap
-
     for p in filtered:
         # Category facet
         if p.category:
-            keyc = _canon_category(p.category)
+            keyc = canon_category(p.category)
             if keyc is None:
                 keyc = str(p.category)
             counts["category"][keyc] = counts["category"].get(keyc, 0) + 1

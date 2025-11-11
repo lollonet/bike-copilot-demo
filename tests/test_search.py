@@ -125,3 +125,38 @@ def test_compatibility_filter():
     assert all(item.mpn == "M12" for item in res.items), (
         "Filter should exclude 11-speed items when 12 requested"
     )
+
+
+def test_category_canonicalization_match():
+    # Ensure canonicalized facet label (title-cased) matches raw stored category
+    Product, SupplierOffer, SessionLocal = _setup_db("test_category.db")
+
+    with SessionLocal() as db:
+        p = Product(
+            brand="T",
+            mpn="C1",
+            ean=None,
+            name="Catena",
+            category="trasmissione mtb",  # raw lowercase with space
+        )
+        db.add(p)
+        db.commit()
+        db.refresh(p)
+        db.add(
+            SupplierOffer(
+                product_id=p.id,
+                supplier="S",
+                price=9.99,
+                in_stock=True,
+                lead_time_days=1,
+            )
+        )
+        db.commit()
+
+    from app.types import SearchRequest
+    from app.search import search
+
+    # Category as it would appear in facet labels
+    res = search(SearchRequest(category="Trasmissione Mtb"))
+    assert res.items, "Expected results to match canonicalized category label"
+    assert any(it.mpn == "C1" for it in res.items), "Should include product C1"
