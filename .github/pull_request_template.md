@@ -12,4 +12,5 @@ REQ: REQ-###  | ADR: ADR-###
 - [ ] CI is green
 - [ ] Session log attached: .codepilot/sessions/<id>.md
 - [ ] `bash scripts/status.sh` run locally (or `--fix`)
- - [ ] Docs synced to codebase (Runbook 05); spec_lint and traceability pass
+- [ ] Docs synced to codebase (Runbook 05); spec_lint and traceability pass
+- [ ] Commento post‑push con `@codex review` per trigger autocheck
