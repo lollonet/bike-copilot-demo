@@ -23,6 +23,7 @@ REQ-003:
 REQ-004:
   commits: []
   files:
+  - docs/architecture/ARC-020-ux-wireframes.md
   - docs/requirements/REQ-004.ui-pn-first.md
   - docs/requirements/REQ-INDEX.md
   prs: []
@@ -30,6 +31,7 @@ REQ-004:
 REQ-005:
   commits: []
   files:
+  - docs/architecture/ARC-020-ux-wireframes.md
   - docs/requirements/REQ-005.order-optimizer.md
   - docs/requirements/REQ-INDEX.md
   prs: []
@@ -37,6 +39,7 @@ REQ-005:
 REQ-006:
   commits: []
   files:
+  - docs/architecture/ARC-020-ux-wireframes.md
   - docs/requirements/REQ-006.quote-branding.md
   - docs/requirements/REQ-INDEX.md
   prs: []

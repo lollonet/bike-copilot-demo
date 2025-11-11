@@ -47,7 +47,6 @@ CLI Autocomplete
 - After install, TAB completes commands/params; `--offer-id` dynamically completes from DB.
 
 CLI Examples
-- Ingest base CSV: `uv run python -m app.cli ingest-csv --products data/demo/products.csv --offers data/demo/offers.csv`
 - Ingest CSV mappato: `uv run python -m app.cli ingest-csv-mapped --csv ./catalogo_real_mtb.csv --mapping providers/csv-catalogo-mtb.yaml`
 - Ingest sintetico (doppioni per fornitori): `uv run python -m app.cli ingest-csv-synth --csv ./catalogo_real_mtb.csv --mapping providers/csv-catalogo-mtb.yaml --suppliers 3 --coverage 0.65 --jitter 0.15`
 - Search: `uv run python -m app.cli search-cli --speed 11 --freehub HG`
@@ -117,7 +116,6 @@ Scheduled ingest
 
 Directories
 - `app/` – code (typed contracts, models, adapters, services).
-- `data/demo/` – example CSVs.
 - `scripts/` – install/seed helpers.
 - `deploy/` – systemd example.
 
