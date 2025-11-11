@@ -6,6 +6,8 @@ from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
 from .config import settings
+import os
+import yaml
 from .models import EventLog, Product, SessionLocal, SupplierOffer
 from .types import OfferItem, SearchRequest, SearchResponse, FacetsResponse
 
@@ -205,10 +207,27 @@ def facets(request: SearchRequest) -> FacetsResponse:
         else None
     )
 
+    # Load category synonyms once
+    _cat_syn: dict[str, str] = {}
+    try:
+        if os.path.exists(settings.category_synonyms_path):
+            with open(settings.category_synonyms_path, "r", encoding="utf-8") as cf:
+                data = yaml.safe_load(cf) or {}
+                # expect mapping canonical -> [aliases]
+                for canon, aliases in data.items():
+                    _cat_syn[str(canon).lower().strip()] = canon
+                    for a in (aliases or []):
+                        _cat_syn[str(a).lower().strip()] = canon
+    except Exception:
+        _cat_syn = {}
+
     def _canon_category(value: str | None) -> str | None:
         if value is None:
             return None
         t = " ".join(str(value).strip().split())
+        low = t.lower()
+        if low in _cat_syn:
+            return _cat_syn[low]
         if not t:
             return None
         # Title-case generic labels; keep common acronyms uppercased

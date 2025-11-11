@@ -2,6 +2,14 @@ Bike Copilot Demo (Lite)
 
 Goal: local demo to ingest parts lists from CSV (later PDF/web), normalize/dedup into SQLite, search with ranking, and generate quotes. This repo is structured to extend sources via provider adapters without reengineering the core.
 
+Documentation Map
+- Vision: `VISION.md` (root)
+- Architecture: `docs/architecture/ARC-010-overview.md`
+- CI/CD: `docs/architecture/ARC-001-ci-cd.md`
+- Technology: `docs/technology/TECH-010-runtime.md`
+- Requirements Index: `docs/requirements/REQ-INDEX.md`
+- Runbooks: `docs/standards/RUNBOOKS/`
+
 Quick start
 - Use `uv` for running and gates. If `uv` isn’t installed, follow https://docs.astral.sh/uv/ to install.
 
