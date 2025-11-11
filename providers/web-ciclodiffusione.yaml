@@ -1,0 +1,19 @@
+supplier: Ciclodiffusione
+search:
+  url_template: "https://www.ciclodiffusione.com/shop/search/{q}/"
+root: "#shop_products .product_preview"
+name: ".product_preview_title strong"
+price: ".product_preview_price .final_price"
+item_link: "a[href^='/product/']"
+# placeholders for schema completeness; detail overrides with OG meta
+brand: ".product_preview_title strong"
+mpn: ".product_preview_description"
+detail:
+  root: "html"
+  name: "meta[property='og:title']"
+  price: "meta[property='og:price:amount']"
+  brand: "meta[property='og:title']"
+  mpn: "meta[property='og:description']"
+  in_stock: "meta[property='og:availability']"
+  category: "#breadcrumb .breadcrumb li a:last-child"
+  lead_time_days: ""

@@ -1,0 +1,19 @@
+REQ-001:
+  commits: []
+  files:
+  - docs/architecture/ARC-001-ci-cd.md
+  - docs/requirements/REQ-001.standards-adoption.md
+  prs: []
+  tests: []
+REQ-002:
+  commits: []
+  files:
+  - docs/requirements/REQ-002.ui-facets.md
+  prs: []
+  tests: []
+REQ-003:
+  commits: []
+  files:
+  - docs/requirements/REQ-003.provider-storeden.md
+  prs: []
+  tests: []

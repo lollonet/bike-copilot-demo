@@ -29,7 +29,9 @@ class WebMapping(TypedDict):
     pagination: NotRequired[PaginationMapping]
     search: NotRequired[SearchMapping]
     item_link: NotRequired[str]
-    detail: NotRequired[dict[str, str]]
+    detail: NotRequired[
+        dict[str, str]
+    ]  # may include keys: name, price, brand, mpn, in_stock, lead_time_days, category
 
 
 def _load_mapping(path: Path) -> WebMapping:
@@ -47,7 +49,17 @@ def _text(el) -> str:
 
 def _to_bool(s: str) -> bool:
     v = s.strip().lower()
-    return v in {"1", "yes", "y", "true", "ok", "available", "stock"}
+    return v in {
+        "1",
+        "yes",
+        "y",
+        "true",
+        "ok",
+        "available",
+        "stock",
+        "instock",
+        "in stock",
+    }
 
 
 def _to_price(s: str) -> float:
@@ -151,14 +163,27 @@ def parse_detail_html(
         if not sel:
             return ""
         el = scope.select_one(sel)
-        return el.get_text(strip=True) if el else ""
+        if el is None:
+            return ""
+        # If meta tag, prefer content attribute
+        if getattr(el, "name", "").lower() == "meta":
+            val = el.get("content")
+            return str(val) if val is not None else ""
+        return el.get_text(strip=True)
 
-    brand = pick("brand")
-    name = pick("name")
-    mpn = pick("mpn")
+    brand = pick("brand").strip()
+    name = pick("name").strip()
+    mpn = pick("mpn").strip()
+    # Price: support meta content or HTML amounts
+    price_s = ""
     price_sel = detail.get("price") or ""
     price_el = scope.select_one(price_sel) if price_sel else None
-    price_s = _price_text(price_el)
+    if price_el is not None:
+        # If <meta>, use its content; otherwise parse the container via _price_text
+        if getattr(price_el, "name", "").lower() == "meta":
+            price_s = str(price_el.get("content") or "")
+        else:
+            price_s = _price_text(price_el)
     in_stock_s = pick("in_stock")
     lead_s = pick("lead_time_days")
 
@@ -173,7 +198,28 @@ def parse_detail_html(
 
         m = re.search(r"\bCOD[:\s]+([\w\-\./]+)", meta_text, flags=re.IGNORECASE)
         if m:
-            mpn = m.group(1)
+            mpn = m.group(1).strip()
+    # Fallback 2: if still missing, parse product id from og:url (/product/<id>/...)
+    if not mpn:
+        url_meta = scope.select_one("meta[property='og:url']")
+        if url_meta and url_meta.get("content"):
+            import re
+
+            mm = re.search(r"/product/(\d+)/", str(url_meta.get("content")))
+            if mm:
+                mpn = mm.group(1)
+
+    mpn = mpn.strip()
+    category = pick("category").strip()
+    # Prefer breadcrumb category when available
+    trail = soup.select("ol.breadcrumb li a, #breadcrumb .breadcrumb li a")
+    for a in reversed(trail):
+        href = str(a.get("href") or "")
+        if "/category/" in href:
+            ct = a.get_text(strip=True)
+            if ct:
+                category = ct
+                break
 
     if not brand or not mpn or not price_s:
         return None, None
@@ -186,6 +232,7 @@ def parse_detail_html(
         mpn=mpn,
         ean=None,
         name=name or f"{brand} {mpn}",
+        category=(category or None),
         speed=None,
         brake=None,
         axle=None,
@@ -234,7 +281,9 @@ def fetch_and_parse_urls(
 
     def _fetch(u: str) -> str:
         with httpx.Client(
-            timeout=10.0, headers=headers or {"User-Agent": "BikeCopilotBot/0.1"}
+            timeout=10.0,
+            headers=headers or {"User-Agent": "BikeCopilotBot/0.1"},
+            follow_redirects=True,
         ) as client:
             r = client.get(u)
             r.raise_for_status()
@@ -378,7 +427,9 @@ def parse_sitemap_urls(
 
     def _fetch(u: str) -> str:
         with httpx.Client(
-            timeout=10.0, headers=headers or {"User-Agent": "BikeCopilotBot/0.1"}
+            timeout=10.0,
+            headers=headers or {"User-Agent": "BikeCopilotBot/0.1"},
+            follow_redirects=True,
         ) as client:
             r = client.get(u)
             r.raise_for_status()

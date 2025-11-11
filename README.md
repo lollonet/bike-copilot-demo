@@ -2,6 +2,14 @@ Bike Copilot Demo (Lite)
 
 Goal: local demo to ingest parts lists from CSV (later PDF/web), normalize/dedup into SQLite, search with ranking, and generate quotes. This repo is structured to extend sources via provider adapters without reengineering the core.
 
+Documentation Map
+- Vision: `VISION.md` (root)
+- Architecture: `docs/architecture/ARC-010-overview.md`
+- CI/CD: `docs/architecture/ARC-001-ci-cd.md`
+- Technology: `docs/technology/TECH-010-runtime.md`
+- Requirements Index: `docs/requirements/REQ-INDEX.md`
+- Runbooks: `docs/standards/RUNBOOKS/`
+
 Quick start
 - Use `uv` for running and gates. If `uv` isn’t installed, follow https://docs.astral.sh/uv/ to install.
 
@@ -73,13 +81,24 @@ WooCommerce example (Cicli Montanini)
   - Listing pages often lack MPN; the adapter follows each product link and parses detail selectors (sku/price/stock) to ensure `brand+mpn` for dedupe.
   - Keep a small `--delay` and modest `--max-pages`; respect site TOS/robots. If blocked, pass a browser Cookie via `--header`.
 
+Storeden example (Ciclodiffusione)
+- Mapping provided: `providers/web-ciclodiffusione.yaml`
+- Typical usage:
+  - Search ingest: `uv run python -m app.cli search-web --query "catena" --mapping providers/web-ciclodiffusione.yaml --max-pages 2 --delay 1.0`
+  - Sitemap ingest (if/when a product sitemap exists): `uv run python -m app.cli fetch-sitemap --sitemap https://www.ciclodiffusione.com/sitemap.xml --mapping providers/web-ciclodiffusione.yaml --contains /product/ --delay 0.8`
+- Notes:
+  - Listing pages contain name/price and link; detail pages expose OG meta (`og:title`, `og:description` for MPN/code, `og:price:amount`, `og:availability`). The adapter reads meta `content` attributes directly.
+  - If the site restricts scraping or returns empty results, add a Cookie header: `--header "Cookie: <paste>"` and keep a reasonable `--delay`.
+
 Security
 - Basic Auth guards `/quote`, `/kpi/*`, and `/files/*` when `APP_BASIC_USER` and `APP_BASIC_PASS` are set.
 - `/files/*` serves only `.html` and `.pdf` from `APP_OUT_DIR`.
 
 UI features
 - Ricerca per testo con token (brand/mpn/nome) + budget cap.
-- Filtri dinamici post‑ricerca (facets): Velocità, Corpetto, Freno, Rotore (Axle come info), Fornitori, Categoria; tooltip con conteggi.
+- Ricerca full‑width in alto; sotto, filtri primari: Categoria e Fornitori.
+- Filtri dinamici post‑ricerca (facets): Velocità, Corpetto, Freno, Rotore, Axle.
+- “Albero filtri”: dopo la prima ricerca compaiono radio per ciascun facet; scegli un valore per applicarlo al filtro.
 - Gating intelligente: i "Filtri tecnici" si abilitano solo se coprono ≥15% dei risultati correnti, evitando filtri fuorvianti.
 - “Solo in stock”, “Budget massimo” con info min/max da facets; campo numerico e slider sincronizzati (0 = nessun limite).
 - Ricerca non parte ad ogni tasto: premi Invio nella casella di testo o il pulsante "Cerca"; i filtri invece aggiornano automaticamente i risultati.

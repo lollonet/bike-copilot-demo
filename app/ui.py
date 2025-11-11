@@ -139,7 +139,14 @@ def _create_quote(
 
 
 def build_interface() -> gr.Blocks:
-    with gr.Blocks(title="Bike Copilot Demo") as demo:
+    css = """
+    #filters-row { gap: 8px; }
+    @media (max-width: 980px){
+      #filters-row { flex-wrap: wrap; }
+      #results-col { flex: 1 1 100% !important; }
+    }
+    """
+    with gr.Blocks(title="Bike Copilot Demo", css=css) as demo:
         gr.Markdown("""
         ## Bike Copilot — Ricerca e Preventivo
         Cerca un componente, confronta le offerte e genera un preventivo in 1 click.
@@ -148,67 +155,64 @@ def build_interface() -> gr.Blocks:
         results_state = gr.State({})
         cart_state = gr.State({})
 
+        # Ricerca in alto a tutta larghezza
+        gr.Markdown("### Ricerca")
+        with gr.Row():
+            query = gr.Textbox(
+                label="Ricerca (testo libero)",
+                placeholder="Es. cassetta 11v HG 11-32, catena CN-HG601",
+                info="Parole chiave libere: marca, MPN, specifiche.",
+                scale=3,
+            )
+            search_btn = gr.Button("Cerca", variant="primary")
+            clear_btn = gr.Button("Pulisci")
+
+        # Filtri principali sotto la ricerca: Categoria, Fornitori, Stock, Budget
+        with gr.Row(elem_id="filters-row"):
+            category = gr.Dropdown(label="Categoria", choices=[""], value="", scale=1)
+            suppliers = gr.CheckboxGroup(label="Fornitori", choices=[], scale=2)
+            in_stock = gr.Checkbox(label="Solo in stock", value=False)
+            budget = gr.Number(
+                label="Budget massimo (€)",
+                value=None,
+                info="0 = nessun limite; filtra offerte con prezzo ≤ budget.",
+            )
+            budget_slider = gr.Slider(
+                label="Budget (slider)",
+                minimum=0,
+                maximum=1000,
+                step=1,
+                value=0,
+                info="Usa lo slider per impostare rapidamente il budget (0 = nessun limite).",
+            )
+
         with gr.Row():
             with gr.Column(scale=1):
-                gr.Markdown("### Ricerca")
-                query = gr.Textbox(
-                    label="Ricerca (testo libero)",
-                    placeholder="Es. cassetta 11v HG 11-32, catena CN-HG601",
-                    info="Parole chiave libere: marca, MPN, specifiche.",
-                )
+                gr.Markdown("### Pannello filtri")
+                # Stato tecnico (gestito dall'albero post-ricerca)
+                speed = gr.State("")
+                freehub = gr.State("")
+                brake = gr.State("")
+                axle = gr.State("")
+                rotor = gr.State("")
+                # Albero filtri (si popola dopo la ricerca)
+                with gr.Accordion("Albero filtri (post-ricerca)", open=False):
+                    facet_speed = gr.Radio(
+                        label="Velocità", choices=[], interactive=True
+                    )
+                    facet_freehub = gr.Radio(
+                        label="Corpetto", choices=[], interactive=True
+                    )
+                    facet_brake = gr.Radio(label="Freno", choices=[], interactive=True)
+                    facet_rotor = gr.Radio(label="Rotore", choices=[], interactive=True)
+                    facet_axle = gr.Radio(
+                        label="Asse (Axle)", choices=[], interactive=True
+                    )
                 with gr.Row():
-                    category = gr.Dropdown(label="Categoria", choices=[""], value="")
-                    in_stock = gr.Checkbox(label="Solo in stock", value=False)
-                with gr.Accordion("Filtri tecnici", open=False):
-                    speed = gr.Dropdown(
-                        choices=["", "11", "12"],
-                        value="",
-                        label="Velocità",
-                        info="Numero di velocità (lascia vuoto per qualsiasi).",
-                    )
-                    freehub = gr.Dropdown(
-                        choices=["", "HG", "XD", "MS"],
-                        value="",
-                        label="Corpetto",
-                        info="Tipo di freehub/corpetto (HG, XD, MicroSpline).",
-                    )
-                    brake = gr.Dropdown(
-                        choices=["", "disc"],
-                        value="",
-                        label="Freno",
-                        info="Tipologia freno (disc per disco).",
-                    )
-                    axle = gr.Textbox(
-                        label="Asse (Axle)",
-                        placeholder="Es. 12x148",
-                        info="Formato perno posteriore (es. 12x148, 12x142).",
-                    )
-                    rotor = gr.Dropdown(
-                        choices=["", "CL", "6B"],
-                        value="",
-                        label="Rotore",
-                        info="Standard disco: CL (CenterLock) o 6B (6 fori).",
-                    )
-                    budget = gr.Number(
-                        label="Budget massimo (€)",
-                        value=None,
-                        info="0 = nessun limite; filtra offerte con prezzo ≤ budget.",
-                    )
-                    budget_slider = gr.Slider(
-                        label="Budget (slider)",
-                        minimum=0,
-                        maximum=1000,
-                        step=1,
-                        value=0,
-                        info="Usa lo slider per impostare rapidamente il budget (0 = nessun limite).",
-                    )
-                with gr.Accordion("Fornitori", open=False):
-                    suppliers = gr.CheckboxGroup(label="Fornitori", choices=[])
-                with gr.Row():
-                    search_btn = gr.Button("Cerca", variant="primary")
-                    clear_btn = gr.Button("Pulisci")
+                    # Pulsanti già definiti in alto; solo reminder visuale
+                    pass
                 status = gr.Markdown(visible=True)
-            with gr.Column(scale=2):
+            with gr.Column(scale=3, elem_id="results-col"):
                 gr.Markdown("### Risultati")
                 results = gr.Dataframe(
                     headers=[
@@ -387,26 +391,26 @@ def build_interface() -> gr.Blocks:
                     cov_freehub = _coverage(f.get("freehub", {}))
                     cov_brake = _coverage(f.get("brake", {}))
                     cov_rotor = _coverage(f.get("rotor", {}))
-                    speed_upd = gr.update(
+                    _ = gr.update(
                         choices=[""] + speed_choices,
                         value=speed_val,
                         info=_annotate((speed_info or None), cov_speed),
                         interactive=(cov_speed >= thr),
                     )
-                    freehub_upd = gr.update(
+                    _ = gr.update(
                         choices=[""] + freehub_choices,
                         value=freehub_val,
                         info=_annotate((freehub_info or None), cov_freehub),
                         interactive=(cov_freehub >= thr),
                     )
-                    brake_upd = gr.update(
+                    _ = gr.update(
                         choices=[""] + brake_choices,
                         value=brake_val,
                         info=_annotate((brake_info or None), cov_brake),
                         interactive=(cov_brake >= thr),
                     )
-                    axle_upd = gr.update(info=(axle_info or None))
-                    rotor_upd = gr.update(
+                    _ = gr.update(info=(axle_info or None))
+                    _ = gr.update(
                         choices=[""] + rotor_choices,
                         value=rotor_val,
                         info=_annotate((rotor_info or None), cov_rotor),
@@ -418,6 +422,12 @@ def build_interface() -> gr.Blocks:
                     category_upd = gr.update(
                         choices=[""] + category_choices,
                         value=category_val,
+                        interactive=bool(category_choices),
+                        info=(
+                            None
+                            if category_choices
+                            else "Nessuna categoria nei risultati"
+                        ),
                     )
                     price = f.get("price", {})
                     price_info = None
@@ -440,41 +450,75 @@ def build_interface() -> gr.Blocks:
                         maximum=max(100, int(max_val) or 100),
                         value=slider_val,
                     )
+                    # Facet tree radios (choices + enablement)
+                    cov_speed = _coverage(f.get("speed", {}))
+                    cov_freehub = _coverage(f.get("freehub", {}))
+                    cov_brake = _coverage(f.get("brake", {}))
+                    cov_rotor = _coverage(f.get("rotor", {}))
+                    facet_speed_upd = gr.update(
+                        choices=speed_choices,
+                        value=None,
+                        interactive=(cov_speed >= thr),
+                        info=_annotate(speed_info or None, cov_speed),
+                    )
+                    facet_freehub_upd = gr.update(
+                        choices=freehub_choices,
+                        value=None,
+                        interactive=(cov_freehub >= thr),
+                        info=_annotate(freehub_info or None, cov_freehub),
+                    )
+                    facet_brake_upd = gr.update(
+                        choices=brake_choices,
+                        value=None,
+                        interactive=(cov_brake >= thr),
+                        info=_annotate(brake_info or None, cov_brake),
+                    )
+                    facet_rotor_upd = gr.update(
+                        choices=rotor_choices,
+                        value=None,
+                        interactive=(cov_rotor >= thr),
+                        info=_annotate(rotor_info or None, cov_rotor),
+                    )
+                    facet_axle_upd = gr.update(
+                        choices=sorted(list(f.get("axle", {}).keys())),
+                        value=None,
+                        info=axle_info or None,
+                    )
                 else:
-                    speed_upd = gr.update()
-                    freehub_upd = gr.update()
-                    brake_upd = gr.update()
-                    axle_upd = gr.update()
-                    rotor_upd = gr.update()
                     suppliers_upd = gr.update()
                     category_upd = gr.update()
                     budget_upd = gr.update()
                     budget_slider_upd = gr.update()
+                    facet_speed_upd = gr.update()
+                    facet_freehub_upd = gr.update()
+                    facet_brake_upd = gr.update()
+                    facet_rotor_upd = gr.update()
+                    facet_axle_upd = gr.update()
             except Exception:
-                speed_upd = gr.update()
-                freehub_upd = gr.update()
-                brake_upd = gr.update()
-                axle_upd = gr.update()
-                rotor_upd = gr.update()
                 suppliers_upd = gr.update()
                 category_upd = gr.update()
                 budget_upd = gr.update()
                 budget_slider_upd = gr.update()
+                facet_speed_upd = gr.update()
+                facet_freehub_upd = gr.update()
+                facet_brake_upd = gr.update()
+                facet_rotor_upd = gr.update()
+                facet_axle_upd = gr.update()
 
             return (
                 rows,
                 gr.update(choices=labels, value=default_label),
                 {k: v for k, v in mapping.items()},
                 msg,
-                speed_upd,
-                freehub_upd,
-                brake_upd,
-                axle_upd,
-                rotor_upd,
                 suppliers_upd,
                 category_upd,
                 budget_upd,
                 budget_slider_upd,
+                facet_speed_upd,
+                facet_freehub_upd,
+                facet_brake_upd,
+                facet_rotor_upd,
+                facet_axle_upd,
             )
 
         search_btn.click(
@@ -496,24 +540,19 @@ def build_interface() -> gr.Blocks:
                 offer_select,
                 results_state,
                 status,
-                speed,
-                freehub,
-                brake,
-                axle,
-                rotor,
                 suppliers,
                 category,
                 budget,
                 budget_slider,
+                facet_speed,
+                facet_freehub,
+                facet_brake,
+                facet_rotor,
+                facet_axle,
             ],
         )
 
         for ctrl in [
-            speed,
-            freehub,
-            brake,
-            axle,
-            rotor,
             budget,
             budget_slider,
             category,
@@ -539,15 +578,15 @@ def build_interface() -> gr.Blocks:
                     offer_select,
                     results_state,
                     status,
-                    speed,
-                    freehub,
-                    brake,
-                    axle,
-                    rotor,
                     suppliers,
                     category,
                     budget,
                     budget_slider,
+                    facet_speed,
+                    facet_freehub,
+                    facet_brake,
+                    facet_rotor,
+                    facet_axle,
                 ],
             )
 
@@ -571,15 +610,15 @@ def build_interface() -> gr.Blocks:
                 offer_select,
                 results_state,
                 status,
-                speed,
-                freehub,
-                brake,
-                axle,
-                rotor,
                 suppliers,
                 category,
                 budget,
                 budget_slider,
+                facet_speed,
+                facet_freehub,
+                facet_brake,
+                facet_rotor,
+                facet_axle,
             ],
         )
 
@@ -614,6 +653,174 @@ def build_interface() -> gr.Blocks:
                 offer_select,
                 results_state,
                 status,
+                facet_speed,
+                facet_freehub,
+                facet_brake,
+                facet_rotor,
+                facet_axle,
+            ],
+        )
+
+        # Facet tree interactions: pick → set corresponding control, then the .change handler triggers search
+        # Apply facet picks to internal state and re-run search
+        facet_speed.change(
+            lambda v: (v or ""), inputs=[facet_speed], outputs=[speed]
+        ).then(
+            _on_search,
+            inputs=[
+                query,
+                speed,
+                freehub,
+                brake,
+                axle,
+                rotor,
+                budget,
+                category,
+                suppliers,
+                in_stock,
+            ],
+            outputs=[
+                results,
+                offer_select,
+                results_state,
+                status,
+                suppliers,
+                category,
+                budget,
+                budget_slider,
+                facet_speed,
+                facet_freehub,
+                facet_brake,
+                facet_rotor,
+                facet_axle,
+            ],
+        )
+        facet_freehub.change(
+            lambda v: (v or ""), inputs=[facet_freehub], outputs=[freehub]
+        ).then(
+            _on_search,
+            inputs=[
+                query,
+                speed,
+                freehub,
+                brake,
+                axle,
+                rotor,
+                budget,
+                category,
+                suppliers,
+                in_stock,
+            ],
+            outputs=[
+                results,
+                offer_select,
+                results_state,
+                status,
+                suppliers,
+                category,
+                budget,
+                budget_slider,
+                facet_speed,
+                facet_freehub,
+                facet_brake,
+                facet_rotor,
+                facet_axle,
+            ],
+        )
+        facet_brake.change(
+            lambda v: (v or ""), inputs=[facet_brake], outputs=[brake]
+        ).then(
+            _on_search,
+            inputs=[
+                query,
+                speed,
+                freehub,
+                brake,
+                axle,
+                rotor,
+                budget,
+                category,
+                suppliers,
+                in_stock,
+            ],
+            outputs=[
+                results,
+                offer_select,
+                results_state,
+                status,
+                suppliers,
+                category,
+                budget,
+                budget_slider,
+                facet_speed,
+                facet_freehub,
+                facet_brake,
+                facet_rotor,
+                facet_axle,
+            ],
+        )
+        facet_rotor.change(
+            lambda v: (v or ""), inputs=[facet_rotor], outputs=[rotor]
+        ).then(
+            _on_search,
+            inputs=[
+                query,
+                speed,
+                freehub,
+                brake,
+                axle,
+                rotor,
+                budget,
+                category,
+                suppliers,
+                in_stock,
+            ],
+            outputs=[
+                results,
+                offer_select,
+                results_state,
+                status,
+                suppliers,
+                category,
+                budget,
+                budget_slider,
+                facet_speed,
+                facet_freehub,
+                facet_brake,
+                facet_rotor,
+                facet_axle,
+            ],
+        )
+        facet_axle.change(
+            lambda v: (v or ""), inputs=[facet_axle], outputs=[axle]
+        ).then(
+            _on_search,
+            inputs=[
+                query,
+                speed,
+                freehub,
+                brake,
+                axle,
+                rotor,
+                budget,
+                category,
+                suppliers,
+                in_stock,
+            ],
+            outputs=[
+                results,
+                offer_select,
+                results_state,
+                status,
+                suppliers,
+                category,
+                budget,
+                budget_slider,
+                facet_speed,
+                facet_freehub,
+                facet_brake,
+                facet_rotor,
+                facet_axle,
             ],
         )
 

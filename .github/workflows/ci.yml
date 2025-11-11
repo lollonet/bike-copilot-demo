@@ -1,0 +1,33 @@
+name: CI
+on:
+  push: {branches: ["**"]}
+  pull_request:
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v3
+      - name: Install dependencies (uv)
+        run: uv sync
+      - name: Complexity Gate (repo-wide)
+        run: |
+          uv run python scripts/complexity_gate.py --paths src scripts
+      - name: Spec Lint & Traceability
+        run: |
+          uv run python scripts/spec_lint.py
+          uv run python scripts/traceability.py
+      - name: Test (se presenti)
+        run: |
+          if [ -f "pytest.ini" ] || [ -d "tests" ]; then
+            # Use the project environment created by `uv sync`.
+            uv run pytest -q || true
+          fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: traceability-matrix
+          path: traceability/matrix.yaml
