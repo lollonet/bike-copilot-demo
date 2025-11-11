@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+set -euo pipefail
+# Use uv-managed env to run checks; avoid writing to $HOME by pinning UV dirs.
+export UV_CACHE_DIR="${UV_CACHE_DIR:-$(pwd)/.cache/uv}"
+export UV_TOOL_DIR="${UV_TOOL_DIR:-$(pwd)/.cache/uv/tools}"
+export UV_PYTHON_INSTALL_DIR="${UV_PYTHON_INSTALL_DIR:-$(pwd)/.cache/uv/python}"
+mkdir -p "$UV_CACHE_DIR" "$UV_TOOL_DIR" "$UV_PYTHON_INSTALL_DIR"
+
+uv run python scripts/spec_lint.py
+uv run python scripts/traceability.py
+uv run python scripts/trace_check.py

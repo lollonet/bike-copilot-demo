@@ -1,0 +1,19 @@
+## Created by Codex Agent to migrate from requirements.txt to uv-managed dependencies.
+
+[project]
+name = "basscodebase"
+version = "0.1.0"
+description = "BassCodeBase: uv-managed Python project"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+  # Migrated from requirements.txt
+  "PyYAML>=6.0",
+]
+
+# Using uv for dependency resolution and sync. No build system is required
+# unless packaging a wheel/sdist; add [build-system] later if needed.
+
+[tool.uv]
+## Configure uv behavior. Keep defaults; set cache inside workspace to avoid home writes.
+cache-dir = ".cache/uv"

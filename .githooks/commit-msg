@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+set -euo pipefail
+MSG_FILE="$1"
+if grep -Eq '(REQ-[0-9]{3,}|INIT-000)' "$MSG_FILE"; then
+  exit 0
+else
+  echo "ERROR: il commit deve citare un REQ-### (o INIT-000 per bootstrap)." >&2
+  exit 1
+fi
