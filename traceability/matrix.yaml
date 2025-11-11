@@ -5,3 +5,15 @@ REQ-001:
   - docs/requirements/REQ-001.standards-adoption.md
   prs: []
   tests: []
+REQ-002:
+  commits: []
+  files:
+  - docs/requirements/REQ-002.ui-facets.md
+  prs: []
+  tests: []
+REQ-003:
+  commits: []
+  files:
+  - docs/requirements/REQ-003.provider-storeden.md
+  prs: []
+  tests: []
