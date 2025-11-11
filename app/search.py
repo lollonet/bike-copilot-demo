@@ -10,6 +10,24 @@ from .models import EventLog, Product, SessionLocal, SupplierOffer
 from .types import OfferItem, SearchRequest, SearchResponse, FacetsResponse
 
 
+def canon_category(value: str | None) -> str | None:
+    """Canonicalize category labels for stable comparisons and facet keys.
+
+    - Trim and collapse inner whitespace
+    - Title-case words, but keep common acronyms uppercased
+    Returns None for empty/whitespace-only inputs.
+    """
+    if value is None:
+        return None
+    t = " ".join(str(value).strip().split())
+    if not t:
+        return None
+    cap = t.title()
+    for ac in ("MTB", "BMX", "E-BIKE", "Ebike", "CX"):
+        cap = cap.replace(ac.title(), ac)
+    return cap
+
+
 def _load_synonyms() -> dict[str, dict[str, list[str]]]:
     with open(settings.synonyms_path, "r", encoding="utf-8") as f:
         data: dict[str, dict[str, list[str]]] = yaml.safe_load(f) or {}
@@ -83,7 +101,10 @@ def _prefilter_products(request: SearchRequest) -> list[Product]:
                 if t not in hay:
                     ok = False
                     break
-        if request.category and (p.category or "") != request.category:
+        # Category comparison uses canonical form to match facet labels
+        if request.category and canon_category(p.category) != canon_category(
+            request.category
+        ):
             ok = False
         if request.speed and apply_synonyms(
             request.speed, "speed", synonyms
@@ -205,22 +226,10 @@ def facets(request: SearchRequest) -> FacetsResponse:
         else None
     )
 
-    def _canon_category(value: str | None) -> str | None:
-        if value is None:
-            return None
-        t = " ".join(str(value).strip().split())
-        if not t:
-            return None
-        # Title-case generic labels; keep common acronyms uppercased
-        cap = t.title()
-        for ac in ("MTB", "BMX", "E-BIKE", "Ebike", "CX"):
-            cap = cap.replace(ac.title(), ac)
-        return cap
-
     for p in filtered:
         # Category facet
         if p.category:
-            keyc = _canon_category(p.category)
+            keyc = canon_category(p.category)
             if keyc is None:
                 keyc = str(p.category)
             counts["category"][keyc] = counts["category"].get(keyc, 0) + 1
