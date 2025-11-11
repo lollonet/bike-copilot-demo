@@ -1,6 +1,7 @@
 REQ-001:
   commits: []
   files:
+  - docs/architecture/ARC-001-ci-cd.md
   - docs/requirements/REQ-001.standards-adoption.md
   prs: []
   tests: []
