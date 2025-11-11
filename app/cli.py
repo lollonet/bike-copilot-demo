@@ -14,6 +14,7 @@ from .adapters.web_adapter import (
     parse_file as parse_web_file,
     fetch_and_parse_urls,
     build_search_urls,
+    parse_sitemap_urls,
 )
 from .adapters.csv_mapped_adapter import parse_unified_csv
 from .ingest import IngestStats, upsert
@@ -170,6 +171,71 @@ def search_web(
     )
     stats: IngestStats = upsert(products, offers)
     rich.print({"urls": urls, **stats.__dict__})
+
+
+@app.command("fetch-sitemap")
+def fetch_sitemap(
+    sitemap: str = typer.Option(..., help="sitemap or sitemap index URL"),
+    mapping: Path = typer.Option(
+        ..., exists=True, file_okay=True, dir_okay=False, readable=True
+    ),
+    contains: str = typer.Option(
+        "/prodotto/",
+        help="only visit URLs containing this substring (e.g., '/prodotto/')",
+    ),
+    limit: int = typer.Option(0, help="max URLs to visit (0 = no limit)"),
+    delay: float = typer.Option(0.5, min=0.0, help="delay between requests"),
+    header: list[str] = typer.Option(
+        None,
+        help='extra HTTP headers (key:value), e.g. "Cookie: a=b"',
+    ),
+) -> None:
+    """Fetch all product detail pages listed in a sitemap and ingest offers.
+
+    Designed for WooCommerce sites that expose product URLs in sitemaps.
+    """
+    hdrs: dict[str, str] = {}
+    if header:
+        for h in header:
+            if ":" in h:
+                k, v = h.split(":", 1)
+                hdrs[k.strip()] = v.strip()
+    urls = [
+        u
+        for u in parse_sitemap_urls(sitemap, headers=hdrs, limit=(limit or None))
+        if contains in u
+    ]
+    # Fetch sequentially with delay using detail parsing path
+    from time import sleep
+    from .adapters.web_adapter import parse_detail_html, _load_mapping  # type: ignore
+    from .types import ProductInput, OfferInput
+    import httpx
+
+    mapping_obj = _load_mapping(mapping)
+    products: list[ProductInput] = []
+    offers: list[OfferInput] = []
+    seen: set[tuple[str, str, str]] = set()
+    with httpx.Client(
+        timeout=10.0, headers=hdrs or {"User-Agent": "BikeCopilotBot/0.1"}
+    ) as client:
+        for u in urls:
+            try:
+                r = client.get(u)
+                r.raise_for_status()
+                p, o = parse_detail_html(r.text, mapping_obj)
+                if p and o:
+                    key = (p.brand, p.mpn, o.supplier)
+                    if key in seen:
+                        continue
+                    seen.add(key)
+                    products.append(p)
+                    offers.append(o)
+            except Exception:
+                continue
+            finally:
+                sleep(max(0.0, delay))
+    stats: IngestStats = upsert(products, offers)
+    rich.print({"visited": len(urls), **stats.__dict__})
 
 
 @app.command("ingest-csv-mapped")

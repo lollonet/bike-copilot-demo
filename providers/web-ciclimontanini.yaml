@@ -1,0 +1,19 @@
+supplier: CicliMontanini
+search:
+  url_template: "https://www.ciclimontanini.com/?s={q}"
+root: "ul.products li.product, .wc-block-grid__products li.wc-block-grid__product"
+name: ".woocommerce-loop-product__title"
+price: ".price"
+# Listing typically lacks MPN; we follow item_link to detail pages
+item_link: "a.woocommerce-LoopProduct-link, a.woocommerce-LoopProduct__link, a.wc-block-grid__product-link, a"
+# For listing, brand/mpn selectors are placeholders to satisfy schema; detail overrides
+brand: ".woocommerce-loop-product__title"
+mpn: ".sku"  # will be overridden from detail
+detail:
+  root: "body.single-product"
+  name: "h1.product_title"
+  price: ".summary .price"
+  brand: "h1.product_title"
+  mpn: ".product_meta .sku, .product_meta .sku_wrapper .sku"
+  in_stock: ".summary .stock"
+  lead_time_days: ""

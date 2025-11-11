@@ -28,6 +28,8 @@ class WebMapping(TypedDict):
     lead_time_days: NotRequired[str]
     pagination: NotRequired[PaginationMapping]
     search: NotRequired[SearchMapping]
+    item_link: NotRequired[str]
+    detail: NotRequired[dict[str, str]]
 
 
 def _load_mapping(path: Path) -> WebMapping:
@@ -56,6 +58,26 @@ def _to_price(s: str) -> float:
     return float(t)
 
 
+def _price_text(el) -> str:
+    """Extract a single price text from a WooCommerce container.
+
+    Prefer <ins> current price when on sale; else first .woocommerce-Price-amount.
+    Fallback to element text.
+    """
+    if el is None:
+        return ""
+    # On sale: <ins><span class="woocommerce-Price-amount">€9,90</span></ins>
+    ins_amt = el.select_one(
+        "ins .woocommerce-Price-amount, ins span.woocommerce-Price-amount"
+    )
+    if ins_amt is not None:
+        return ins_amt.get_text(strip=True)
+    amt = el.select_one(".woocommerce-Price-amount, span.amount")
+    if amt is not None:
+        return amt.get_text(strip=True)
+    return el.get_text(strip=True)
+
+
 def parse_html(
     html: str, mapping: WebMapping
 ) -> tuple[list[ProductInput], list[OfferInput]]:
@@ -67,7 +89,7 @@ def parse_html(
         brand = _text(r.select_one(mapping["brand"]))
         mpn = _text(r.select_one(mapping["mpn"]))
         name = _text(r.select_one(mapping["name"]))
-        price_s = _text(r.select_one(mapping["price"]))
+        price_s = _price_text(r.select_one(mapping["price"]))
         if not brand or not mpn or not price_s:
             continue
         in_stock = True
@@ -102,6 +124,83 @@ def parse_html(
             )
         )
     return products, offers
+
+
+def _abs_url(base_url: str, href: str | None) -> str | None:
+    if not href:
+        return None
+    from urllib.parse import urljoin
+
+    return urljoin(base_url, href)
+
+
+def parse_detail_html(
+    html: str, mapping: WebMapping
+) -> tuple[ProductInput | None, OfferInput | None]:
+    detail = mapping.get("detail") or {}
+    soup = BeautifulSoup(html, "html.parser")
+    scope = soup
+    root_sel = detail.get("root")
+    if root_sel:
+        root = soup.select_one(root_sel)
+        if root is not None:
+            scope = root
+
+    def pick(key: str) -> str:
+        sel = detail.get(key)
+        if not sel:
+            return ""
+        el = scope.select_one(sel)
+        return el.get_text(strip=True) if el else ""
+
+    brand = pick("brand")
+    name = pick("name")
+    mpn = pick("mpn")
+    price_sel = detail.get("price") or ""
+    price_el = scope.select_one(price_sel) if price_sel else None
+    price_s = _price_text(price_el)
+    in_stock_s = pick("in_stock")
+    lead_s = pick("lead_time_days")
+
+    if not brand and name:
+        brand = name.split()[0]
+
+    # Fallback: if MPN missing, try to extract from meta text (e.g., "COD: XYZ")
+    if not mpn:
+        meta_el = scope.select_one(".product_meta")
+        meta_text = meta_el.get_text(" ", strip=True) if meta_el else ""
+        import re
+
+        m = re.search(r"\bCOD[:\s]+([\w\-\./]+)", meta_text, flags=re.IGNORECASE)
+        if m:
+            mpn = m.group(1)
+
+    if not brand or not mpn or not price_s:
+        return None, None
+
+    in_stock = _to_bool(in_stock_s) if in_stock_s else True
+    lead = int(lead_s) if (lead_s and lead_s.isdigit()) else None
+
+    p = ProductInput(
+        brand=brand,
+        mpn=mpn,
+        ean=None,
+        name=name or f"{brand} {mpn}",
+        speed=None,
+        brake=None,
+        axle=None,
+        rotor=None,
+        freehub=None,
+    )
+    o = OfferInput(
+        brand=brand,
+        mpn=mpn,
+        supplier=mapping["supplier"],
+        price=_to_price(price_s),
+        in_stock=in_stock,
+        lead_time_days=lead,
+    )
+    return p, o
 
 
 def parse_file(
@@ -149,9 +248,41 @@ def fetch_and_parse_urls(
             html = _fetch(seed)
         except Exception:
             continue
-        p, o = parse_html(html, mapping)
-        all_products.extend(p)
-        all_offers.extend(o)
+        # Prefer detail follow if configured (to ensure MPN presence)
+        item_link_sel = mapping.get("item_link")
+        has_detail = bool(mapping.get("detail"))
+        if item_link_sel and has_detail:
+            soup = BeautifulSoup(html, "html.parser")
+            rows = soup.select(mapping["root"])  # type: ignore[index]
+            for r in rows:
+                a = r.select_one(item_link_sel)
+                href_attr = a.get("href") if a else None
+                href = _abs_url(seed, str(href_attr) if href_attr is not None else None)
+                if not href or href in seen_pages:
+                    continue
+                seen_pages.add(href)
+                time.sleep(max(0.0, delay_sec))
+                try:
+                    dhtml = _fetch(href)
+                except Exception:
+                    continue
+                p1, o1 = parse_detail_html(dhtml, mapping)
+                if p1 and o1:
+                    # Deduplicate by (brand, mpn)
+                    if not any(
+                        (pp.brand, pp.mpn) == (p1.brand, p1.mpn) for pp in all_products
+                    ):
+                        all_products.append(p1)
+                    if not any(
+                        (oo.brand, oo.mpn, oo.supplier)
+                        == (o1.brand, o1.mpn, o1.supplier)
+                        for oo in all_offers
+                    ):
+                        all_offers.append(o1)
+        else:
+            p, o = parse_html(html, mapping)
+            all_products.extend(p)
+            all_offers.extend(o)
 
         if (
             follow_next
@@ -160,13 +291,16 @@ def fetch_and_parse_urls(
         ):
             next_sel = mapping["pagination"].get("next")  # type: ignore[index]
             if next_sel:
-                from bs4 import BeautifulSoup
-
                 soup = BeautifulSoup(html, "html.parser")
                 page_count = 1
+                current_url = seed
                 nxt = soup.select_one(next_sel)
                 while nxt is not None and page_count < max_pages:
-                    href = nxt.get("href") if nxt else None
+                    href_attr = nxt.get("href") if nxt else None
+                    # Normalize relative pagination links to absolute
+                    href = _abs_url(
+                        current_url, str(href_attr) if href_attr is not None else None
+                    )
                     if not href or href in seen_pages:
                         break
                     seen_pages.add(href)
@@ -175,9 +309,43 @@ def fetch_and_parse_urls(
                         html = _fetch(href)
                     except Exception:
                         break
-                    p2, o2 = parse_html(html, mapping)
-                    all_products.extend(p2)
-                    all_offers.extend(o2)
+                    # Track current page URL for subsequent pagination joins
+                    current_url = href
+                    if item_link_sel and has_detail:
+                        soup = BeautifulSoup(html, "html.parser")
+                        rows = soup.select(mapping["root"])  # type: ignore[index]
+                        for r in rows:
+                            a = r.select_one(item_link_sel)
+                            href_attr2 = a.get("href") if a else None
+                            href2 = _abs_url(
+                                href,
+                                str(href_attr2) if href_attr2 is not None else None,
+                            )
+                            if not href2 or href2 in seen_pages:
+                                continue
+                            seen_pages.add(href2)
+                            time.sleep(max(0.0, delay_sec))
+                            try:
+                                dhtml = _fetch(href2)
+                            except Exception:
+                                continue
+                            p1, o1 = parse_detail_html(dhtml, mapping)
+                            if p1 and o1:
+                                if not any(
+                                    (pp.brand, pp.mpn) == (p1.brand, p1.mpn)
+                                    for pp in all_products
+                                ):
+                                    all_products.append(p1)
+                                if not any(
+                                    (oo.brand, oo.mpn, oo.supplier)
+                                    == (o1.brand, o1.mpn, o1.supplier)
+                                    for oo in all_offers
+                                ):
+                                    all_offers.append(o1)
+                    else:
+                        p2, o2 = parse_html(html, mapping)
+                        all_products.extend(p2)
+                        all_offers.extend(o2)
                     soup = BeautifulSoup(html, "html.parser")
                     nxt = soup.select_one(next_sel)
                     page_count += 1
@@ -194,3 +362,51 @@ def build_search_urls(query: str, mapping_yaml: Path) -> list[str]:
     from urllib.parse import quote_plus
 
     return [tmpl.format(q=quote_plus(query))]
+
+
+def parse_sitemap_urls(
+    sitemap_url: str, headers: dict[str, str] | None = None, limit: int | None = None
+) -> list[str]:
+    """Parse a sitemap index or urlset and return a list of <loc> URLs.
+
+    If it's an index, fetch child sitemaps. Applies an optional limit.
+    """
+    import httpx
+    import xml.etree.ElementTree as ET
+
+    seen: set[str] = set()
+
+    def _fetch(u: str) -> str:
+        with httpx.Client(
+            timeout=10.0, headers=headers or {"User-Agent": "BikeCopilotBot/0.1"}
+        ) as client:
+            r = client.get(u)
+            r.raise_for_status()
+            return r.text
+
+    def _parse(xml_text: str) -> list[str]:
+        try:
+            root = ET.fromstring(xml_text)
+        except Exception:
+            return []
+        ns = "{http://www.sitemaps.org/schemas/sitemap/0.9}"
+        urls: list[str] = []
+        if root.tag.endswith("sitemapindex"):
+            for sm in root.findall(f"{ns}sitemap"):
+                loc = sm.findtext(f"{ns}loc") or ""
+                if loc and loc not in seen:
+                    seen.add(loc)
+                    child = _fetch(loc)
+                    urls.extend(_parse(child))
+        elif root.tag.endswith("urlset"):
+            for u in root.findall(f"{ns}url"):
+                loc = u.findtext(f"{ns}loc") or ""
+                if loc:
+                    urls.append(loc)
+        return urls
+
+    xml = _fetch(sitemap_url)
+    urls = _parse(xml)
+    if limit is not None and limit > 0:
+        return urls[:limit]
+    return urls
