@@ -5,6 +5,7 @@ Goal: local demo to ingest parts lists from CSV (later PDF/web), normalize/dedup
 Mappa Documenti (in italiano)
 - Visione: `VISION.md` (radice)
 - Architettura: `ARCH.md` (radice) e `docs/architecture/ARC-010-overview.md`
+  - Wireframe UX PN‑first: `docs/architecture/ARC-020-ux-wireframes.md`
 - Tecnologia: `TECH.md` (radice) e `docs/technology/TECH-010-runtime.md`
 - Requisiti: `docs/requirements/REQ-INDEX.md` (include REQ‑004..008)
 - Runbook: `docs/standards/RUNBOOKS/` (07..11 per PN‑first)
