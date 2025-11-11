@@ -1,38 +1,38 @@
-# vision
+# Visione (PN‑first, mercato Italia)
 
-Why: help a bike shop quote parts fast and confidently from mixed supplier sources (CSV, PDF, websites) entirely offline on a single Linux Mint box, with a clean path to real APIs later.
+Perché
+- Offrire ai negozi di biciclette un’esperienza rapidissima e affidabile di preparazione preventivi a partire dal codice produttore (PN), aggregando offerte aggiornate da più dealer e generando PDF/HTML brandizzati. Dati locali (CSV/PDF/web) su una macchina Linux, con percorso chiaro verso connettori/API reali.
 
-Who
-- Owner/Mechanic: searches parts, chooses top option, generates a quote.
-- Operator: keeps lists up to date (drops CSV/PDF), checks KPIs.
-- Integrator: later adds supplier APIs/ERP without breaking the flow.
+Utenti e Scenari
+- Operatore/Meccanico: inserisce uno o più PN, confronta offerte per dealer, aggiunge al carrello, genera preventivo.
+- Amministratore: aggiunge un nuovo dealer (mapping + credenziali opzionali), pianifica il crawling, controlla freschezza e KPI.
+- Integratore: in fasi successive collega ERP/API fornitori senza rompere i flussi.
 
-Outcomes (what “good” looks like)
-- One‑click quote: search → select → PDF/HTML ready in under 30 seconds.
-- Top‑3 proposals with clear pros/cons (price, stock, lead time, compatibility).
-- Local, robust demo: no Internet required for core flows; service managed by systemd.
-- Extensible ingest: add a provider by writing an adapter only; no core rewrites.
+Obiettivi e Metriche
+- Tempo al preventivo: P50 ≤ 30s, P95 ≤ 60s (dati già in DB locale).
+- Copertura PN: ≥ 80% dei PN target con almeno un’offerta.
+- Freschezza offerte: ≥ 85% aggiornate ≤ 24h (configurabile per dealer).
+- Accuratezza match PN: ≥ 99,5% (quasi zero falsi positivi; alias e normalizzazione forti, fuzzy solo come ultima ratio).
+- Latenza ricerca locale: < 300 ms; verifica on‑demand (fase 2+) < 5 s.
 
-Success Metrics
-- TtQ (time‑to‑quote): P50 ≤ 30s; P95 ≤ 60s.
-- Ingest friction: drop CSV/PDF and run one command; P95 runtime ≤ 2 min for 10k rows.
-- Search precision: ≥ 95% of demo scenarios return a plausible top‑3.
-- Operability: startup ≤ 3s; zero type errors; ruff=0 findings; tests ≥ 85% coverage once added.
+Perimetro v1
+- Ricerca PN‑first (campo singolo e incolla lista) e ranking prezzo/disponibilità/tempi.
+- Crawler/configurazione per 2–3 piattaforme (es. WooCommerce, Storeden) + import CSV/PDF quando disponibili.
+- UI: risultati per PN/dealer; carrello multi‑riga; preventivo con logo negozio e intestazione cliente; ottimizzazione ordine (un dealer / max N / miglior prezzo) con stima spedizioni.
+- API allineate a PN‑first con contratti tipizzati.
 
-Non‑Goals
-- Full ERP, inventory write‑back, payments, or multi‑tenant SaaS.
-- Advanced auth beyond Basic Auth for demo endpoints.
-- “Perfect” PDF parsing for all catalogs (we target common, table‑like PDFs).
+Non‑Obiettivi v1
+- Integrazione ERP completa, garanzia real‑time, headless browser universale.
+- Multi‑tenant SaaS.
 
-Risks & Mitigations
-- PDF variance: isolate in adapters; keep raw → staged → normalized pipeline with hashes.
-- Data quality: prefer EAN/GTIN; log collisions; keep fuzzy matching configurable.
-- Concurrency on SQLite: enable WAL; serialize ingest vs. live demo.
-- Legal/ToS: prefer official files/APIs; scrape only with permission and etiquette.
+Rischi e Mitigazioni
+- Anti‑bot/rate‑limit: politeness (delay/jitter), caching, scheduling scaglionato; credenziali ove disponibili.
+- Variabilità PN: tabella alias e normalizzazione (uppercase, trim, rimozione separatori/suffissi); fuzzy ancorato e con soglie conservative.
+- Compliance/ToS: preferire feed ufficiali; rispettare robots/condizioni; chiedere consenso dove necessario.
 
-Milestones
-- M1 Demo‑Lite (CSV) — DONE: search, top‑3, quote HTML/PDF, KPI basics, CLI + UI.
-- M2 PDF Ingest — DONE: pdfplumber adapter with mapping YAML, staging.
-- M2.5 Price History — DONE: unique offer upsert and price history table.
-- M3 Web Adapter — NEXT: provider fetcher with cache and selectors in YAML.
-- M4 Hardening — PARTIAL: auth on /quote,/kpi,/files; systemd env; cron. Increase tests and coverage to ≥ 85%.
+Fasi
+- P0 Documenti e piano (questa Visione, ARCH, TECH, CONTROL, Runbook).
+- P1 Fondazione PN‑first: modello dati centrato su PN, contratti API, migrazione UI minima.
+- P2 Motore crawling baseline + estrazione “Spedizioni/Soglie” deterministica; (opz.) probing carrello; LLM assistivo con guardrail dove serve.
+- P3 Ottimizzatore ordine (scenari) e Impostazioni dealer/branding.
+- P4 Switch percorso PN‑first come predefinito; archiviazione parti legacy non più usate.

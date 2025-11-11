@@ -1,14 +1,13 @@
-Bike Copilot Demo (Lite)
+Bike Copilot Demo — PN‑first (Italia)
 
 Goal: local demo to ingest parts lists from CSV (later PDF/web), normalize/dedup into SQLite, search with ranking, and generate quotes. This repo is structured to extend sources via provider adapters without reengineering the core.
 
-Documentation Map
-- Vision: `VISION.md` (root)
-- Architecture: `docs/architecture/ARC-010-overview.md`
-- CI/CD: `docs/architecture/ARC-001-ci-cd.md`
-- Technology: `docs/technology/TECH-010-runtime.md`
-- Requirements Index: `docs/requirements/REQ-INDEX.md`
-- Runbooks: `docs/standards/RUNBOOKS/`
+Mappa Documenti (in italiano)
+- Visione: `VISION.md` (radice)
+- Architettura: `ARCH.md` (radice) e `docs/architecture/ARC-010-overview.md`
+- Tecnologia: `TECH.md` (radice) e `docs/technology/TECH-010-runtime.md`
+- Requisiti: `docs/requirements/REQ-INDEX.md` (include REQ‑004..008)
+- Runbook: `docs/standards/RUNBOOKS/` (07..11 per PN‑first)
 
 Quick start
 - Use `uv` for running and gates. If `uv` isn’t installed, follow https://docs.astral.sh/uv/ to install.
@@ -21,7 +20,7 @@ Makefile targets
 - `make ui` – run Gradio UI on `:7860`.
 - CLI help: `uv run python -m app.cli --help`.
 
-Quick demo (2 minutes)
+Demo rapida (2 minuti)
 - `uv pip install -r requirements.txt`
 - `cp .env.example .env` (opzionale: imposta VAT/auth)
 - Popola dati:
@@ -94,16 +93,10 @@ Security
 - Basic Auth guards `/quote`, `/kpi/*`, and `/files/*` when `APP_BASIC_USER` and `APP_BASIC_PASS` are set.
 - `/files/*` serves only `.html` and `.pdf` from `APP_OUT_DIR`.
 
-UI features
-- Ricerca per testo con token (brand/mpn/nome) + budget cap.
-- Ricerca full‑width in alto; sotto, filtri primari: Categoria e Fornitori.
-- Filtri dinamici post‑ricerca (facets): Velocità, Corpetto, Freno, Rotore, Axle.
-- “Albero filtri”: dopo la prima ricerca compaiono radio per ciascun facet; scegli un valore per applicarlo al filtro.
-- Gating intelligente: i "Filtri tecnici" si abilitano solo se coprono ≥15% dei risultati correnti, evitando filtri fuorvianti.
-- “Solo in stock”, “Budget massimo” con info min/max da facets; campo numerico e slider sincronizzati (0 = nessun limite).
-- Ricerca non parte ad ogni tasto: premi Invio nella casella di testo o il pulsante "Cerca"; i filtri invece aggiornano automaticamente i risultati.
-- Carrello multi‑articolo con Qtà +/- , totali live (Subtotale/IVA/Totale).
-- Preventivo multi‑riga con PDF/HTML; `file_url` se l’API è attiva; fallback locale robusto.
+UI (stato attuale)
+- Ricerca testuale con filtri dinamici e carrello multi‑articolo (in transizione verso PN‑first).
+- Preventivo multi‑riga con PDF/HTML; branding opzionale via variabili ambiente.
+Nota: stiamo migrando a PN‑first (vedi REQ‑004..006). I comandi esistenti restano per compatibilità demo.
 
 Quote customization
 - Optional env: `APP_SHOP_NAME`, `APP_SHOP_ADDRESS`, `APP_SHOP_CONTACT`, `APP_SHOP_LOGO` (path/URL) for header in the PDF/HTML.
