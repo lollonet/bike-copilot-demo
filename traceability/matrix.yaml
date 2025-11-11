@@ -1,6 +1,6 @@
-REQ-010:
+REQ-001:
   commits: []
   files:
-  - docs/requirements/REQ-010.standards-adoption.md
+  - docs/requirements/REQ-001.standards-adoption.md
   prs: []
   tests: []
