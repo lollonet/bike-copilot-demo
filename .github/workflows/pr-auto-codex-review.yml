@@ -46,7 +46,7 @@ jobs:
             const skipDirRe = new RegExp(`^(${skipDirs.map(esc).join('|')})/`, 'i');
             // List files in PR (full PR scope)
             const files = await github.paginate(github.rest.pulls.listFiles, {owner, repo, pull_number: pr.number, per_page: 100});
-            const considered = files.filter(f => ['added','modified','renamed'].includes(f.status));
+            const considered = files.filter(f => ['added','modified','renamed','removed','copied','changed'].includes(f.status));
             core.info('PR files considered:');
             considered.forEach(f => core.info(` - ${f.filename} [${f.status}]`));
             const codeChanged = considered.some(f => dirRe.test(f.filename) && extRe.test(f.filename));
