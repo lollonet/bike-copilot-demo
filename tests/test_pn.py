@@ -5,6 +5,13 @@ import os
 
 def _setup_db(tmp_name: str):
     os.environ["APP_DB_URL"] = f"sqlite:///./{tmp_name}"
+    # Reload config and models so that settings.db_url and SessionLocal rebind
+    import importlib
+    import app.config as app_config
+    import app.models as app_models
+
+    importlib.reload(app_config)
+    importlib.reload(app_models)
     from app.models import Product, SupplierOffer, SessionLocal, create_all
 
     create_all()
