@@ -235,7 +235,7 @@ def _reduce_dealers_greedy(
 
     while len(dealers_of(curr)) > max(1, N):
         dealers = dealers_of(curr)
-        worst_choice: Tuple[float, str, List[OptimizeLine]] | None = None
+        worst_choice: Tuple[float, str, List[OptimizeLine], List[int]] | None = None
         for d in dealers:
             # Reassign lines currently served by d to next best offers from other dealers
             cand: List[OptimizeLine] = []
@@ -269,11 +269,10 @@ def _reduce_dealers_greedy(
             if not cand:
                 continue
             if worst_choice is None or cost_increase < worst_choice[0]:
-                worst_choice = (cost_increase, d, cand)
+                worst_choice = (cost_increase, d, cand, cand_idx)
         if worst_choice is None:
             break
         curr = worst_choice[2]
-        # Recompute curr_idx consistent with curr by rebuilding from cand_idx above
-        # Since worst_choice was built in this loop, reuse cand_idx from the last iteration
-        curr_idx = cand_idx
+        # Apply the PN index list selected for the chosen candidate
+        curr_idx = worst_choice[3]
     return curr

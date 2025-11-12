@@ -1,0 +1,23 @@
+name: PR Body Lint
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize]
+
+jobs:
+  body-check:
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: read
+      contents: read
+    steps:
+      - name: Validate PR body has no literal \n sequences
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const body = context.payload.pull_request.body || "";
+            if (body.includes("\\n")) {
+              core.setFailed("PR body contains literal \\n characters; use real newlines instead.");
+            } else {
+              core.info("PR body OK");
+            }
