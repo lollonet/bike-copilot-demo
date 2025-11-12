@@ -8,6 +8,7 @@ All comments are in English as per repo policy; UI strings remain Italian.
 from typing import Iterable
 
 from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 
 from .models import Product, SessionLocal
 from .types import PNOfferItem, SearchPNRequest, SearchPNResponse
@@ -55,9 +56,12 @@ def search_pn(req: SearchPNRequest) -> SearchPNResponse:
     """
     target = normalize_pn(req.maker_pn)
     with SessionLocal() as db:
-        products = db.scalars(select(Product)).all()
-    matches = [p for p in products if normalize_pn(p.mpn) == target]
-    offers = _gather_offers(matches)
+        # Eager-load offers to avoid DetachedInstanceError after session closes
+        products = db.scalars(
+            select(Product).options(selectinload(Product.offers))
+        ).all()
+        matches = [p for p in products if normalize_pn(p.mpn) == target]
+        offers = _gather_offers(matches)
 
     # Filters
     if req.dealers:
@@ -75,4 +79,3 @@ def search_pn(req: SearchPNRequest) -> SearchPNResponse:
 
     offers_sorted = sorted(offers, key=_key)
     return SearchPNResponse(maker_pn=req.maker_pn, offers=offers_sorted)
-
