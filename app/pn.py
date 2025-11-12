@@ -125,13 +125,14 @@ def search_pn_batch(req: SearchPNBatchRequest) -> SearchPNBatchResponse:
         products = db.scalars(
             select(Product).options(selectinload(Product.offers))
         ).all()
-        # Build normalized MPN -> products map
+        # Build helper indexes
         norm_map: dict[str, list[Product]] = {}
+        id_index: dict[int, Product] = {}
         for p in products:
+            id_index[p.id] = p
             key = normalize_pn(p.mpn)
-            if not key:
-                continue
-            norm_map.setdefault(key, []).append(p)
+            if key:
+                norm_map.setdefault(key, []).append(p)
 
         # Load PNMapping rows for requested set
         pid_by_norm: dict[str, set[int]] = {k: set() for k in target_set}
@@ -149,23 +150,12 @@ def search_pn_batch(req: SearchPNBatchRequest) -> SearchPNBatchResponse:
     results: list[SearchPNResponse] = []
     for original, norm in zip(items, targets):
         prods = list(norm_map.get(norm, []))
-        for pid in pid_by_norm.get(norm, set()):
-            prods.extend([p for p in prods if p.id == pid])  # ensure unique? We'll add missing below
-        # Ensure products from mapping that are not in direct list
-        # Build a set of ids present, then add by id from products loaded (norm_map covers all; fetch by id)
         ids_present = {p.id for p in prods}
-        # We need a global id->product map; reuse products loaded via norm_map
-        # Flatten a small index on demand
-        if pid_by_norm.get(norm):
-            # Create an index id -> Product lazily
-            id_index: dict[int, Product] = {}
-            for lst in norm_map.values():
-                for p in lst:
-                    if p.id not in id_index:
-                        id_index[p.id] = p
-            for pid in pid_by_norm[norm]:
-                if pid not in ids_present and pid in id_index:
-                    prods.append(id_index[pid])
+        # Add mapped products that are not already present
+        for pid in pid_by_norm.get(norm, set()):
+            if pid not in ids_present and pid in id_index:
+                prods.append(id_index[pid])
+                ids_present.add(pid)
 
         # Gather offers and apply filters
         offers = _gather_offers(prods)
