@@ -54,10 +54,15 @@ jobs:
             // PR-level docs-only check: skip only if ALL files are in SKIP_DIRS
             const prDocsOnly = considered.length > 0 && considered.every(f => skipDirRe.test(f.filename));
             core.info(`prDocsOnly=${prDocsOnly}`);
-            // Collect existing comments (issue + review)
+            // Collect existing comments (issue + inline review + top-level reviews)
             const issueComments = await github.paginate(github.rest.issues.listComments, {owner, repo, issue_number: pr.number, per_page: 100});
             const reviewComments = await github.paginate(github.rest.pulls.listReviewComments, {owner, repo, pull_number: pr.number, per_page: 100});
-            const hasTrigger = [...issueComments, ...reviewComments].some(c => (c.body||'').includes('@codex review'));
+            const topLevelReviews = await github.paginate(github.rest.pulls.listReviews, {owner, repo, pull_number: pr.number, per_page: 100});
+            const hasTrigger = [
+              ...issueComments,
+              ...reviewComments,
+              ...topLevelReviews,
+            ].some(c => (c.body||'').includes('@codex review'));
             core.info(`hasTrigger=${hasTrigger}`);
             const should = codeChanged && !hasTrigger && !prDocsOnly;
             core.info(`should_comment=${should}`);
