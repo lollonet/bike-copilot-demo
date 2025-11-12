@@ -155,7 +155,7 @@ def build_interface() -> gr.Blocks:
         results_state = gr.State({})
         cart_state = gr.State({})
 
-        # Ricerca in alto a tutta larghezza
+        # Search bar full-width at the top
         gr.Markdown("### Ricerca")
         with gr.Row():
             query = gr.Textbox(
@@ -167,7 +167,7 @@ def build_interface() -> gr.Blocks:
             search_btn = gr.Button("Cerca", variant="primary")
             clear_btn = gr.Button("Pulisci")
 
-        # Filtri principali sotto la ricerca: Categoria, Fornitori, Stock, Budget
+        # Primary filters under the search: Category, Suppliers, Stock, Budget
         with gr.Row(elem_id="filters-row"):
             category = gr.Dropdown(label="Categoria", choices=[""], value="", scale=1)
             suppliers = gr.CheckboxGroup(label="Fornitori", choices=[], scale=2)
@@ -189,13 +189,13 @@ def build_interface() -> gr.Blocks:
         with gr.Row():
             with gr.Column(scale=1):
                 gr.Markdown("### Pannello filtri")
-                # Stato tecnico (gestito dall'albero post-ricerca)
+                # Technical state (handled by the post-search facet tree)
                 speed = gr.State("")
                 freehub = gr.State("")
                 brake = gr.State("")
                 axle = gr.State("")
                 rotor = gr.State("")
-                # Albero filtri (si popola dopo la ricerca)
+                # Facet tree (populated after first search)
                 with gr.Accordion("Albero filtri (post-ricerca)", open=False):
                     facet_speed = gr.Radio(
                         label="Velocità", choices=[], interactive=True
@@ -209,7 +209,7 @@ def build_interface() -> gr.Blocks:
                         label="Asse (Axle)", choices=[], interactive=True
                     )
                 with gr.Row():
-                    # Pulsanti già definiti in alto; solo reminder visuale
+                    # Buttons already defined above; visual reminder only
                     pass
                 status = gr.Markdown(visible=True)
             with gr.Column(scale=3, elem_id="results-col"):
@@ -356,7 +356,7 @@ def build_interface() -> gr.Blocks:
                     speed_choices = sorted(list(f.get("speed", {}).keys()))
                     freehub_choices = sorted(list(f.get("freehub", {}).keys()))
                     brake_choices = sorted(list(f.get("brake", {}).keys()))
-                    # axle choices remain free-text for now (tooltip only)
+                    # Axle choices remain free-text for now (tooltip only)
                     rotor_choices = sorted(list(f.get("rotor", {}).keys()))
 
                     # Coverage gating based on product totals
