@@ -109,14 +109,8 @@ def search_pn_batch(req: SearchPNBatchRequest) -> SearchPNBatchResponse:
       - For each requested PN, union products from direct match and mapping
       - Apply dealers/in_stock filters and sort per PN
     """
-    want = [str(x) for x in (req.items or [])]
-    # De-duplicate while preserving order
-    seen: set[str] = set()
-    items: list[str] = []
-    for w in want:
-        if w not in seen:
-            seen.add(w)
-            items.append(w)
+    # Preserve original order and multiplicity; build a normalized cache
+    items: list[str] = [str(x) for x in (req.items or [])]
     targets = [normalize_pn(w) for w in items]
     target_set = set(t for t in targets if t)
 
