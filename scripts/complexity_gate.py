@@ -89,10 +89,16 @@ def radon_cc(paths: list[str]) -> dict[str, list[dict[str, Any]]]:
         sys.exit(2)
 
 
-def flake8_cognitive(paths: list[str], max_cog: int) -> tuple[bool, list[str]]:
-    """Run flake8 with cognitive complexity plugin.
+def flake8_cognitive_both(
+    paths: list[str], warn_cog: int, fail_cog: int
+) -> tuple[list[str], list[str]]:
+    """Run flake8 cognitive-complexity once at the warn threshold and split
+    results into WARN and FAIL groups.
 
-    Returns (has_violations, violation_lines).
+    Classification mirrors McCabe/LOC semantics:
+    - FAIL: complexity > fail_cog
+    - WARN: warn_cog <= complexity <= fail_cog
+    Returns (warn_lines, fail_lines).
     """
     exclude = ",".join(EXCLUDE_DIRS)
     cmd = [
@@ -102,7 +108,7 @@ def flake8_cognitive(paths: list[str], max_cog: int) -> tuple[bool, list[str]]:
         "--with",
         "flake8-cognitive-complexity",
         "flake8",
-        f"--max-cognitive-complexity={max_cog}",
+        f"--max-cognitive-complexity={warn_cog}",
         "--select",
         "CCR",
         "--exclude",
@@ -117,7 +123,24 @@ def flake8_cognitive(paths: list[str], max_cog: int) -> tuple[bool, list[str]]:
         details = text.strip() or "(no output)"
         print("[complexity] flake8 cognitive-complexity failed:\n" + details)
         sys.exit(2)
-    return (len(lines) > 0), lines
+    # Parse "(X > Y)" and split
+    import re
+
+    warn_lines: list[str] = []
+    fail_lines: list[str] = []
+    pat = re.compile(r"\((\d+)\s*>\s*(\d+)\)")
+    for l in lines:
+        m = pat.search(l)
+        if not m:
+            # If we can't parse, conservatively treat as WARN
+            warn_lines.append(l)
+            continue
+        lvl = int(m.group(1))
+        if lvl > fail_cog:
+            fail_lines.append(l)
+        else:
+            warn_lines.append(l)
+    return warn_lines, fail_lines
 
 
 def _summarize_cc(
@@ -150,8 +173,8 @@ def _format_sections(
     m_fail: list[str],
     l_warn: list[str],
     l_fail: list[str],
-    cog_fail: bool,
-    cog_lines: list[str],
+    cog_warn_lines: list[str],
+    cog_fail_lines: list[str],
 ) -> list[str]:
     out: list[str] = []
 
@@ -162,8 +185,9 @@ def _format_sections(
 
     add("[McCabe WARN]", m_warn)
     add("[LOC WARN]", l_warn)
-    if cog_fail and cog_lines:
-        add("[Cognitive FAIL] violations:", cog_lines)
+    add("[Cognitive WARN]", cog_warn_lines)
+    if cog_fail_lines:
+        add("[Cognitive FAIL] violations:", cog_fail_lines)
     add("[McCabe FAIL]", m_fail)
     add("[LOC FAIL]", l_fail)
     return out
@@ -172,9 +196,13 @@ def _format_sections(
 def evaluate(th: Thresholds, targets: list[str]) -> tuple[bool, list[str]]:
     cc = radon_cc(targets)
     m_warn, m_fail, l_warn, l_fail = _summarize_cc(cc, th)
-    cog_fail, cog_lines = flake8_cognitive(targets, th.cog_fail)
-    out = _format_sections(m_warn, m_fail, l_warn, l_fail, cog_fail, cog_lines)
-    return bool(m_fail or l_fail or cog_fail), out
+    cog_warn_lines, cog_fail_lines = flake8_cognitive_both(
+        targets, th.cog_warn, th.cog_fail
+    )
+    out = _format_sections(
+        m_warn, m_fail, l_warn, l_fail, cog_warn_lines, cog_fail_lines
+    )
+    return bool(m_fail or l_fail or cog_fail_lines), out
 
 
 def main() -> None:
