@@ -8,6 +8,7 @@ __pycache__/
 app.db*
 out/
 .api_pid
+.api_pid*
 .ui_pid
 
 # OS
