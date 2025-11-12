@@ -9,9 +9,11 @@ def _setup_db(tmp_name: str):
     import importlib
     import app.config as app_config
     import app.models as app_models
+    import app.pn as app_pn
 
     importlib.reload(app_config)
     importlib.reload(app_models)
+    importlib.reload(app_pn)
     from app.models import Product, SupplierOffer, SessionLocal, create_all
 
     create_all()
@@ -67,4 +69,5 @@ def test_search_pn_filters_and_sort():
     assert res.offers and res.offers[0].dealer == "DealerA"
     # Filter dealers
     res2 = search_pn(SearchPNRequest(maker_pn="CN-HG601", dealers=["DealerB"]))
+    assert res2.offers, "Expected filtered offers for DealerB"
     assert all(o.dealer == "DealerB" for o in res2.offers)
