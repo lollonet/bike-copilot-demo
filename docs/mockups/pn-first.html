@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="it">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Mockup — Preventivo PN‑first</title>
+    <link rel="stylesheet" href="pn-first.css" />
+  </head>
+  <body>
+    <header class="app-header" role="banner">
+      <div class="brand">
+        <div class="logo" aria-hidden="true">🏪</div>
+        <h1>Preventivo PN</h1>
+      </div>
+      <nav class="quick-links" aria-label="Collegamenti rapidi">
+        <a href="#" aria-current="page">Mockup</a>
+        <a href="#">Impostazioni</a>
+        <a href="#">KPI</a>
+        <a href="#">Aiuto</a>
+      </nav>
+    </header>
+
+    <main class="layout" role="main">
+      <section class="search-panel" aria-label="Ricerca PN">
+        <div class="row">
+          <label for="pn-input" class="sr-only">PN produttore</label>
+          <input id="pn-input" type="text" placeholder="PN produttore (es. CN-HG601)" />
+          <button id="add-btn" type="button">Aggiungi</button>
+          <button id="paste-btn" type="button">Incolla lista…</button>
+        </div>
+        <div class="chips" role="group" aria-label="Filtri rapidi">
+          <label><input type="checkbox" id="in-stock-only" /> Solo in stock</label>
+          <label>Dealer: <select id="dealer-select" multiple aria-label="Seleziona dealer"></select></label>
+          <label>Budget € <input id="budget" type="number" min="0" value="0" /></label>
+        </div>
+      </section>
+
+      <section class="content">
+        <div class="results" aria-live="polite" aria-label="Risultati per PN">
+          <!-- Results injected by JS -->
+        </div>
+        <aside class="cart" aria-label="Carrello e Ottimizzatore">
+          <h2>Carrello</h2>
+          <div id="cart-rows"></div>
+          <div class="optimizer">
+            <h3>Ottimizzatore</h3>
+            <label><input type="radio" name="opt" value="multi" checked /> Miglior prezzo</label>
+            <label><input type="radio" name="opt" value="single" /> Un solo dealer</label>
+            <label><input type="radio" name="opt" value="maxn" /> Al massimo N dealer <input id="max-n" type="range" min="1" max="3" value="2" /></label>
+            <label><input type="radio" name="opt" value="fast" /> Più veloce</label>
+            <button id="recalc" type="button">Ricalcola</button>
+          </div>
+          <div class="totals">
+            <div>Subtotale: <strong id="subtotal">€0,00</strong></div>
+            <div>Spedizioni: <strong id="shipping">€0,00</strong></div>
+            <div>IVA: <strong id="vat">€0,00</strong></div>
+            <div>Totale: <strong id="grand">€0,00</strong></div>
+          </div>
+          <button id="quote" class="cta" type="button">Crea preventivo</button>
+        </aside>
+      </section>
+    </main>
+
+    <dialog id="paste-modal" aria-label="Incolla lista PN">
+      <form method="dialog">
+        <h3>Incolla lista PN (uno per riga)</h3>
+        <textarea id="pn-list" rows="8" placeholder="CN-HG601\nPG-1230\nCS-HG700"></textarea>
+        <menu>
+          <button id="paste-cancel" value="cancel">Annulla</button>
+          <button id="paste-apply" value="apply" class="primary">Aggiungi</button>
+        </menu>
+      </form>
+    </dialog>
+
+    <script src="pn-first.js"></script>
+  </body>
+  </html>
+
