@@ -3,9 +3,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
-import re
-import shlex
 import subprocess
 import sys
 from dataclasses import dataclass
@@ -25,7 +22,15 @@ class Thresholds:
     loc_fail: int
 
 
-EXCLUDE_DIRS = [".git", ".venv", ".cache", "dist", "build", ".ruff_cache", "node_modules"]
+EXCLUDE_DIRS = [
+    ".git",
+    ".venv",
+    ".cache",
+    "dist",
+    "build",
+    ".ruff_cache",
+    "node_modules",
+]
 
 
 def read_control(path: Path) -> tuple[Thresholds, list[str]]:
@@ -107,7 +112,7 @@ def flake8_cognitive(paths: list[str], max_cog: int) -> tuple[bool, list[str]]:
     res = run(cmd)
     text = (res.stdout or "") + ("\n" + res.stderr if res.stderr else "")
     # Keep only plugin violation lines (contain CCR)
-    lines = [l for l in text.splitlines() if "CCR" in l]
+    lines = [line for line in text.splitlines() if "CCR" in line]
     if res.returncode not in (0, 1) or (res.returncode != 0 and not lines):
         details = text.strip() or "(no output)"
         print("[complexity] flake8 cognitive-complexity failed:\n" + details)
@@ -115,7 +120,9 @@ def flake8_cognitive(paths: list[str], max_cog: int) -> tuple[bool, list[str]]:
     return (len(lines) > 0), lines
 
 
-def _summarize_cc(cc: dict[str, list[dict[str, Any]]], th: Thresholds) -> tuple[list[str], list[str], list[str], list[str]]:
+def _summarize_cc(
+    cc: dict[str, list[dict[str, Any]]], th: Thresholds
+) -> tuple[list[str], list[str], list[str], list[str]]:
     mccabe_warn: list[str] = []
     mccabe_fail: list[str] = []
     loc_warn: list[str] = []
@@ -126,7 +133,7 @@ def _summarize_cc(cc: dict[str, list[dict[str, Any]]], th: Thresholds) -> tuple[
             lineno = int(b.get("lineno", 0))
             endline = int(b.get("endline", lineno))
             loc = max(0, endline - lineno + 1)
-            ident = f"{file}:{lineno} {b.get('type','func')} {b.get('name','?')}"
+            ident = f"{file}:{lineno} {b.get('type', 'func')} {b.get('name', '?')}"
             if complexity > th.mccabe_fail:
                 mccabe_fail.append(f"{ident} McCabe={complexity} > {th.mccabe_fail}")
             elif complexity >= th.mccabe_warn:
@@ -139,13 +146,20 @@ def _summarize_cc(cc: dict[str, list[dict[str, Any]]], th: Thresholds) -> tuple[
 
 
 def _format_sections(
-    m_warn: list[str], m_fail: list[str], l_warn: list[str], l_fail: list[str], cog_fail: bool, cog_lines: list[str]
+    m_warn: list[str],
+    m_fail: list[str],
+    l_warn: list[str],
+    l_fail: list[str],
+    cog_fail: bool,
+    cog_lines: list[str],
 ) -> list[str]:
     out: list[str] = []
+
     def add(label: str, items: list[str]) -> None:
         if items:
             out.append(label)
             out.extend("- " + x for x in items)
+
     add("[McCabe WARN]", m_warn)
     add("[LOC WARN]", l_warn)
     if cog_fail and cog_lines:
