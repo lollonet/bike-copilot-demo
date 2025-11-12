@@ -150,12 +150,14 @@ def search_pn_batch(req: SearchPNBatchRequest) -> SearchPNBatchResponse:
     results: list[SearchPNResponse] = []
     for original, norm in zip(items, targets):
         prods = list(norm_map.get(norm, []))
-        ids_present = {p.id for p in prods}
-        # Add mapped products that are not already present
-        for pid in pid_by_norm.get(norm, set()):
-            if pid not in ids_present and pid in id_index:
-                prods.append(id_index[pid])
-                ids_present.add(pid)
+        # Keep semantics consistent with single-item search:
+        # use PNMapping only as fallback when there is no direct Product match
+        if not prods:
+            ids_present: set[int] = set()
+            for pid in pid_by_norm.get(norm, set()):
+                if pid not in ids_present and pid in id_index:
+                    prods.append(id_index[pid])
+                    ids_present.add(pid)
 
         # Gather offers and apply filters
         offers = _gather_offers(prods)
