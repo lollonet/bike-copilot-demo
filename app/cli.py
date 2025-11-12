@@ -23,6 +23,8 @@ from .models import EventLog, SessionLocal, SupplierOffer, Product, create_all, 
 from .quote import render_quote
 from .search import search
 from .types import Brake, Freehub, QuoteResponse, Rotor, SearchRequest
+from .policy import parse_policy_html
+from .models import DealerPolicy
 
 
 app = typer.Typer(add_completion=True, no_args_is_help=True, help="Bike Copilot CLI")
@@ -212,6 +214,56 @@ def pn_alias_import(
                     inserted += 1
         db.commit()
     rich.print(f"[green]Alias PN importati da {yaml_file} — inseriti: {inserted}, aggiornati: {updated}[/green]")
+
+
+@app.command("fetch-policy")
+def fetch_policy(
+    dealer: str = typer.Option(..., help="Dealer name"),
+    url: str = typer.Option(..., help="URL pagina Spedizioni/Condizioni"),
+    header: list[str] = typer.Option(None, help='extra HTTP headers (key:value)'),
+) -> None:
+    """Fetch a shipping policy page and upsert DealerPolicy using deterministic rules."""
+    import httpx
+
+    hdrs: dict[str, str] = {}
+    for h in header or []:
+        if ":" in h:
+            k, v = h.split(":", 1)
+            hdrs[k.strip()] = v.strip()
+    create_all()
+    with httpx.Client(timeout=15.0, headers=hdrs or {"User-Agent": "BikeCopilotBot/0.1"}, follow_redirects=True) as client:
+        r = client.get(url)
+        r.raise_for_status()
+        ext = parse_policy_html(r.text)
+    with SessionLocal() as db:
+        row = db.query(DealerPolicy).filter(DealerPolicy.dealer == dealer).first()
+        if row is None:
+            db.add(
+                DealerPolicy(
+                    dealer=dealer,
+                    base_cost=ext.base_cost,
+                    free_threshold=ext.free_threshold,
+                    lead_days_std=ext.lead_days_std,
+                    source="rules",
+                    confidence=ext.confidence,
+                )
+            )
+        else:
+            row.base_cost = ext.base_cost
+            row.free_threshold = ext.free_threshold
+            row.lead_days_std = ext.lead_days_std
+            row.source = "rules"
+            row.confidence = ext.confidence
+        db.commit()
+    rich.print(
+        {
+            "dealer": dealer,
+            "base_cost": ext.base_cost,
+            "free_threshold": ext.free_threshold,
+            "lead_days_std": ext.lead_days_std,
+            "confidence": ext.confidence,
+        }
+    )
 
 
 @app.command("ingest-csv")
