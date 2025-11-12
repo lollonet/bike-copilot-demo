@@ -89,6 +89,32 @@ class FacetsResponse(BaseModel):
     totals: dict[str, int]
 
 
+# PN-first search boundary
+class SearchPNRequest(BaseModel):
+    maker_pn: str
+    dealers: list[str] | None = None
+    in_stock_only: bool | None = None
+    freshness_ttl_h: int | None = None  # reserved; local DB baseline
+
+
+class PNOfferItem(BaseModel):
+    offer_id: int
+    dealer: str
+    price: float | None = None
+    in_stock: bool
+    lead_time_days: int | None = None
+    updated_at: datetime | None = None
+    brand: str | None = None
+    mpn: str | None = None
+    name: str | None = None
+
+
+class SearchPNResponse(BaseModel):
+    maker_pn: str
+    offers: list[PNOfferItem]
+    ts: datetime = Field(default_factory=datetime.utcnow)
+
+
 # Internal ingest boundary (provider adapters → ingest orchestrator)
 class ProductInput(BaseModel):
     brand: str

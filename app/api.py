@@ -21,8 +21,11 @@ from .types import (
     SearchRequest,
     SearchResponse,
     FacetsResponse,
+    SearchPNRequest,
+    SearchPNResponse,
 )
 from .logging_utils import log_event
+from .pn import search_pn
 
 
 app = FastAPI(title="Bike Copilot Demo")
@@ -100,6 +103,20 @@ def api_facets(req: SearchRequest, request: Request) -> FacetsResponse:
             "products": res.totals.get("products", 0),
             "offers": res.totals.get("offers", 0),
         },
+    )
+    return res
+
+
+@app.post("/search_pn", response_model=SearchPNResponse, responses={400: {"model": Problem}})
+def api_search_pn(req: SearchPNRequest, request: Request) -> SearchPNResponse:
+    res = search_pn(req)
+    log_event(
+        "INFO",
+        op="search_pn",
+        kind="api",
+        message="search_pn completed",
+        trace_id=getattr(request.state, "trace_id", None),
+        extra={"offers": len(res.offers)},
     )
     return res
 
