@@ -1,0 +1,79 @@
+name: PR Auto-Comment (@codex review)
+
+on:
+  pull_request:
+    types: [opened, reopened, ready_for_review, synchronize]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  ensure-codex-comment:
+    if: ${{ !github.event.pull_request.draft }}
+    runs-on: ubuntu-latest
+    concurrency:
+      group: pr-auto-codex-${{ github.event.pull_request.number }}
+      cancel-in-progress: false
+    env:
+      CODE_DIRS: "app src scripts providers tests"
+      CODE_EXTS: "py sh yaml yml"
+      SKIP_DIRS: "docs .github"
+    steps:
+      - name: Decide if code changes exist and comment is missing
+        id: decide
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const {owner, repo} = context.repo;
+            const pr = context.payload.pull_request;
+            // Labels: allow skip via 'skip-codex-review'
+            const labels = (pr.labels || []).map(l => (typeof l === 'string' ? l : l.name));
+            if (labels.includes('skip-codex-review')) {
+              core.info('skip-codex-review label present → skipping');
+              core.setOutput('should_comment','false');
+              return;
+            }
+            // Build patterns from env
+            const words = s => (s||'').split(/\s+/).filter(Boolean);
+            const esc = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            const dirs = words(process.env.CODE_DIRS);
+            const exts = words(process.env.CODE_EXTS);
+            const skipDirs = words(process.env.SKIP_DIRS);
+            const dirRe = new RegExp(`^(${dirs.map(esc).join('|')})/`, 'i');
+            const extRe = new RegExp(`\\.(${exts.map(esc).join('|')})$`, 'i');
+            const skipDirRe = new RegExp(`^(${skipDirs.map(esc).join('|')})/`, 'i');
+            // List files in PR
+            const files = await github.paginate(github.rest.pulls.listFiles, {owner, repo, pull_number: pr.number, per_page: 100});
+            const considered = files.filter(f => ['added','modified','renamed'].includes(f.status));
+            core.info('PR files:');
+            considered.forEach(f => core.info(` - ${f.filename} [${f.status}]`));
+            const codeChanged = considered.some(f => dirRe.test(f.filename) && extRe.test(f.filename));
+            core.info(`codeChanged=${codeChanged}`);
+            // For 'synchronize', skip if last commit touches only docs/.github
+            let onlyDocsLastCommit = false;
+            if (context.eventName === 'pull_request' && context.payload.action === 'synchronize') {
+              const headSha = pr.head.sha;
+              const commit = await github.rest.repos.getCommit({owner, repo, ref: headSha});
+              const commitFiles = (commit.data.files || []).map(f => f.filename);
+              core.info('Last commit files:');
+              commitFiles.forEach(f => core.info(` * ${f}`));
+              onlyDocsLastCommit = commitFiles.length > 0 && commitFiles.every(f => skipDirRe.test(f));
+              core.info(`onlyDocsLastCommit=${onlyDocsLastCommit}`);
+            }
+            // Collect existing comments (issue + review)
+            const issueComments = await github.paginate(github.rest.issues.listComments, {owner, repo, issue_number: pr.number, per_page: 100});
+            const reviewComments = await github.paginate(github.rest.pulls.listReviewComments, {owner, repo, pull_number: pr.number, per_page: 100});
+            const hasTrigger = [...issueComments, ...reviewComments].some(c => (c.body||'').includes('@codex review'));
+            core.info(`hasTrigger=${hasTrigger}`);
+            const should = codeChanged && !hasTrigger && !onlyDocsLastCommit;
+            core.info(`should_comment=${should}`);
+            core.setOutput('should_comment', should ? 'true' : 'false');
+      - name: Post trigger comment
+        if: steps.decide.outputs.should_comment == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const {owner, repo} = context.repo;
+            const pr = context.payload.pull_request;
+            await github.rest.issues.createComment({ owner, repo, issue_number: pr.number, body: '@codex review' });

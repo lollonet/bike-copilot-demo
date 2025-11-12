@@ -14,3 +14,4 @@ REQ: REQ-###  | ADR: ADR-###
 - [ ] `bash scripts/status.sh` run locally (or `--fix`)
 - [ ] Docs synced to codebase (Runbook 05); spec_lint and traceability pass
 - [ ] Commento post‑push con `@codex review` (obbligatorio se il PR cambia codice)
+ - [ ] Se vuoi disabilitare l’autocommento, aggiungi label `skip-codex-review`
