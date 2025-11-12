@@ -23,6 +23,9 @@ from .types import (
     FacetsResponse,
     SearchPNRequest,
     SearchPNResponse,
+    SearchPNBatchRequest,
+    SearchPNBatchResponse,
+    DealersResponse,
 )
 from .logging_utils import log_event
 from .pn import search_pn
@@ -119,6 +122,66 @@ def api_search_pn(req: SearchPNRequest, request: Request) -> SearchPNResponse:
         extra={"offers": len(res.offers)},
     )
     return res
+
+
+@app.post(
+    "/search_pn_batch",
+    response_model=SearchPNBatchResponse,
+    responses={400: {"model": Problem}},
+)
+def api_search_pn_batch(
+    req: SearchPNBatchRequest, request: Request
+) -> SearchPNBatchResponse:
+    items = list(dict.fromkeys([str(x) for x in (req.items or [])]))
+    results: list[SearchPNResponse] = []
+    for maker_pn in items:
+        r = search_pn(
+            SearchPNRequest(
+                maker_pn=maker_pn,
+                dealers=req.dealers,
+                in_stock_only=req.in_stock_only,
+            )
+        )
+        results.append(r)
+    log_event(
+        "INFO",
+        op="search_pn_batch",
+        kind="api",
+        message="batch completed",
+        trace_id=getattr(request.state, "trace_id", None),
+        extra={"requested": len(items), "results": len(results)},
+    )
+    return SearchPNBatchResponse(results=results)
+
+
+@app.get("/dealers", response_model=DealersResponse)
+def api_dealers() -> DealersResponse:
+    create_all()
+    with SessionLocal() as db:
+        # Fetch per-dealer offers count and max(updated_at)
+        from sqlalchemy import func
+
+        rows = (
+            db.query(
+                SupplierOffer.supplier,
+                func.count(SupplierOffer.id),
+                func.max(SupplierOffer.updated_at),
+            )
+            .group_by(SupplierOffer.supplier)
+            .all()
+        )
+    dealers = [
+        {
+            "name": str(name),
+            "offers": int(cnt),
+            "last_updated": upd,
+        }
+        for (name, cnt, upd) in rows
+    ]
+    return DealersResponse(dealers=[
+        # pydantic will coerce dicts to DealerInfo
+        *dealers
+    ])
 
 
 @app.get("/files/{name:path}")

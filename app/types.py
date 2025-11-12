@@ -115,6 +115,28 @@ class SearchPNResponse(BaseModel):
     ts: datetime = Field(default_factory=datetime.utcnow)
 
 
+class SearchPNBatchRequest(BaseModel):
+    items: list[str]
+    dealers: list[str] | None = None
+    in_stock_only: bool | None = None
+
+
+class SearchPNBatchResponse(BaseModel):
+    results: list[SearchPNResponse]
+    ts: datetime = Field(default_factory=datetime.utcnow)
+
+
+class DealerInfo(BaseModel):
+    name: str
+    offers: int
+    last_updated: datetime | None = None
+
+
+class DealersResponse(BaseModel):
+    dealers: list[DealerInfo]
+    ts: datetime = Field(default_factory=datetime.utcnow)
+
+
 # Internal ingest boundary (provider adapters → ingest orchestrator)
 class ProductInput(BaseModel):
     brand: str
