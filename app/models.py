@@ -140,7 +140,7 @@ class PNMapping(Base):
     confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
 
     __table_args__ = (
-        UniqueConstraint("product_id", "dealer", "dealer_pn_norm", name="uq_pnmap_product_dealer_code"),
+        UniqueConstraint("dealer", "dealer_pn_norm", name="uq_pnmap_dealer_code"),
     )
 
 

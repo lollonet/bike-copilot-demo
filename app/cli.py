@@ -162,7 +162,19 @@ def pn_alias_import(
         raise typer.BadParameter("YAML root must be a list of dealer blocks")
     create_all()
     inserted = 0
+    updated = 0
     with SessionLocal() as db:
+        # Build normalized MPN → product map once to avoid O(N*M) scans
+        rows = db.query(Product.id, Product.mpn).filter(Product.mpn.isnot(None)).all()
+        norm_to_product: dict[str, int] = {}
+        for pid, mpn in rows:
+            try:
+                key = normalize_pn(str(mpn))
+            except Exception:
+                continue
+            if key:
+                norm_to_product[key] = int(pid)
+
         for block in data:
             dealer = str(block.get("dealer") or "").strip() or None
             for a in block.get("aliases", []) or []:
@@ -171,43 +183,35 @@ def pn_alias_import(
                 dealer_norm = normalize_pn(dealer_pn) if dealer_pn else None
                 if not maker:
                     continue
-                # Try to find product by maker PN
-                prod = (
-                    db.query(Product)
-                    .filter(Product.mpn.isnot(None))
-                    .all()
-                )
-                target = None
-                for p in prod:
-                    if normalize_pn(p.mpn) == maker:
-                        target = p
-                        break
-                if not target:
-                    # Skip if product unknown; alias can be re-imported later
+                target_id = norm_to_product.get(maker)
+                if not target_id:
+                    # Product not present yet; skip and allow re-import later
                     continue
-                exists = (
-                    db.query(PNMapping)
-                    .filter(
-                        PNMapping.product_id == target.id,
-                        PNMapping.dealer == dealer,
-                        PNMapping.dealer_pn_norm == dealer_norm,
-                    )
-                    .first()
+                # Upsert on (dealer, dealer_pn_norm): update product_id/confidence if exists
+                q = db.query(PNMapping).filter(
+                    PNMapping.dealer == dealer,
+                    PNMapping.dealer_pn_norm == dealer_norm,
                 )
-                if exists:
-                    continue
-                db.add(
-                    PNMapping(
-                        product_id=target.id,
-                        dealer=dealer,
-                        maker_pn_norm=maker,
-                        dealer_pn_norm=dealer_norm,
-                        confidence=float(a.get("confidence") or 1.0),
+                row = q.first()
+                conf = float(a.get("confidence") or 1.0)
+                if row:
+                    row.product_id = int(target_id)
+                    row.maker_pn_norm = maker
+                    row.confidence = conf
+                    updated += 1
+                else:
+                    db.add(
+                        PNMapping(
+                            product_id=int(target_id),
+                            dealer=dealer,
+                            maker_pn_norm=maker,
+                            dealer_pn_norm=dealer_norm,
+                            confidence=conf,
+                        )
                     )
-                )
-                inserted += 1
+                    inserted += 1
         db.commit()
-    rich.print(f"[green]Imported {inserted} PN alias rows from {yaml_file}[/green]")
+    rich.print(f"[green]Alias PN importati da {yaml_file} — inseriti: {inserted}, aggiornati: {updated}[/green]")
 
 
 @app.command("ingest-csv")
