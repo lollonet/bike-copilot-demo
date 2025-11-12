@@ -137,6 +137,48 @@ class DealersResponse(BaseModel):
     ts: datetime = Field(default_factory=datetime.utcnow)
 
 
+# Optimizer boundary
+class OptimizeItem(BaseModel):
+    maker_pn: str
+    qty: int = 1
+
+
+class OptimizeParams(BaseModel):
+    scenario: str = "miglior-prezzo"  # miglior-prezzo | un-solo-dealer | max-n-dealer | piu-veloce
+    max_dealer: int | None = None
+    penale_dealer: float = 3.5
+    penale_lead: float = 0.5  # €/giorno
+
+
+class OptimizeRequest(BaseModel):
+    items: list[OptimizeItem]
+    params: OptimizeParams = Field(default_factory=OptimizeParams)
+
+
+class OptimizeLine(BaseModel):
+    maker_pn: str
+    dealer: str
+    unit_price: float | None
+    qty: int
+    line_total: float
+    lead_time_days: int | None
+
+
+class OptimizeCost(BaseModel):
+    subtotal: float
+    shipping: float
+    penalties: float
+    total: float
+
+
+class OptimizeResponse(BaseModel):
+    lines: list[OptimizeLine]
+    dealers: list[str]
+    costs: OptimizeCost
+    notes: list[str] = Field(default_factory=list)
+    ts: datetime = Field(default_factory=datetime.utcnow)
+
+
 # Internal ingest boundary (provider adapters → ingest orchestrator)
 class ProductInput(BaseModel):
     brand: str

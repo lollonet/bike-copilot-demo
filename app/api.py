@@ -26,9 +26,12 @@ from .types import (
     SearchPNBatchRequest,
     SearchPNBatchResponse,
     DealersResponse,
+    OptimizeRequest,
+    OptimizeResponse,
 )
 from .logging_utils import log_event
 from .pn import search_pn, search_pn_batch
+from .optimizer import optimize
 
 
 app = FastAPI(title="Bike Copilot Demo")
@@ -170,6 +173,20 @@ def api_dealers() -> DealersResponse:
         # pydantic will coerce dicts to DealerInfo
         *dealers
     ])
+
+
+@app.post("/optimize", response_model=OptimizeResponse)
+def api_optimize(req: OptimizeRequest, request: Request) -> OptimizeResponse:
+    res = optimize(req)
+    log_event(
+        "INFO",
+        op="optimize",
+        kind="api",
+        message="optimize computed",
+        trace_id=getattr(request.state, "trace_id", None),
+        extra={"dealers": len(res.dealers), "lines": len(res.lines), "total": res.costs.total},
+    )
+    return res
 
 
 @app.get("/files/{name:path}")
