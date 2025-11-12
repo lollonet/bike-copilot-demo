@@ -183,7 +183,8 @@ def optimize(req: OptimizeRequest) -> OptimizeResponse:
         N = int(params.max_dealer or 1)
         # Start from best price per PN
         base_lines: List[OptimizeLine] = []
-        for (offers, q, pn) in zip(per_pn, qty_list, [it.maker_pn for it in items]):
+        base_idx: List[int] = []
+        for idx, (offers, q, pn) in enumerate(zip(per_pn, qty_list, [it.maker_pn for it in items])):
             o = _pick_cheapest(offers)
             if not o:
                 continue
@@ -198,7 +199,8 @@ def optimize(req: OptimizeRequest) -> OptimizeResponse:
                     lead_time_days=o.lead_time_days,
                 )
             )
-        lines = _reduce_dealers_greedy(base_lines, per_pn, qty_list, N)
+            base_idx.append(idx)
+        lines = _reduce_dealers_greedy(base_lines, base_idx, per_pn, qty_list, N)
     else:
         # default fallback
         return optimize(OptimizeRequest(items=req.items, params=OptimizeParams(scenario="miglior-prezzo", penale_dealer=params.penale_dealer, penale_lead=params.penale_lead)))
@@ -223,10 +225,11 @@ def _avg_lead(lines: List[OptimizeLine]) -> float:
 
 
 def _reduce_dealers_greedy(
-    lines: List[OptimizeLine], per_pn: List[List[PNOfferItem]], qty_list: List[int], N: int
+    lines: List[OptimizeLine], line_idx: List[int], per_pn: List[List[PNOfferItem]], qty_list: List[int], N: int
 ) -> List[OptimizeLine]:
     # Greedy: while dealers > N, pick the dealer whose removal increases total least
     curr = list(lines)
+    curr_idx = list(line_idx)
     def dealers_of(ls: List[OptimizeLine]) -> List[str]:
         return sorted(list({l.dealer for l in ls}))
 
@@ -236,12 +239,15 @@ def _reduce_dealers_greedy(
         for d in dealers:
             # Reassign lines currently served by d to next best offers from other dealers
             cand: List[OptimizeLine] = []
+            cand_idx: List[int] = []
             cost_increase = 0.0
-            for idx, l in enumerate(curr):
+            for pos, l in enumerate(curr):
                 if l.dealer != d:
                     cand.append(l)
+                    cand_idx.append(curr_idx[pos])
                     continue
                 # choose next best from other dealers for PN idx
+                idx = curr_idx[pos]
                 offers = per_pn[idx]
                 alt = [o for o in offers if o.dealer != d]
                 nb = _pick_cheapest(alt)
@@ -258,6 +264,7 @@ def _reduce_dealers_greedy(
                     lead_time_days=nb.lead_time_days,
                 )
                 cand.append(new_line)
+                cand_idx.append(idx)
                 cost_increase += (new_line.line_total - l.line_total)
             if not cand:
                 continue
@@ -266,4 +273,7 @@ def _reduce_dealers_greedy(
         if worst_choice is None:
             break
         curr = worst_choice[2]
+        # Recompute curr_idx consistent with curr by rebuilding from cand_idx above
+        # Since worst_choice was built in this loop, reuse cand_idx from the last iteration
+        curr_idx = cand_idx
     return curr

@@ -37,7 +37,9 @@ def _seed_db():
 
 @pytest.fixture()
 def client(tmp_path: Path) -> TestClient:
-    _prepare_env("test_opt.db", str(tmp_path / "out"))
+    # Use per-test SQLite file under tmp_path to avoid unique constraint collisions
+    os.environ["APP_DB_URL"] = f"sqlite:///{tmp_path}/test_opt.db"
+    os.environ["APP_OUT_DIR"] = str(tmp_path / "out")
     # reload modules to bind to fresh DB
     import importlib
     import app.config as app_config
@@ -76,4 +78,3 @@ def test_optimize_un_solo_dealer(client: TestClient) -> None:
     data = r.json()
     # Should have 1 dealer or fallback notes
     assert len(data["dealers"]) in (1, 2)
-
