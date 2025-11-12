@@ -69,9 +69,7 @@ def parse_policy_html(html: str) -> PolicyExtract:
                     break
 
     # Base cost: pick the smallest euro not part of threshold sentence
-    euros = [
-        _to_float(x) for x in EUR_RE.findall(text)
-    ]
+    euros = [_to_float(x) for x in EUR_RE.findall(text)]
     euros = [e for e in euros if e is not None]
     base: float | None = None
     if euros:
@@ -90,5 +88,6 @@ def parse_policy_html(html: str) -> PolicyExtract:
         conf += 0.1
     conf = min(1.0, conf)
 
-    return PolicyExtract(base_cost=base, free_threshold=free, lead_days_std=lead, confidence=conf)
-
+    return PolicyExtract(
+        base_cost=base, free_threshold=free, lead_days_std=lead, confidence=conf
+    )

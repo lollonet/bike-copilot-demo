@@ -19,15 +19,41 @@ def _seed_db():
     with SessionLocal() as db:
         # P1
         p1 = Product(brand="Shimano", mpn="CN-HG601", ean=None, name="Catena 11v")
-        db.add(p1); db.commit(); db.refresh(p1)
-        db.add_all([
-            SupplierOffer(product_id=p1.id, supplier="DealerA", price=24.9, in_stock=True, lead_time_days=1),
-            SupplierOffer(product_id=p1.id, supplier="DealerB", price=23.5, in_stock=False, lead_time_days=3),
-        ])
+        db.add(p1)
+        db.commit()
+        db.refresh(p1)
+        db.add_all(
+            [
+                SupplierOffer(
+                    product_id=p1.id,
+                    supplier="DealerA",
+                    price=24.9,
+                    in_stock=True,
+                    lead_time_days=1,
+                ),
+                SupplierOffer(
+                    product_id=p1.id,
+                    supplier="DealerB",
+                    price=23.5,
+                    in_stock=False,
+                    lead_time_days=3,
+                ),
+            ]
+        )
         # P2
         p2 = Product(brand="SRAM", mpn="PG-1230", ean=None, name="Cassetta 12v")
-        db.add(p2); db.commit(); db.refresh(p2)
-        db.add(SupplierOffer(product_id=p2.id, supplier="DealerA", price=89.0, in_stock=True, lead_time_days=2))
+        db.add(p2)
+        db.commit()
+        db.refresh(p2)
+        db.add(
+            SupplierOffer(
+                product_id=p2.id,
+                supplier="DealerA",
+                price=89.0,
+                in_stock=True,
+                lead_time_days=2,
+            )
+        )
         db.commit()
 
 
@@ -40,6 +66,7 @@ def client(tmp_path: Path) -> TestClient:
     import app.models as app_models
     import app.pn as app_pn
     import app.api as app_api
+
     importlib.reload(app_config)
     importlib.reload(app_models)
     # Reload PN first so API can import fresh search_pn bound to new SessionLocal
@@ -47,6 +74,7 @@ def client(tmp_path: Path) -> TestClient:
     importlib.reload(app_api)
     _seed_db()
     from app.api import app
+
     return TestClient(app)
 
 

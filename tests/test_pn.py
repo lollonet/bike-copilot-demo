@@ -30,7 +30,11 @@ def test_search_pn_normalization_match():
         db.refresh(p)
         db.add(
             SupplierOffer(
-                product_id=p.id, supplier="DealerA", price=24.9, in_stock=True, lead_time_days=1
+                product_id=p.id,
+                supplier="DealerA",
+                price=24.9,
+                in_stock=True,
+                lead_time_days=1,
             )
         )
         db.commit()
@@ -52,10 +56,18 @@ def test_search_pn_filters_and_sort():
         db.add_all(
             [
                 SupplierOffer(
-                    product_id=p.id, supplier="DealerA", price=25.0, in_stock=True, lead_time_days=2
+                    product_id=p.id,
+                    supplier="DealerA",
+                    price=25.0,
+                    in_stock=True,
+                    lead_time_days=2,
                 ),
                 SupplierOffer(
-                    product_id=p.id, supplier="DealerB", price=23.0, in_stock=False, lead_time_days=1
+                    product_id=p.id,
+                    supplier="DealerB",
+                    price=23.0,
+                    in_stock=False,
+                    lead_time_days=1,
                 ),
             ]
         )

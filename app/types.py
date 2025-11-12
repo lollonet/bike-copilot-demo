@@ -137,6 +137,26 @@ class DealersResponse(BaseModel):
     ts: datetime = Field(default_factory=datetime.utcnow)
 
 
+# KPI summary boundary
+class KPIDealerEntry(BaseModel):
+    dealer: str
+    offers: int
+    updated_24h_pct: float
+    lag_days: float | None = None
+
+
+class KPISummaryResponse(BaseModel):
+    products_total: int
+    products_with_offers: int
+    coverage_pn_pct: float
+    offers_total: int
+    offers_updated_24h: int
+    updated_24h_pct: float
+    pn_unmapped: int
+    per_dealer: list[KPIDealerEntry]
+    ts: datetime = Field(default_factory=datetime.utcnow)
+
+
 # Optimizer boundary
 class OptimizeItem(BaseModel):
     maker_pn: str
@@ -144,7 +164,9 @@ class OptimizeItem(BaseModel):
 
 
 class OptimizeParams(BaseModel):
-    scenario: str = "miglior-prezzo"  # miglior-prezzo | un-solo-dealer | max-n-dealer | piu-veloce
+    scenario: str = (
+        "miglior-prezzo"  # miglior-prezzo | un-solo-dealer | max-n-dealer | piu-veloce
+    )
     max_dealer: int | None = None
     penale_dealer: float = 3.5
     penale_lead: float = 0.5  # €/giorno

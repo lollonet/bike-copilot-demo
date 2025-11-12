@@ -72,7 +72,8 @@ def search_pn(req: SearchPNRequest) -> SearchPNResponse:
             pids: set[int] = set()
             rows = db.scalars(
                 select(PNMapping.product_id).where(
-                    (PNMapping.maker_pn_norm == target) | (PNMapping.dealer_pn_norm == target)
+                    (PNMapping.maker_pn_norm == target)
+                    | (PNMapping.dealer_pn_norm == target)
                 )
             ).all()
             pids.update(int(pid) for pid in rows)
@@ -131,9 +132,18 @@ def search_pn_batch(req: SearchPNBatchRequest) -> SearchPNBatchResponse:
         # Load PNMapping rows for requested set
         pid_by_norm: dict[str, set[int]] = {k: set() for k in target_set}
         if target_set:
-            rows = db.query(PNMapping.maker_pn_norm, PNMapping.dealer_pn_norm, PNMapping.product_id).filter(
-                (PNMapping.maker_pn_norm.in_(list(target_set))) | (PNMapping.dealer_pn_norm.in_(list(target_set)))
-            ).all()
+            rows = (
+                db.query(
+                    PNMapping.maker_pn_norm,
+                    PNMapping.dealer_pn_norm,
+                    PNMapping.product_id,
+                )
+                .filter(
+                    (PNMapping.maker_pn_norm.in_(list(target_set)))
+                    | (PNMapping.dealer_pn_norm.in_(list(target_set)))
+                )
+                .all()
+            )
             for maker_norm, dealer_norm, pid in rows:
                 if maker_norm in pid_by_norm:
                     pid_by_norm[maker_norm].add(int(pid))
@@ -161,6 +171,7 @@ def search_pn_batch(req: SearchPNBatchRequest) -> SearchPNBatchResponse:
             offers = [it for it in offers if it.dealer in allowed]
         if req.in_stock_only:
             offers = [it for it in offers if it.in_stock]
+
         # Sort
         def _key(it: PNOfferItem) -> tuple[int, float, int]:
             instock_rank = 0 if it.in_stock else 1

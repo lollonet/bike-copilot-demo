@@ -7,7 +7,6 @@ from sqlalchemy.orm import selectinload
 
 from .config import settings
 import os
-import yaml
 from .models import EventLog, Product, SessionLocal, SupplierOffer
 from .types import OfferItem, SearchRequest, SearchResponse, FacetsResponse
 
@@ -26,7 +25,7 @@ def _load_category_synonyms() -> dict[str, str]:
                 data = yaml.safe_load(cf) or {}
                 for canon, aliases in data.items():
                     mapping[str(canon).lower().strip()] = str(canon)
-                    for a in (aliases or []):
+                    for a in aliases or []:
                         mapping[str(a).lower().strip()] = str(canon)
     except Exception:
         mapping = {}

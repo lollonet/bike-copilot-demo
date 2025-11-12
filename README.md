@@ -19,6 +19,7 @@ Target Makefile
 - `make seed` – popola CSV demo (oppure CLI synth per 1000 articoli).
 - `make api` – avvia FastAPI su `:8000`.
 - `make ui` – avvia Gradio UI su `:7860`.
+- `make ui-pn` – avvia la UI PN‑first su `:7861`.
 - Aiuto CLI: `uv run python -m app.cli --help`.
 
 Demo rapida (2 minuti)
@@ -28,6 +29,7 @@ Demo rapida (2 minuti)
   - semplice: `make seed`
   - catalogo reale + fornitori sintetici: `uv run python -m app.cli reset-db && uv run python -m app.cli ingest-csv-synth --csv ./catalogo_real_mtb.csv --mapping providers/csv-catalogo-mtb.yaml --suppliers 3 --coverage 0.65 --jitter 0.15`
 - `make api` e in un’altra shell `make ui`
+- (PN‑first) in un’altra shell `make ui-pn` e apri http://localhost:7861
 - UI: cerca (“borraccia”), aggiungi più offerte al carrello (Qtà +/−), crea preventivo (multi‑riga con totali). 
 - API quick check:
   - Search: `curl -s :8000/search -H 'content-type: application/json' -d '{"query_text":"borraccia"}' | jq`
@@ -40,6 +42,7 @@ Ambiente
 
 Health
 - `GET /health` → `{status:'ok', db:true, pdfkit:<bool>, version:'<x.y.z>'}`; le risposte includono l’header `X-Trace-Id`.
+- `GET /kpi/summary` → copertura PN, % offerte aggiornate ≤24h, lag per dealer, conteggio PN non mappati.
 
 Autocomplete CLI
 - Mostra script: `uv run python -m app.cli --show-completion`

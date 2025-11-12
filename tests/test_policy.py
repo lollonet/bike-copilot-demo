@@ -12,4 +12,3 @@ def test_parse_policy_free_threshold_and_base_cost():
     assert ext.free_threshold is not None and abs(ext.free_threshold - 49.0) < 0.01
     assert ext.lead_days_std in (1, 2)
     assert 0.5 <= ext.confidence <= 1.0
-

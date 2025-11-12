@@ -149,7 +149,9 @@ class PNMapping(Base):
     product_id: Mapped[int] = mapped_column(ForeignKey("product.id"), index=True)
     dealer: Mapped[str | None] = mapped_column(String(100), nullable=True, index=True)
     maker_pn_norm: Mapped[str] = mapped_column(String(120), index=True)
-    dealer_pn_norm: Mapped[str | None] = mapped_column(String(120), nullable=True, index=True)
+    dealer_pn_norm: Mapped[str | None] = mapped_column(
+        String(120), nullable=True, index=True
+    )
     confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
 
     __table_args__ = (
