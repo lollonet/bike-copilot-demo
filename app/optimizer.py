@@ -200,7 +200,7 @@ def optimize(req: OptimizeRequest) -> OptimizeResponse:
                 )
             )
             base_idx.append(idx)
-        lines = _reduce_dealers_greedy(base_lines, base_idx, per_pn, qty_list, N)
+        lines = _reduce_dealers_greedy(base_lines, base_idx, per_pn, qty_list, N, params)
     else:
         # default fallback
         return optimize(OptimizeRequest(items=req.items, params=OptimizeParams(scenario="miglior-prezzo", penale_dealer=params.penale_dealer, penale_lead=params.penale_lead)))
