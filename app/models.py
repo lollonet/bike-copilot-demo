@@ -129,6 +129,21 @@ def create_all() -> None:
     Base.metadata.create_all(engine)
 
 
+class PNMapping(Base):
+    __tablename__ = "pn_mapping"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    product_id: Mapped[int] = mapped_column(ForeignKey("product.id"), index=True)
+    dealer: Mapped[str | None] = mapped_column(String(100), nullable=True, index=True)
+    maker_pn_norm: Mapped[str] = mapped_column(String(120), index=True)
+    dealer_pn_norm: Mapped[str | None] = mapped_column(String(120), nullable=True, index=True)
+    confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
+
+    __table_args__ = (
+        UniqueConstraint("product_id", "dealer", "dealer_pn_norm", name="uq_pnmap_product_dealer_code"),
+    )
+
+
 class RawIngest(Base):
     __tablename__ = "raw_ingest"
 

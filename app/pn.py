@@ -10,7 +10,7 @@ from typing import Iterable
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
-from .models import Product, SessionLocal
+from .models import Product, SessionLocal, PNMapping
 from .types import PNOfferItem, SearchPNRequest, SearchPNResponse
 
 
@@ -56,11 +56,22 @@ def search_pn(req: SearchPNRequest) -> SearchPNResponse:
     """
     target = normalize_pn(req.maker_pn)
     with SessionLocal() as db:
-        # Eager-load offers to avoid DetachedInstanceError after session closes
+        # First, try direct product match by normalized maker PN
         products = db.scalars(
             select(Product).options(selectinload(Product.offers))
         ).all()
         matches = [p for p in products if normalize_pn(p.mpn) == target]
+        # If no direct match, consult PNMapping using either maker or dealer normalized PN
+        if not matches:
+            pids: set[int] = set()
+            rows = db.scalars(
+                select(PNMapping.product_id).where(
+                    (PNMapping.maker_pn_norm == target) | (PNMapping.dealer_pn_norm == target)
+                )
+            ).all()
+            pids.update(int(pid) for pid in rows)
+            if pids:
+                matches = [p for p in products if p.id in pids]
         offers = _gather_offers(matches)
 
     # Filters

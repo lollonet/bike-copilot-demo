@@ -1,0 +1,11 @@
+- dealer: DealerA
+  aliases:
+    - maker_pn: CN-HG601
+      dealer_pn: ICNHG601116
+      confidence: 0.98
+    - maker_pn: PG-1230
+      dealer_pn: 00.2418.086.000
+- dealer: DealerB
+  aliases:
+    - maker_pn: CS-HG700
+      dealer_pn: CSHG7001134
