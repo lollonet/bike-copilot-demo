@@ -60,7 +60,9 @@ def index_req_ids(paths: list[Path]) -> dict[str, dict[str, list[str]]]:
         except Exception:
             continue
         for m in set(REQ_RE.findall(txt)):
-            d = idx.setdefault(m, {"files": set(), "tests": set(), "prs": [], "commits": []})
+            d = idx.setdefault(
+                m, {"files": set(), "tests": set(), "prs": [], "commits": []}
+            )
             (d["tests"] if is_test_path(p) else d["files"]).add(str(p))
     for k, v in idx.items():
         v["files"] = sorted(v["files"])  # type: ignore[assignment]
@@ -71,10 +73,17 @@ def index_req_ids(paths: list[Path]) -> dict[str, dict[str, list[str]]]:
 def main() -> None:
     files = iter_candidate_files(Path("."))
     mapping = index_req_ids(files)
-    out = {k: {"files": v["files"], "tests": v["tests"], "prs": [], "commits": []} for k, v in sorted(mapping.items())}  # type: ignore[index]
+    out = {
+        k: {"files": v["files"], "tests": v["tests"], "prs": [], "commits": []}
+        for k, v in sorted(mapping.items())
+    }  # type: ignore[index]
     MATRIX_PATH.parent.mkdir(parents=True, exist_ok=True)
-    MATRIX_PATH.write_text(yaml.safe_dump(out, sort_keys=True, allow_unicode=True), encoding="utf-8")
-    print(f"[traceability] updated traceability/matrix.yaml with {len(out)} REQ entries")
+    MATRIX_PATH.write_text(
+        yaml.safe_dump(out, sort_keys=True, allow_unicode=True), encoding="utf-8"
+    )
+    print(
+        f"[traceability] updated traceability/matrix.yaml with {len(out)} REQ entries"
+    )
 
 
 if __name__ == "__main__":
