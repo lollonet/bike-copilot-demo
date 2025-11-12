@@ -28,7 +28,7 @@ from .types import (
     DealersResponse,
 )
 from .logging_utils import log_event
-from .pn import search_pn
+from .pn import search_pn, search_pn_batch
 
 
 app = FastAPI(title="Bike Copilot Demo")
@@ -129,29 +129,17 @@ def api_search_pn(req: SearchPNRequest, request: Request) -> SearchPNResponse:
     response_model=SearchPNBatchResponse,
     responses={400: {"model": Problem}},
 )
-def api_search_pn_batch(
-    req: SearchPNBatchRequest, request: Request
-) -> SearchPNBatchResponse:
-    items = list(dict.fromkeys([str(x) for x in (req.items or [])]))
-    results: list[SearchPNResponse] = []
-    for maker_pn in items:
-        r = search_pn(
-            SearchPNRequest(
-                maker_pn=maker_pn,
-                dealers=req.dealers,
-                in_stock_only=req.in_stock_only,
-            )
-        )
-        results.append(r)
+def api_search_pn_batch(req: SearchPNBatchRequest, request: Request) -> SearchPNBatchResponse:
+    res = search_pn_batch(req)
     log_event(
         "INFO",
         op="search_pn_batch",
         kind="api",
         message="batch completed",
         trace_id=getattr(request.state, "trace_id", None),
-        extra={"requested": len(items), "results": len(results)},
+        extra={"requested": len(req.items or []), "results": len(res.results)},
     )
-    return SearchPNBatchResponse(results=results)
+    return res
 
 
 @app.get("/dealers", response_model=DealersResponse)
