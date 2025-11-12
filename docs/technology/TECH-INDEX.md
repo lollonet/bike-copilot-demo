@@ -5,6 +5,6 @@ status: approved
 source_of_truth: true
 related: []
 ---
-Runtime policy, SDKs, versioning, compatibility.
+Policy runtime, SDK, versioning, compatibilità.
 
-- TECH-010 — Runtime & Environment overview
+- TECH-010 — Runtime e Ambiente (panoramica)

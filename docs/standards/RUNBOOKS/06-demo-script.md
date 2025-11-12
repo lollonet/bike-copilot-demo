@@ -1,25 +1,24 @@
 ---
-title: Demo Script (60 seconds)
+title: Script Demo (60 secondi)
 ---
 
-Goal
-Show search → facet tweak → cart → multi‑item quote with PDF/HTML.
+Obiettivo
+Mostrare ricerca → affinamento facet → carrello → preventivo multi‑riga con PDF/HTML.
 
-Steps (operator)
-1) Start services
+Passi (operatore)
+1) Avvia servizi
    - Shell A: `make api`
    - Shell B: `make ui`
-2) UI: open http://localhost:7860
-3) Search: type `sella` → Click "Cerca"
-4) Facets: expand "Albero filtri" → pick one value (e.g., Velocità)
-5) Add to cart: select an offer → set Qtà → "Aggiungi al carrello" (repeat 2 items)
-6) Quote: fill Cliente/Contatto → "Crea preventivo" → open HTML/PDF path
+2) UI: apri http://localhost:7860
+3) Ricerca: digita `sella` → clicca "Cerca"
+4) Facet: espandi "Albero filtri" → scegli un valore (es. Velocità)
+5) Carrello: seleziona un’offerta → imposta Qtà → "Aggiungi al carrello" (ripeti 2 articoli)
+6) Preventivo: compila Cliente/Contatto → "Crea preventivo" → apri percorso HTML/PDF
 
-Extras
+Extra
 - API check: `curl -s :8000/search -H 'content-type: application/json' -d '{"query_text":"sella"}' | jq`
 - KPI: `curl -s :8000/kpi/today | jq`
 
-Reset/Refresh
-- `make crawl-montanini` or `make crawl-ciclodiffusione Q="sella casco catena"`
-- `uv run python -m app.cli reset-db` (destructive)
-
+Reset/Aggiornamento
+- `make crawl-montanini` o `make crawl-ciclodiffusione Q="sella casco catena"`
+- `uv run python -m app.cli reset-db` (distruttivo)

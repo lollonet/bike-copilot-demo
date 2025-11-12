@@ -1,38 +1,38 @@
 ---
-title: Docs System Overview
+title: Sistema Documentale — Panoramica
 ---
 
-Taxonomy
-- Requirements (REQ-###): functional or non-functional requirements with acceptance criteria. Index: `docs/requirements/REQ-INDEX.md`.
-- Architecture (ARC-###): architectural elements and contexts. Index: `docs/architecture/ARC-INDEX.md`.
-- Technology (TECH-###): runtime/policy and environment. Index: `docs/technology/TECH-INDEX.md`.
+Tassonomia
+- Requisiti (REQ-###): funzionali o non funzionali con criteri di accettazione. Indice: `docs/requirements/REQ-INDEX.md`.
+- Architettura (ARC-###): elementi e contesti architetturali. Indice: `docs/architecture/ARC-INDEX.md`.
+- Tecnologia (TECH-###): runtime/policy e ambiente. Indice: `docs/technology/TECH-INDEX.md`.
 - ADR (ADR-###): Architecture Decision Records.
-- Standards/Runbooks: procedural guides and style. Not part of the REQ/ARC/TECH/ADR taxonomy.
+- Standard/Runbook: guide procedurali e stile. Non fanno parte della tassonomia REQ/ARC/TECH/ADR.
 
 Front matter
-- Required fields: `id`, `domain`, `status`, `source_of_truth`, optional `related`. REQ docs also include `acceptance`.
+- Campi obbligatori: `id`, `domain`, `status`, `source_of_truth`, opzionale `related`. I REQ includono anche `acceptance`.
 
-Traceability
-- REQ IDs discovered across the repo feed `traceability/matrix.yaml` via `scripts/traceability.py`.
-- The script excludes generated directories and the matrix output itself to avoid self-references.
+Tracciabilità
+- Gli ID REQ nel repo alimentano `traceability/matrix.yaml` via `scripts/traceability.py`.
+- Lo script esclude directory generate e la matrice stessa per evitare auto‑riferimenti.
 
-Gates
-- `scripts/spec_lint.py` validates IDs, domains, and REQ acceptance.
-- Commit messages must include `REQ-###` (enforced by `.githooks/commit-msg`).
-- CI runs: complexity gate → spec lint → traceability → tests using uv (pytest optional).
-- Complexity gate (repo-wide):
-  - McCabe and function LOC via `uvx radon` (JSON output).
+Gate
+- `scripts/spec_lint.py` valida ID, domini e acceptance dei REQ.
+- I messaggi di commit devono includere `REQ-###` (hook `.githooks/commit-msg`).
+- La CI esegue: complexity gate → spec lint → traceability → test via uv (pytest opzionale).
+- Complexity gate (repo‑wide):
+  - McCabe e function LOC via `uvx radon` (output JSON).
   - Cognitive complexity via `uvx flake8 --with flake8-cognitive-complexity` (CCR).
-  - Thresholds read from `CONTROL.yaml`.
+  - Soglie lette da `CONTROL.yaml`.
 
-Coverage
-- Phase 1 observe-only; end‑state targets: line 85%, branch 85%.
+Copertura
+- Fase 1 osservazione; obiettivi finali: line 85%, branch 85%.
 
 Type checking
-- `scripts/status.sh` runs basedpyright on `src` and/or `scripts` when present.
+- `scripts/status.sh` esegue basedpyright su `app` e/o `scripts` quando presenti.
 
-How to add a new item
-1) Create the doc with valid front matter.
-2) Reference related IDs where applicable.
-3) Run `uv run python scripts/spec_lint.py`.
-4) Commit with `REQ-###` in the message; open a PR.
+Come aggiungere un documento
+1) Crea il doc con front matter valido.
+2) Referenzia gli ID correlati dove opportuno.
+3) Esegui `uv run python scripts/spec_lint.py`.
+4) Commit con `REQ-###` nel messaggio; apri una PR.
