@@ -38,12 +38,13 @@ def client(tmp_path: Path) -> TestClient:
     import importlib
     import app.config as app_config
     import app.models as app_models
-    import app.api as app_api
     import app.pn as app_pn
+    import app.api as app_api
     importlib.reload(app_config)
     importlib.reload(app_models)
-    importlib.reload(app_api)
+    # Reload PN first so API can import fresh search_pn bound to new SessionLocal
     importlib.reload(app_pn)
+    importlib.reload(app_api)
     _seed_db()
     from app.api import app
     return TestClient(app)
