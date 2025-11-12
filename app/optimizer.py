@@ -225,7 +225,12 @@ def _avg_lead(lines: List[OptimizeLine]) -> float:
 
 
 def _reduce_dealers_greedy(
-    lines: List[OptimizeLine], line_idx: List[int], per_pn: List[List[PNOfferItem]], qty_list: List[int], N: int
+    lines: List[OptimizeLine],
+    line_idx: List[int],
+    per_pn: List[List[PNOfferItem]],
+    qty_list: List[int],
+    N: int,
+    params: OptimizeParams,
 ) -> List[OptimizeLine]:
     # Greedy: while dealers > N, pick the dealer whose removal increases total least
     curr = list(lines)
@@ -235,12 +240,18 @@ def _reduce_dealers_greedy(
 
     while len(dealers_of(curr)) > max(1, N):
         dealers = dealers_of(curr)
-        worst_choice: Tuple[float, str, List[OptimizeLine], List[int]] | None = None
+        # Compute current total including shipping and penalties
+        curr_sub = sum(l.line_total for l in curr)
+        curr_ship = _shipping_costs(curr)
+        curr_lead = _avg_lead(curr)
+        curr_pen = params.penale_dealer * max(0, len(dealers) - 1) + params.penale_lead * curr_lead
+        curr_total = curr_sub + curr_ship + curr_pen
+
+        best_choice: Tuple[float, str, List[OptimizeLine], List[int]] | None = None
         for d in dealers:
             # Reassign lines currently served by d to next best offers from other dealers
             cand: List[OptimizeLine] = []
             cand_idx: List[int] = []
-            cost_increase = 0.0
             for pos, l in enumerate(curr):
                 if l.dealer != d:
                     cand.append(l)
@@ -265,14 +276,21 @@ def _reduce_dealers_greedy(
                 )
                 cand.append(new_line)
                 cand_idx.append(idx)
-                cost_increase += (new_line.line_total - l.line_total)
             if not cand:
                 continue
-            if worst_choice is None or cost_increase < worst_choice[0]:
-                worst_choice = (cost_increase, d, cand, cand_idx)
-        if worst_choice is None:
+            # Compute full candidate total including shipping and penalties
+            cand_dealers = dealers_of(cand)
+            cand_sub = sum(l.line_total for l in cand)
+            cand_ship = _shipping_costs(cand)
+            cand_lead = _avg_lead(cand)
+            cand_pen = params.penale_dealer * max(0, len(cand_dealers) - 1) + params.penale_lead * cand_lead
+            cand_total = cand_sub + cand_ship + cand_pen
+            delta = cand_total - curr_total
+            if best_choice is None or delta < best_choice[0]:
+                best_choice = (delta, d, cand, cand_idx)
+        if best_choice is None:
             break
-        curr = worst_choice[2]
+        curr = best_choice[2]
         # Apply the PN index list selected for the chosen candidate
-        curr_idx = worst_choice[3]
+        curr_idx = best_choice[3]
     return curr
