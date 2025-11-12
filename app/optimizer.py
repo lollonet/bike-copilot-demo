@@ -33,10 +33,19 @@ from .types import (
 )
 
 
-def _shipping_costs(dealers: List[str], subtotal: float) -> float:
-    """Compute shipping as sum of per-dealer cost with free-threshold policy."""
-    if not dealers:
+def _shipping_costs(lines: List[OptimizeLine]) -> float:
+    """Compute shipping as sum of per-dealer costs using each dealer's line subtotal.
+
+    Free-shipping thresholds are evaluated against the subtotal of the lines
+    assigned to that specific dealer, not the whole order subtotal.
+    """
+    if not lines:
         return 0.0
+    # Subtotal per dealer
+    per_dealer: Dict[str, float] = {}
+    for l in lines:
+        per_dealer[l.dealer] = per_dealer.get(l.dealer, 0.0) + float(l.line_total or 0.0)
+    dealers = list(per_dealer.keys())
     with SessionLocal() as db:
         rows = (
             db.query(DealerPolicy.dealer, DealerPolicy.base_cost, DealerPolicy.free_threshold)
@@ -48,9 +57,9 @@ def _shipping_costs(dealers: List[str], subtotal: float) -> float:
         for (name, cost, thr) in rows
     }
     total = 0.0
-    for d in dealers:
-        base, thr = policy.get(d, (6.9, 49.0))  # fallback defaults
-        if thr is not None and subtotal >= thr:
+    for d, dealer_subtotal in per_dealer.items():
+        base, thr = policy.get(d, (6.9, 49.0))  # fallback defaults when policy missing
+        if thr is not None and dealer_subtotal >= thr:
             continue
         total += float(base or 0.0)
     return total
@@ -162,7 +171,7 @@ def optimize(req: OptimizeRequest) -> OptimizeResponse:
             if not ok:
                 continue
             subtotal = sum(l.line_total for l in cand_lines)
-            ship = _shipping_costs([d], subtotal)
+            ship = _shipping_costs(cand_lines)
             lead_avg = _avg_lead(cand_lines)
             penalties = params.penale_lead * lead_avg
             tot = subtotal + ship + penalties
@@ -196,7 +205,7 @@ def optimize(req: OptimizeRequest) -> OptimizeResponse:
 
     dealers = sorted(list({l.dealer for l in lines}))
     subtotal = sum(l.line_total for l in lines)
-    ship = _shipping_costs(dealers, subtotal)
+    ship = _shipping_costs(lines)
     lead_avg = _avg_lead(lines)
     penalties = params.penale_dealer * max(0, len(dealers) - 1) + params.penale_lead * lead_avg
     total = subtotal + ship + penalties
@@ -258,4 +267,3 @@ def _reduce_dealers_greedy(
             break
         curr = worst_choice[2]
     return curr
-
