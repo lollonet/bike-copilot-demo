@@ -8,8 +8,10 @@ def _setup_db(tmp_name: str):
     import importlib
     import app.config as app_config
     import app.models as app_models
+    import app.pn as app_pn
     importlib.reload(app_config)
     importlib.reload(app_models)
+    importlib.reload(app_pn)
     from app.models import Product, SupplierOffer, PNMapping, SessionLocal, create_all
     create_all()
     return Product, SupplierOffer, PNMapping, SessionLocal
@@ -32,4 +34,3 @@ def test_pn_mapping_dealer_code_lookup():
     # Searching by dealer code should resolve to the product via mapping
     res = search_pn(SearchPNRequest(maker_pn="ICN-HG601-116"))
     assert res.offers and res.offers[0].dealer == "DealerA"
-
