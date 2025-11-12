@@ -2,7 +2,8 @@ name: PR Auto-Comment (@codex review)
 
 on:
   pull_request:
-    types: [opened, reopened, ready_for_review, synchronize]
+    # Do NOT auto-comment at PR creation; run only on subsequent pushes
+    types: [synchronize]
 
 permissions:
   contents: read

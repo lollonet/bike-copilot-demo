@@ -87,6 +87,9 @@ def parse_unified_csv(
         )
         in_stock = bool(defaults.get("in_stock", True))
         lead = defaults.get("lead_time_days")
+        # Optional dealer-specific code column
+        dealer_code_col = cols.get("dealer_code") or cols.get("sku")
+        dealer_code = (str(r.get(dealer_code_col)).strip() if dealer_code_col and r.get(dealer_code_col) is not None else None)
         offers.append(
             OfferInput(
                 brand=brand,
@@ -97,6 +100,7 @@ def parse_unified_csv(
                 lead_time_days=int(lead)
                 if isinstance(lead, (int, str)) and str(lead).isdigit()
                 else None,
+                extra={"dealer_pn": dealer_code} if dealer_code else {},
             )
         )
 

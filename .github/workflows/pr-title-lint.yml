@@ -1,0 +1,23 @@
+name: PR Title Lint
+
+on:
+  pull_request:
+    types: [opened, edited, reopened, synchronize]
+
+jobs:
+  title-check:
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: read
+      contents: read
+    steps:
+      - name: Validate PR title is single-line
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const title = context.payload.pull_request.title || "";
+            if (/\n|\\n/.test(title)) {
+              core.setFailed(`PR title contains newline characters: "${title.replace(/\n/g,'\\n')}"`);
+            } else {
+              core.info(`PR title OK: ${title}`);
+            }
