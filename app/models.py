@@ -129,6 +129,19 @@ def create_all() -> None:
     Base.metadata.create_all(engine)
 
 
+class DealerPolicy(Base):
+    __tablename__ = "dealer_policy"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    dealer: Mapped[str] = mapped_column(String(100), index=True, unique=True)
+    base_cost: Mapped[float | None] = mapped_column(Float, nullable=True)
+    free_threshold: Mapped[float | None] = mapped_column(Float, nullable=True)
+    lead_days_std: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    source: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
+
+
 class PNMapping(Base):
     __tablename__ = "pn_mapping"
 
