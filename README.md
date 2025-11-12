@@ -1,6 +1,6 @@
 Bike Copilot Demo — PN‑first (Italia)
 
-Goal: local demo to ingest parts lists from CSV (later PDF/web), normalize/dedup into SQLite, search with ranking, and generate quotes. This repo is structured to extend sources via provider adapters without reengineering the core.
+Obiettivo: demo locale per acquisire liste ricambi da CSV (in seguito PDF/web), normalizzare/deduplicare in SQLite, cercare con ranking e generare preventivi. Il repository è strutturato per estendere le fonti tramite adapter dei provider senza riscrivere il core.
 
 Mappa Documenti (in italiano)
 - Visione: `VISION.md` (radice)
@@ -10,16 +10,16 @@ Mappa Documenti (in italiano)
 - Requisiti: `docs/requirements/REQ-INDEX.md` (include REQ‑004..008)
 - Runbook: `docs/standards/RUNBOOKS/` (07..11 per PN‑first)
 
-Quick start
-- Use `uv` for running and gates. If `uv` isn’t installed, follow https://docs.astral.sh/uv/ to install.
+Avvio rapido
+- Usa `uv` per esecuzione e gate. Se `uv` non è installato, segui le istruzioni su https://docs.astral.sh/uv/.
 
-Makefile targets
+Target Makefile
 - `make status` – ruff fix/format + basedpyright typecheck.
-- `make test` – run pytest with correct env/cache.
-- `make seed` – seed demo CSVs (o usare CLI synth per 1000 articoli).
-- `make api` – run FastAPI on `:8000`.
-- `make ui` – run Gradio UI on `:7860`.
-- CLI help: `uv run python -m app.cli --help`.
+- `make test` – esegue pytest con env/cache corretti.
+- `make seed` – popola CSV demo (oppure CLI synth per 1000 articoli).
+- `make api` – avvia FastAPI su `:8000`.
+- `make ui` – avvia Gradio UI su `:7860`.
+- Aiuto CLI: `uv run python -m app.cli --help`.
 
 Demo rapida (2 minuti)
 - `uv pip install -r requirements.txt`
@@ -34,43 +34,43 @@ Demo rapida (2 minuti)
   - Facets: `curl -s :8000/facets -H 'content-type: application/json' -d '{"query_text":"borraccia"}' | jq`
   - Quote (multi‑item): `curl -s -u demo:demo123 :8000/quote -H 'content-type: application/json' -d '{"items":[{"offer_id":1,"qty":2},{"offer_id":2,"qty":1}],"customer_name":"Mario","customer_contact":"mario@example.com"}' | jq`
 
-Environment
-- Copy `.env.example` to `.env` e regola se serve.
+Ambiente
+- Copia `.env.example` in `.env` e regola se serve.
 - Variabili utili: `APP_DB_URL`, `APP_OUT_DIR`, `APP_VAT`, `APP_BASIC_USER`, `APP_BASIC_PASS`, `APP_API_BASE` (per UI → API).
 
 Health
-- `GET /health` → `{status:'ok', db:true, pdfkit:<bool>, version:'<x.y.z>'}`; responses include `X-Trace-Id` header.
+- `GET /health` → `{status:'ok', db:true, pdfkit:<bool>, version:'<x.y.z>'}`; le risposte includono l’header `X-Trace-Id`.
 
-CLI Autocomplete
-- Show script: `uv run python -m app.cli --show-completion`
-- Install: `uv run python -m app.cli --install-completion`
-- After install, TAB completes commands/params; `--offer-id` dynamically completes from DB.
+Autocomplete CLI
+- Mostra script: `uv run python -m app.cli --show-completion`
+- Installa: `uv run python -m app.cli --install-completion`
+- Dopo l’installazione, TAB completa comandi/parametri; `--offer-id` completa dinamicamente dal DB.
 
-CLI Examples
+Esempi CLI
 - Ingest CSV mappato: `uv run python -m app.cli ingest-csv-mapped --csv ./catalogo_real_mtb.csv --mapping providers/csv-catalogo-mtb.yaml`
 - Ingest sintetico (doppioni per fornitori): `uv run python -m app.cli ingest-csv-synth --csv ./catalogo_real_mtb.csv --mapping providers/csv-catalogo-mtb.yaml --suppliers 3 --coverage 0.65 --jitter 0.15`
-- Search: `uv run python -m app.cli search-cli --speed 11 --freehub HG`
-- Quote (con qty): `uv run python -m app.cli quote-cli --offer-id <TAB> --qty 2 --customer-name Mario --customer-contact mario@example.com`
+- Ricerca: `uv run python -m app.cli search-cli --speed 11 --freehub HG`
+- Preventivo (con quantità): `uv run python -m app.cli quote-cli --offer-id <TAB> --qty 2 --customer-name Mario --customer-contact mario@example.com`
 - UI: `uv run python -m app.cli ui`
 - API: `uv run python -m app.cli api`
 
-PDF Ingest
+Ingest PDF
 - Esempio: `uv run python -m app.ingest_pdf --pdf /path/to/catalog.pdf --mapping providers/example.yaml --provider ExamplePDF`
 - Il mapping YAML definisce colonne → campi canonici.
 
-Web Ingest (HTML mapping)
-- Example: `uv run python -m app.cli fetch-web --html providers/html/example.html --mapping providers/web-example.yaml`
-- Mapping YAML defines CSS selectors for `root`, `brand`, `mpn`, `name`, `price` (and optional `in_stock`, `lead_time_days`).
+Web Ingest (mapping HTML)
+- Esempio: `uv run python -m app.cli fetch-web --html providers/html/example.html --mapping providers/web-example.yaml`
+- Il mapping YAML definisce i selettori CSS per `root`, `brand`, `mpn`, `name`, `price` (ed eventualmente `in_stock`, `lead_time_days`).
 
-Web Ingest (remote pages)
-- Fetch one or more URLs and upsert:
+Web Ingest (pagine remote)
+- Recupera una o più URL e upsert:
   - `uv run python -m app.cli fetch-web-url --url https://shop.example/cassettes?page=1 --mapping providers/web-example.yaml --follow-next --max-pages 3`
-- Site search via URL template in mapping:
+- Ricerca sito via template URL nel mapping:
   - `uv run python -m app.cli search-web --query "catena 11v" --mapping providers/web-example.yaml`
-- Mapping YAML extra keys:
-  - `pagination.next`: CSS selector for the “next page” link
-  - `search.url_template`: e.g. `https://shop.example/search?q={q}`
-  - For auth/cookies: pass `--header "Cookie: a=b"` (permitted sites only)
+- Chiavi extra del mapping YAML:
+  - `pagination.next`: selettore CSS per il link “pagina successiva”
+  - `search.url_template`: es. `https://shop.example/search?q={q}`
+  - Per auth/cookie: passa `--header "Cookie: a=b"` (solo siti consentiti)
 
 WooCommerce example (Cicli Montanini)
 - Mapping provided: `providers/web-ciclimontanini.yaml`

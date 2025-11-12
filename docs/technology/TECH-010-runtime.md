@@ -5,27 +5,27 @@ status: approved
 source_of_truth: false
 related: [TECH-INDEX, ARC-010]
 ---
-Runtime & Environment
+Runtime e Ambiente
 
 Stack
 - API/UI/CLI: FastAPI, Gradio, Typer; Python via uv
-- Typing/lint/format: Pydantic v2, basedpyright, ruff
+- Typi/lint/format: Pydantic v2, basedpyright, ruff
 - DB: SQLite (WAL), SQLAlchemy 2.x
 - ETL: pandas, pdfplumber (PDF), BeautifulSoup/httpx (web)
-- Templating/PDF: Jinja2 + wkhtmltopdf/pdfkit (HTML fallback when missing)
+- Templating/PDF: Jinja2 + wkhtmltopdf/pdfkit (fallback HTML se assente)
 
-Boundaries & Contracts
-- All external edges use typed models (see app/types.py). No untyped dicts cross edges.
-- Ingest uses provider adapters emitting ProductInput/OfferInput; upsert is idempotent and tracks price history.
+Boundary e Contratti
+- Tutti i bordi esterni usano modelli tipizzati (vedi app/types.py). Nessun dict non tipizzato attraversa i bordi.
+- L’ingest usa adapter provider che emettono ProductInput/OfferInput; l’upsert è idempotente e traccia lo storico prezzi.
 
-Operations
-- Scripts: `make status`, `make test`, `make api`, `make ui`
-- CI: see ARC-001 and CI workflow for order/gates
-- Systemd: deploy/bike-copilot.service; env via `/etc/default/bike-copilot-demo`
+Operatività
+- Script: `make status`, `make test`, `make api`, `make ui`
+- CI: vedi ARC-001 e workflow CI per l’ordine dei gate
+- Systemd: deploy/bike-copilot.service; env tramite `/etc/default/bike-copilot-demo`
 
-Configuration (env)
+Configurazione (env)
 - APP_DB_URL, APP_OUT_DIR, APP_PREFER_IN_STOCK, APP_SYNONYMS,
   APP_BASIC_USER/APP_BASIC_PASS, APP_VAT
 
-Evidence
-- Keep `.venv` audit notes under TECH.md history or session summaries when needed.
+Evidenze
+- Conservare note di audit della `.venv` nella storia di TECH.md o nei session summary quando necessario.
