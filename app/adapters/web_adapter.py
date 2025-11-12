@@ -26,12 +26,13 @@ class WebMapping(TypedDict):
     price: str
     in_stock: NotRequired[str]
     lead_time_days: NotRequired[str]
+    dealer_code: NotRequired[str]
     pagination: NotRequired[PaginationMapping]
     search: NotRequired[SearchMapping]
     item_link: NotRequired[str]
     detail: NotRequired[
         dict[str, str]
-    ]  # may include keys: name, price, brand, mpn, in_stock, lead_time_days, category
+    ]  # may include keys: name, price, brand, mpn, in_stock, lead_time_days, category, dealer_code
 
 
 def _load_mapping(path: Path) -> WebMapping:
@@ -125,6 +126,10 @@ def parse_html(
                 freehub=None,
             )
         )
+        # Optional dealer-specific code (SKU) on listing
+        dealer_code = None
+        if "dealer_code" in mapping:
+            dealer_code = _text(r.select_one(mapping["dealer_code"])) or None
         offers.append(
             OfferInput(
                 brand=brand,
@@ -133,6 +138,7 @@ def parse_html(
                 price=_to_price(price_s),
                 in_stock=in_stock,
                 lead_time_days=lead,
+                extra={"dealer_pn": dealer_code} if dealer_code else {},
             )
         )
     return products, offers
@@ -239,6 +245,8 @@ def parse_detail_html(
         rotor=None,
         freehub=None,
     )
+    # Optional dealer-specific code in detail mapping
+    dealer_code = pick("dealer_code").strip()
     o = OfferInput(
         brand=brand,
         mpn=mpn,
@@ -246,6 +254,7 @@ def parse_detail_html(
         price=_to_price(price_s),
         in_stock=in_stock,
         lead_time_days=lead,
+        extra={"dealer_pn": dealer_code} if dealer_code else {},
     )
     return p, o
 

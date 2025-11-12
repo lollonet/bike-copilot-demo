@@ -6,7 +6,8 @@ from pathlib import Path
 
 from sqlalchemy import select
 
-from .models import PriceHistory, Product, SupplierOffer, SessionLocal, create_all
+from .models import PriceHistory, Product, SupplierOffer, SessionLocal, create_all, PNMapping
+from .pn import normalize_pn
 from .types import OfferInput, ProductInput
 from .adapters.csv_adapter import parse_offers_csv, parse_products_csv
 from .staging import stage_file
@@ -122,6 +123,33 @@ def upsert(core: list[ProductInput], offers: list[OfferInput]) -> IngestStats:
                 offers_upserted=stats.offers_upserted + 1,
                 offers_skipped=stats.offers_skipped,
             )
+            # PN alias mapping: if the offer carries a dealer-specific code, upsert mapping
+            dealer_code = None
+            try:
+                dealer_code = (o.extra or {}).get("dealer_pn")  # type: ignore[union-attr]
+            except Exception:
+                dealer_code = None
+            if dealer_code:
+                maker_norm = normalize_pn(product.mpn)
+                dealer_norm = normalize_pn(str(dealer_code))
+                row = (
+                    db.query(PNMapping)
+                    .filter(PNMapping.dealer == o.supplier, PNMapping.dealer_pn_norm == dealer_norm)
+                    .first()
+                )
+                if row:
+                    row.product_id = int(product.id)
+                    row.maker_pn_norm = maker_norm
+                else:
+                    db.add(
+                        PNMapping(
+                            product_id=int(product.id),
+                            dealer=o.supplier,
+                            maker_pn_norm=maker_norm,
+                            dealer_pn_norm=dealer_norm,
+                            confidence=1.0,
+                        )
+                    )
         db.commit()
     return stats
 
