@@ -34,9 +34,16 @@ def _seed_db():
 @pytest.fixture()
 def client(tmp_path: Path) -> TestClient:
     _prepare_env("test_api_batch.db", str(tmp_path / "out"))
-    from app.api import app  # import after env is set
-
+    # Reload modules to bind settings/SessionLocal to the fresh DB URL
+    import importlib
+    import app.config as app_config
+    import app.models as app_models
+    import app.api as app_api
+    importlib.reload(app_config)
+    importlib.reload(app_models)
+    importlib.reload(app_api)
     _seed_db()
+    from app.api import app
     return TestClient(app)
 
 
