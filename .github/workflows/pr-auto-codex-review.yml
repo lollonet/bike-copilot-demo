@@ -44,30 +44,22 @@ jobs:
             const dirRe = new RegExp(`^(${dirs.map(esc).join('|')})/`, 'i');
             const extRe = new RegExp(`\\.(${exts.map(esc).join('|')})$`, 'i');
             const skipDirRe = new RegExp(`^(${skipDirs.map(esc).join('|')})/`, 'i');
-            // List files in PR
+            // List files in PR (full PR scope)
             const files = await github.paginate(github.rest.pulls.listFiles, {owner, repo, pull_number: pr.number, per_page: 100});
             const considered = files.filter(f => ['added','modified','renamed'].includes(f.status));
-            core.info('PR files:');
+            core.info('PR files considered:');
             considered.forEach(f => core.info(` - ${f.filename} [${f.status}]`));
             const codeChanged = considered.some(f => dirRe.test(f.filename) && extRe.test(f.filename));
             core.info(`codeChanged=${codeChanged}`);
-            // For 'synchronize', skip if last commit touches only docs/.github
-            let onlyDocsLastCommit = false;
-            if (context.eventName === 'pull_request' && context.payload.action === 'synchronize') {
-              const headSha = pr.head.sha;
-              const commit = await github.rest.repos.getCommit({owner, repo, ref: headSha});
-              const commitFiles = (commit.data.files || []).map(f => f.filename);
-              core.info('Last commit files:');
-              commitFiles.forEach(f => core.info(` * ${f}`));
-              onlyDocsLastCommit = commitFiles.length > 0 && commitFiles.every(f => skipDirRe.test(f));
-              core.info(`onlyDocsLastCommit=${onlyDocsLastCommit}`);
-            }
+            // PR-level docs-only check: skip only if ALL files are in SKIP_DIRS
+            const prDocsOnly = considered.length > 0 && considered.every(f => skipDirRe.test(f.filename));
+            core.info(`prDocsOnly=${prDocsOnly}`);
             // Collect existing comments (issue + review)
             const issueComments = await github.paginate(github.rest.issues.listComments, {owner, repo, issue_number: pr.number, per_page: 100});
             const reviewComments = await github.paginate(github.rest.pulls.listReviewComments, {owner, repo, pull_number: pr.number, per_page: 100});
             const hasTrigger = [...issueComments, ...reviewComments].some(c => (c.body||'').includes('@codex review'));
             core.info(`hasTrigger=${hasTrigger}`);
-            const should = codeChanged && !hasTrigger && !onlyDocsLastCommit;
+            const should = codeChanged && !hasTrigger && !prDocsOnly;
             core.info(`should_comment=${should}`);
             core.setOutput('should_comment', should ? 'true' : 'false');
       - name: Post trigger comment
