@@ -1,0 +1,46 @@
+name: PR Sanitize Text
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize]
+
+permissions:
+  pull-requests: write
+  contents: read
+
+concurrency:
+  group: pr-sanitize-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+
+jobs:
+  sanitize:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Normalize PR title/body newlines
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const pr = context.payload.pull_request;
+            if (!pr) return;
+            const origBody = pr.body || "";
+            const origTitle = pr.title || "";
+            // Replace literal sequences "\n" and "\r\n" with actual newlines in body
+            let fixedBody = origBody
+              .replace(/\\r\\n/g, "\n")
+              .replace(/\\n/g, "\n");
+            // Titles must be single‑line: remove literal "\n" and collapse whitespace
+            let fixedTitle = origTitle.replace(/\\n/g, " ").replace(/\s+/g, " ").trim();
+            if (fixedBody !== origBody || fixedTitle !== origTitle) {
+              await github.rest.pulls.update({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: pr.number,
+                title: fixedTitle,
+                body: fixedBody,
+              });
+              core.info(`Sanitized PR text: updated ${fixedTitle !== origTitle ? 'title ' : ''}${fixedBody !== origBody ? 'body' : ''}`);
+            } else {
+              core.info("PR text already clean");
+            }
+
