@@ -118,7 +118,7 @@ def flake8_cognitive_both(
     res = run(cmd)
     text = (res.stdout or "") + ("\n" + res.stderr if res.stderr else "")
     # Keep only plugin violation lines (contain CCR)
-    lines = [l for l in text.splitlines() if "CCR" in l]
+    lines = [line for line in text.splitlines() if "CCR" in line]
     if res.returncode not in (0, 1) or (res.returncode != 0 and not lines):
         details = text.strip() or "(no output)"
         print("[complexity] flake8 cognitive-complexity failed:\n" + details)

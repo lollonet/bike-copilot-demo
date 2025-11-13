@@ -7,10 +7,14 @@ REQ_RE = re.compile(r"REQ-[0-9]{3,}")
 diff = subprocess.run(
     ["git", "diff", "--cached", "-U0"], capture_output=True, text=True
 ).stdout
-added = [l for l in diff.splitlines() if l.startswith("+") and not l.startswith("+++")]
-in_src = [l for l in added if re.search(r"^diff --git a/src/", diff, re.M)]
+added = [
+    line
+    for line in diff.splitlines()
+    if line.startswith("+") and not line.startswith("+++")
+]
+in_src = [line for line in added if re.search(r"^diff --git a/src/", diff, re.M)]
 violations = 0
-if in_src and not any(REQ_RE.search(l) for l in added):
+if in_src and not any(REQ_RE.search(line) for line in added):
     print(
         "[trace-check] ERROR: aggiunte in src/ senza tag REQ-### nelle linee inserite."
     )

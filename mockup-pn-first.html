@@ -1,0 +1,1056 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bike Copilot — PN-first Mockup</title>
+    <style>
+        /* Modern CSS Reset */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        /* Design System Variables */
+        :root {
+            /* Colors */
+            --primary-blue: #2563eb;
+            --primary-blue-hover: #1d4ed8;
+            --primary-blue-light: #dbeafe;
+            --success-green: #10b981;
+            --success-green-light: #d1fae5;
+            --warning-amber: #f59e0b;
+            --danger-red: #ef4444;
+            --gray-50: #f9fafb;
+            --gray-100: #f3f4f6;
+            --gray-200: #e5e7eb;
+            --gray-300: #d1d5db;
+            --gray-400: #9ca3af;
+            --gray-500: #6b7280;
+            --gray-600: #4b5563;
+            --gray-700: #374151;
+            --gray-800: #1f2937;
+            --gray-900: #111827;
+
+            /* Spacing */
+            --space-xs: 0.25rem;
+            --space-sm: 0.5rem;
+            --space-md: 1rem;
+            --space-lg: 1.5rem;
+            --space-xl: 2rem;
+            --space-2xl: 3rem;
+
+            /* Typography */
+            --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            --font-mono: "SF Mono", Monaco, "Cascadia Code", "Roboto Mono", Consolas, "Courier New", monospace;
+
+            /* Borders */
+            --radius-sm: 0.375rem;
+            --radius-md: 0.5rem;
+            --radius-lg: 0.75rem;
+
+            /* Shadows */
+            --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+            --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+            --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+        }
+
+        body {
+            font-family: var(--font-sans);
+            background-color: var(--gray-50);
+            color: var(--gray-900);
+            line-height: 1.6;
+        }
+
+        /* Header */
+        .header {
+            background: white;
+            border-bottom: 1px solid var(--gray-200);
+            padding: var(--space-lg) var(--space-xl);
+            box-shadow: var(--shadow-sm);
+        }
+
+        .header h1 {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--gray-900);
+            margin-bottom: var(--space-xs);
+        }
+
+        .header p {
+            color: var(--gray-600);
+            font-size: 0.875rem;
+        }
+
+        /* Main Container */
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: var(--space-xl);
+        }
+
+        /* Search Section */
+        .search-section {
+            background: white;
+            padding: var(--space-xl);
+            border-radius: var(--radius-lg);
+            box-shadow: var(--shadow-md);
+            margin-bottom: var(--space-xl);
+        }
+
+        .search-section h2 {
+            font-size: 1.125rem;
+            font-weight: 600;
+            margin-bottom: var(--space-md);
+            color: var(--gray-900);
+        }
+
+        .search-bar {
+            display: flex;
+            gap: var(--space-md);
+            margin-bottom: var(--space-lg);
+            flex-wrap: wrap;
+        }
+
+        .input-group {
+            flex: 1;
+            min-width: 300px;
+        }
+
+        .input-group label {
+            display: block;
+            font-size: 0.875rem;
+            font-weight: 500;
+            color: var(--gray-700);
+            margin-bottom: var(--space-xs);
+        }
+
+        .input-group input {
+            width: 100%;
+            padding: 0.625rem var(--space-md);
+            border: 1px solid var(--gray-300);
+            border-radius: var(--radius-md);
+            font-size: 0.9375rem;
+            transition: all 0.2s;
+            font-family: var(--font-mono);
+        }
+
+        .input-group input:focus {
+            outline: none;
+            border-color: var(--primary-blue);
+            box-shadow: 0 0 0 3px var(--primary-blue-light);
+        }
+
+        .btn {
+            padding: 0.625rem var(--space-lg);
+            border: none;
+            border-radius: var(--radius-md);
+            font-weight: 500;
+            font-size: 0.9375rem;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: inline-flex;
+            align-items: center;
+            gap: var(--space-sm);
+            white-space: nowrap;
+        }
+
+        .btn-primary {
+            background-color: var(--primary-blue);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background-color: var(--primary-blue-hover);
+            transform: translateY(-1px);
+            box-shadow: var(--shadow-md);
+        }
+
+        .btn-secondary {
+            background-color: white;
+            color: var(--gray-700);
+            border: 1px solid var(--gray-300);
+        }
+
+        .btn-secondary:hover {
+            background-color: var(--gray-50);
+            border-color: var(--gray-400);
+        }
+
+        /* Filters */
+        .filters {
+            display: flex;
+            gap: var(--space-lg);
+            align-items: center;
+            flex-wrap: wrap;
+            padding: var(--space-md);
+            background-color: var(--gray-50);
+            border-radius: var(--radius-md);
+        }
+
+        .filter-label {
+            font-size: 0.875rem;
+            font-weight: 500;
+            color: var(--gray-700);
+        }
+
+        .checkbox-group {
+            display: flex;
+            gap: var(--space-md);
+            flex-wrap: wrap;
+        }
+
+        .checkbox-item {
+            display: flex;
+            align-items: center;
+            gap: var(--space-xs);
+        }
+
+        .checkbox-item input[type="checkbox"] {
+            width: 1rem;
+            height: 1rem;
+            cursor: pointer;
+            accent-color: var(--primary-blue);
+        }
+
+        .checkbox-item label {
+            font-size: 0.875rem;
+            color: var(--gray-700);
+            cursor: pointer;
+        }
+
+        .budget-input {
+            display: flex;
+            align-items: center;
+            gap: var(--space-sm);
+        }
+
+        .budget-input input {
+            width: 100px;
+            padding: 0.375rem var(--space-sm);
+            border: 1px solid var(--gray-300);
+            border-radius: var(--radius-sm);
+            font-size: 0.875rem;
+        }
+
+        /* Main Grid Layout */
+        .main-grid {
+            display: grid;
+            grid-template-columns: 2fr 1fr;
+            gap: var(--space-xl);
+            align-items: start;
+        }
+
+        @media (max-width: 1024px) {
+            .main-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        /* Results Section */
+        .results-section {
+            display: flex;
+            flex-direction: column;
+            gap: var(--space-lg);
+        }
+
+        .pn-card {
+            background: white;
+            border-radius: var(--radius-lg);
+            box-shadow: var(--shadow-md);
+            overflow: hidden;
+        }
+
+        .pn-card-header {
+            padding: var(--space-lg);
+            background: var(--gray-50);
+            border-bottom: 1px solid var(--gray-200);
+        }
+
+        .pn-title {
+            font-size: 1.125rem;
+            font-weight: 600;
+            color: var(--gray-900);
+            font-family: var(--font-mono);
+        }
+
+        .pn-subtitle {
+            font-size: 0.875rem;
+            color: var(--gray-600);
+            margin-top: var(--space-xs);
+        }
+
+        .offers-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .offers-table thead {
+            background-color: var(--gray-100);
+        }
+
+        .offers-table th {
+            padding: var(--space-md);
+            text-align: left;
+            font-size: 0.75rem;
+            font-weight: 600;
+            color: var(--gray-700);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .offers-table td {
+            padding: var(--space-md);
+            border-bottom: 1px solid var(--gray-200);
+            font-size: 0.9375rem;
+        }
+
+        .offers-table tbody tr:hover {
+            background-color: var(--gray-50);
+        }
+
+        .dealer-name {
+            font-weight: 500;
+            color: var(--gray-900);
+        }
+
+        .price {
+            font-weight: 600;
+            color: var(--gray-900);
+            font-family: var(--font-mono);
+        }
+
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            padding: 0.25rem 0.5rem;
+            border-radius: 9999px;
+            font-size: 0.75rem;
+            font-weight: 500;
+        }
+
+        .badge-success {
+            background-color: var(--success-green-light);
+            color: #065f46;
+        }
+
+        .badge-danger {
+            background-color: #fee2e2;
+            color: #991b1b;
+        }
+
+        .badge-warning {
+            background-color: #fef3c7;
+            color: #92400e;
+        }
+
+        .badge-best-price {
+            background-color: var(--primary-blue-light);
+            color: var(--primary-blue);
+        }
+
+        .lead-time {
+            color: var(--gray-600);
+            font-size: 0.875rem;
+        }
+
+        .action-cell {
+            text-align: right;
+        }
+
+        .btn-sm {
+            padding: 0.375rem var(--space-md);
+            font-size: 0.8125rem;
+        }
+
+        /* Cart Section */
+        .cart-section {
+            position: sticky;
+            top: var(--space-xl);
+        }
+
+        .cart-card {
+            background: white;
+            border-radius: var(--radius-lg);
+            box-shadow: var(--shadow-md);
+            overflow: hidden;
+        }
+
+        .cart-header {
+            padding: var(--space-lg);
+            background: var(--gray-900);
+            color: white;
+        }
+
+        .cart-header h2 {
+            font-size: 1.125rem;
+            font-weight: 600;
+        }
+
+        .cart-items {
+            max-height: 400px;
+            overflow-y: auto;
+        }
+
+        .cart-item {
+            padding: var(--space-md);
+            border-bottom: 1px solid var(--gray-200);
+        }
+
+        .cart-item:hover {
+            background-color: var(--gray-50);
+        }
+
+        .cart-item-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: start;
+            margin-bottom: var(--space-sm);
+        }
+
+        .cart-item-pn {
+            font-weight: 600;
+            font-family: var(--font-mono);
+            font-size: 0.9375rem;
+            color: var(--gray-900);
+        }
+
+        .cart-item-dealer {
+            font-size: 0.8125rem;
+            color: var(--gray-600);
+            margin-bottom: var(--space-xs);
+        }
+
+        .cart-item-footer {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .qty-control {
+            display: flex;
+            align-items: center;
+            gap: var(--space-sm);
+        }
+
+        .qty-btn {
+            width: 1.75rem;
+            height: 1.75rem;
+            border: 1px solid var(--gray-300);
+            background: white;
+            border-radius: var(--radius-sm);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 600;
+            color: var(--gray-700);
+            transition: all 0.2s;
+        }
+
+        .qty-btn:hover {
+            background-color: var(--gray-100);
+            border-color: var(--gray-400);
+        }
+
+        .qty-value {
+            min-width: 2rem;
+            text-align: center;
+            font-weight: 500;
+        }
+
+        .cart-item-price {
+            font-weight: 600;
+            color: var(--gray-900);
+            font-family: var(--font-mono);
+        }
+
+        .cart-empty {
+            padding: var(--space-2xl);
+            text-align: center;
+            color: var(--gray-500);
+        }
+
+        .cart-totals {
+            padding: var(--space-lg);
+            background-color: var(--gray-50);
+            border-top: 2px solid var(--gray-300);
+        }
+
+        .total-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: var(--space-sm);
+            font-size: 0.9375rem;
+        }
+
+        .total-row.grand-total {
+            margin-top: var(--space-md);
+            padding-top: var(--space-md);
+            border-top: 1px solid var(--gray-300);
+            font-size: 1.125rem;
+            font-weight: 700;
+            color: var(--gray-900);
+        }
+
+        /* Optimizer Section */
+        .optimizer-section {
+            padding: var(--space-lg);
+            background: white;
+            border-radius: var(--radius-lg);
+            box-shadow: var(--shadow-md);
+            margin-top: var(--space-lg);
+        }
+
+        .optimizer-section h3 {
+            font-size: 1rem;
+            font-weight: 600;
+            margin-bottom: var(--space-md);
+            color: var(--gray-900);
+        }
+
+        .optimizer-options {
+            display: flex;
+            flex-direction: column;
+            gap: var(--space-sm);
+            margin-bottom: var(--space-md);
+        }
+
+        .radio-item {
+            display: flex;
+            align-items: center;
+            gap: var(--space-sm);
+            padding: var(--space-sm);
+            border-radius: var(--radius-md);
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+
+        .radio-item:hover {
+            background-color: var(--gray-50);
+        }
+
+        .radio-item input[type="radio"] {
+            width: 1rem;
+            height: 1rem;
+            cursor: pointer;
+            accent-color: var(--primary-blue);
+        }
+
+        .radio-item label {
+            font-size: 0.875rem;
+            color: var(--gray-700);
+            cursor: pointer;
+            flex: 1;
+        }
+
+        .max-dealers-input {
+            display: flex;
+            align-items: center;
+            gap: var(--space-sm);
+            margin-left: 1.5rem;
+        }
+
+        .max-dealers-input input {
+            width: 60px;
+            padding: 0.25rem var(--space-sm);
+            border: 1px solid var(--gray-300);
+            border-radius: var(--radius-sm);
+            font-size: 0.875rem;
+        }
+
+        /* Quote Section */
+        .quote-section {
+            padding: var(--space-lg);
+        }
+
+        .quote-section h3 {
+            font-size: 1rem;
+            font-weight: 600;
+            margin-bottom: var(--space-md);
+            color: var(--gray-900);
+        }
+
+        .form-group {
+            margin-bottom: var(--space-md);
+        }
+
+        .form-group label {
+            display: block;
+            font-size: 0.875rem;
+            font-weight: 500;
+            color: var(--gray-700);
+            margin-bottom: var(--space-xs);
+        }
+
+        .form-group input,
+        .form-group textarea {
+            width: 100%;
+            padding: 0.5rem var(--space-md);
+            border: 1px solid var(--gray-300);
+            border-radius: var(--radius-md);
+            font-size: 0.875rem;
+            font-family: var(--font-sans);
+        }
+
+        .form-group input:focus,
+        .form-group textarea:focus {
+            outline: none;
+            border-color: var(--primary-blue);
+            box-shadow: 0 0 0 3px var(--primary-blue-light);
+        }
+
+        .form-group textarea {
+            resize: vertical;
+            min-height: 80px;
+        }
+
+        .btn-full {
+            width: 100%;
+            justify-content: center;
+        }
+
+        /* Icon placeholders (using Unicode symbols) */
+        .icon-add::before {
+            content: "➕";
+            margin-right: var(--space-xs);
+        }
+
+        .icon-paste::before {
+            content: "📋";
+            margin-right: var(--space-xs);
+        }
+
+        .icon-cart::before {
+            content: "🛒";
+            margin-right: var(--space-xs);
+        }
+
+        .icon-check::before {
+            content: "✓";
+        }
+
+        .icon-times::before {
+            content: "✗";
+        }
+
+        /* Empty state */
+        .empty-state {
+            text-align: center;
+            padding: var(--space-2xl);
+            color: var(--gray-500);
+        }
+
+        .empty-state-icon {
+            font-size: 3rem;
+            margin-bottom: var(--space-md);
+            opacity: 0.5;
+        }
+
+        /* Responsive adjustments */
+        @media (max-width: 768px) {
+            .container {
+                padding: var(--space-md);
+            }
+
+            .search-bar {
+                flex-direction: column;
+            }
+
+            .input-group {
+                min-width: 100%;
+            }
+
+            .filters {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+
+            .main-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .cart-section {
+                position: relative;
+                top: 0;
+            }
+        }
+
+        /* Scrollbar styling */
+        .cart-items::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        .cart-items::-webkit-scrollbar-track {
+            background: var(--gray-100);
+        }
+
+        .cart-items::-webkit-scrollbar-thumb {
+            background: var(--gray-400);
+            border-radius: 4px;
+        }
+
+        .cart-items::-webkit-scrollbar-thumb:hover {
+            background: var(--gray-500);
+        }
+    </style>
+</head>
+<body>
+    <!-- Header -->
+    <header class="header">
+        <h1>Bike Copilot — Ricerca PN</h1>
+        <p>Cerca ricambi per codice produttore, confronta offerte da più dealer e genera preventivi professionali</p>
+    </header>
+
+    <!-- Main Container -->
+    <div class="container">
+        <!-- Search Section -->
+        <section class="search-section">
+            <h2>Ricerca per Codice Produttore (PN)</h2>
+            <div class="search-bar">
+                <div class="input-group">
+                    <label for="pn-input">Part Number (PN)</label>
+                    <input
+                        type="text"
+                        id="pn-input"
+                        placeholder="Es. CN-HG601, RD-M8100, CS-M7100"
+                        value="CN-HG601"
+                    >
+                </div>
+                <button class="btn btn-primary icon-add">Aggiungi</button>
+                <button class="btn btn-secondary icon-paste">Incolla Lista</button>
+            </div>
+
+            <!-- Filters -->
+            <div class="filters">
+                <span class="filter-label">Dealer:</span>
+                <div class="checkbox-group">
+                    <div class="checkbox-item">
+                        <input type="checkbox" id="dealer-all" checked>
+                        <label for="dealer-all">Tutti</label>
+                    </div>
+                    <div class="checkbox-item">
+                        <input type="checkbox" id="dealer-a" checked>
+                        <label for="dealer-a">Cicli Montanini</label>
+                    </div>
+                    <div class="checkbox-item">
+                        <input type="checkbox" id="dealer-b" checked>
+                        <label for="dealer-b">Ciclodiffusione</label>
+                    </div>
+                    <div class="checkbox-item">
+                        <input type="checkbox" id="dealer-c" checked>
+                        <label for="dealer-c">BikeDiscount</label>
+                    </div>
+                </div>
+                <div class="checkbox-item">
+                    <input type="checkbox" id="stock-only">
+                    <label for="stock-only">Solo in stock</label>
+                </div>
+                <div class="budget-input">
+                    <label for="budget-max" class="filter-label">Budget max:</label>
+                    <input type="number" id="budget-max" placeholder="€ 0" min="0">
+                </div>
+            </div>
+        </section>
+
+        <!-- Main Grid -->
+        <div class="main-grid">
+            <!-- Results Section -->
+            <div class="results-section">
+                <!-- PN Card Example 1 -->
+                <div class="pn-card">
+                    <div class="pn-card-header">
+                        <div class="pn-title">CN-HG601</div>
+                        <div class="pn-subtitle">Shimano — Catena 11 velocità HG-X11</div>
+                    </div>
+                    <table class="offers-table">
+                        <thead>
+                            <tr>
+                                <th>Dealer</th>
+                                <th>Prezzo</th>
+                                <th>Stock</th>
+                                <th>Lead</th>
+                                <th>Note</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td class="dealer-name">Ciclodiffusione</td>
+                                <td class="price">€ 23,50</td>
+                                <td><span class="badge badge-success icon-check">In stock</span></td>
+                                <td class="lead-time">1-2 gg</td>
+                                <td><span class="badge badge-best-price">Miglior prezzo</span></td>
+                                <td class="action-cell">
+                                    <button class="btn btn-primary btn-sm icon-cart">Aggiungi</button>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td class="dealer-name">Cicli Montanini</td>
+                                <td class="price">€ 24,90</td>
+                                <td><span class="badge badge-success icon-check">In stock</span></td>
+                                <td class="lead-time">1 gg</td>
+                                <td><span class="badge badge-warning">24h</span></td>
+                                <td class="action-cell">
+                                    <button class="btn btn-primary btn-sm icon-cart">Aggiungi</button>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td class="dealer-name">BikeDiscount</td>
+                                <td class="price">€ 26,00</td>
+                                <td><span class="badge badge-danger icon-times">Non disp.</span></td>
+                                <td class="lead-time">7-10 gg</td>
+                                <td></td>
+                                <td class="action-cell">
+                                    <button class="btn btn-secondary btn-sm icon-cart">Aggiungi</button>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- PN Card Example 2 -->
+                <div class="pn-card">
+                    <div class="pn-card-header">
+                        <div class="pn-title">RD-M8100</div>
+                        <div class="pn-subtitle">Shimano Deore XT — Cambio posteriore 12v SGS</div>
+                    </div>
+                    <table class="offers-table">
+                        <thead>
+                            <tr>
+                                <th>Dealer</th>
+                                <th>Prezzo</th>
+                                <th>Stock</th>
+                                <th>Lead</th>
+                                <th>Note</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td class="dealer-name">Cicli Montanini</td>
+                                <td class="price">€ 89,90</td>
+                                <td><span class="badge badge-success icon-check">In stock</span></td>
+                                <td class="lead-time">1 gg</td>
+                                <td><span class="badge badge-best-price">Miglior prezzo</span></td>
+                                <td class="action-cell">
+                                    <button class="btn btn-primary btn-sm icon-cart">Aggiungi</button>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td class="dealer-name">BikeDiscount</td>
+                                <td class="price">€ 92,50</td>
+                                <td><span class="badge badge-success icon-check">In stock</span></td>
+                                <td class="lead-time">3-5 gg</td>
+                                <td></td>
+                                <td class="action-cell">
+                                    <button class="btn btn-primary btn-sm icon-cart">Aggiungi</button>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- PN Card Example 3 -->
+                <div class="pn-card">
+                    <div class="pn-card-header">
+                        <div class="pn-title">CS-M7100</div>
+                        <div class="pn-subtitle">Shimano SLX — Cassetta 12v 10-51T</div>
+                    </div>
+                    <table class="offers-table">
+                        <thead>
+                            <tr>
+                                <th>Dealer</th>
+                                <th>Prezzo</th>
+                                <th>Stock</th>
+                                <th>Lead</th>
+                                <th>Note</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td class="dealer-name">Ciclodiffusione</td>
+                                <td class="price">€ 74,50</td>
+                                <td><span class="badge badge-success icon-check">In stock</span></td>
+                                <td class="lead-time">1-2 gg</td>
+                                <td><span class="badge badge-best-price">Miglior prezzo</span></td>
+                                <td class="action-cell">
+                                    <button class="btn btn-primary btn-sm icon-cart">Aggiungi</button>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td class="dealer-name">Cicli Montanini</td>
+                                <td class="price">€ 76,90</td>
+                                <td><span class="badge badge-success icon-check">In stock</span></td>
+                                <td class="lead-time">1 gg</td>
+                                <td></td>
+                                <td class="action-cell">
+                                    <button class="btn btn-primary btn-sm icon-cart">Aggiungi</button>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td class="dealer-name">BikeDiscount</td>
+                                <td class="price">€ 79,00</td>
+                                <td><span class="badge badge-danger icon-times">Non disp.</span></td>
+                                <td class="lead-time">14-21 gg</td>
+                                <td></td>
+                                <td class="action-cell">
+                                    <button class="btn btn-secondary btn-sm icon-cart">Aggiungi</button>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Cart & Optimizer Section -->
+            <div class="cart-section">
+                <div class="cart-card">
+                    <div class="cart-header">
+                        <h2>Carrello / Preventivo</h2>
+                    </div>
+                    <div class="cart-items">
+                        <!-- Cart Item 1 -->
+                        <div class="cart-item">
+                            <div class="cart-item-header">
+                                <div>
+                                    <div class="cart-item-pn">CN-HG601</div>
+                                    <div class="cart-item-dealer">Ciclodiffusione</div>
+                                </div>
+                                <button class="qty-btn" title="Rimuovi">×</button>
+                            </div>
+                            <div class="cart-item-footer">
+                                <div class="qty-control">
+                                    <button class="qty-btn">−</button>
+                                    <span class="qty-value">2</span>
+                                    <button class="qty-btn">+</button>
+                                </div>
+                                <div class="cart-item-price">€ 47,00</div>
+                            </div>
+                        </div>
+
+                        <!-- Cart Item 2 -->
+                        <div class="cart-item">
+                            <div class="cart-item-header">
+                                <div>
+                                    <div class="cart-item-pn">RD-M8100</div>
+                                    <div class="cart-item-dealer">Cicli Montanini</div>
+                                </div>
+                                <button class="qty-btn" title="Rimuovi">×</button>
+                            </div>
+                            <div class="cart-item-footer">
+                                <div class="qty-control">
+                                    <button class="qty-btn">−</button>
+                                    <span class="qty-value">1</span>
+                                    <button class="qty-btn">+</button>
+                                </div>
+                                <div class="cart-item-price">€ 89,90</div>
+                            </div>
+                        </div>
+
+                        <!-- Cart Item 3 -->
+                        <div class="cart-item">
+                            <div class="cart-item-header">
+                                <div>
+                                    <div class="cart-item-pn">CS-M7100</div>
+                                    <div class="cart-item-dealer">Ciclodiffusione</div>
+                                </div>
+                                <button class="qty-btn" title="Rimuovi">×</button>
+                            </div>
+                            <div class="cart-item-footer">
+                                <div class="qty-control">
+                                    <button class="qty-btn">−</button>
+                                    <span class="qty-value">1</span>
+                                    <button class="qty-btn">+</button>
+                                </div>
+                                <div class="cart-item-price">€ 74,50</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Cart Totals -->
+                    <div class="cart-totals">
+                        <div class="total-row">
+                            <span>Subtotale</span>
+                            <span>€ 211,40</span>
+                        </div>
+                        <div class="total-row">
+                            <span>IVA (22%)</span>
+                            <span>€ 46,51</span>
+                        </div>
+                        <div class="total-row">
+                            <span>Spedizione (stima)</span>
+                            <span>€ 8,50</span>
+                        </div>
+                        <div class="total-row grand-total">
+                            <span>Totale</span>
+                            <span>€ 266,41</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Optimizer Section -->
+                <div class="optimizer-section">
+                    <h3>Ottimizzatore Ordine</h3>
+                    <div class="optimizer-options">
+                        <div class="radio-item">
+                            <input type="radio" id="opt-best-price" name="optimizer" checked>
+                            <label for="opt-best-price">Miglior prezzo (multi-dealer)</label>
+                        </div>
+                        <div class="radio-item">
+                            <input type="radio" id="opt-single-dealer" name="optimizer">
+                            <label for="opt-single-dealer">Un solo dealer</label>
+                        </div>
+                        <div class="radio-item">
+                            <input type="radio" id="opt-max-dealers" name="optimizer">
+                            <label for="opt-max-dealers">Al massimo N dealer</label>
+                        </div>
+                        <div class="max-dealers-input">
+                            <label for="max-dealers-count" style="font-size: 0.75rem; color: var(--gray-600);">Numero massimo:</label>
+                            <input type="number" id="max-dealers-count" value="2" min="1" max="10" aria-label="Numero massimo di dealer">
+                            <span style="font-size: 0.75rem; color: var(--gray-600);">dealer</span>
+                        </div>
+                        <div class="radio-item">
+                            <input type="radio" id="opt-fastest" name="optimizer">
+                            <label for="opt-fastest">Più veloce (lead min)</label>
+                        </div>
+                    </div>
+                    <button class="btn btn-primary btn-full">Ricalcola</button>
+                </div>
+
+                <!-- Quote Section -->
+                <div class="quote-section">
+                    <h3>Genera Preventivo</h3>
+                    <div class="form-group">
+                        <label for="customer-name">Cliente</label>
+                        <input type="text" id="customer-name" placeholder="Nome cognome o ragione sociale">
+                    </div>
+                    <div class="form-group">
+                        <label for="customer-contact">Contatto</label>
+                        <input type="text" id="customer-contact" placeholder="Email o telefono">
+                    </div>
+                    <div class="form-group">
+                        <label for="validity">Validità (giorni)</label>
+                        <input type="number" id="validity" value="7" min="1">
+                    </div>
+                    <div class="form-group">
+                        <label for="notes">Note (opzionale)</label>
+                        <textarea id="notes" placeholder="Note aggiuntive per il preventivo"></textarea>
+                    </div>
+                    <button class="btn btn-primary btn-full">Crea Preventivo (PDF/HTML)</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Basic interactivity for demonstration
+        console.log('Bike Copilot PN-first Mockup loaded');
+
+        // This mockup demonstrates the visual design and layout
+        // Actual functionality would be implemented in the Python/Gradio backend
+    </script>
+</body>
+</html>
