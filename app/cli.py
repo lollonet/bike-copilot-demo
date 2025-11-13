@@ -83,6 +83,18 @@ def dump_md(
     category: str | None = typer.Option(None, help="Filter by category"),
 ) -> None:
     """Dump joined product+offer rows as a Markdown table for inspection."""
+    rows = _query_export_rows(limit, supplier, brand, category)
+    items = _build_export_rows(rows)
+    table = _render_export_table(items)
+    print(table)
+
+
+def _query_export_rows(
+    limit: int | None,
+    supplier: str | None,
+    brand: str | None,
+    category: str | None,
+) -> list[tuple[SupplierOffer, str, float, bool, int | None, str, str, str, str | None]]:
     from sqlalchemy import asc
 
     with SessionLocal() as db:
@@ -109,7 +121,12 @@ def dump_md(
         if isinstance(limit, int) and limit > 0:
             q = q.limit(limit)
         rows = q.all()
+    return rows
 
+
+def _build_export_rows(
+    rows: list[tuple[SupplierOffer, str, float, bool, int | None, str, str, str, str | None]]
+) -> list[ExportRow]:
     items: list[ExportRow] = []
     for _offer, sup, price, in_stock, lead, br, mpn, name, cat in rows:
         items.append(
@@ -124,8 +141,10 @@ def dump_md(
                 lead_time_days=int(lead) if lead is not None else None,
             )
         )
+    return items
 
-    # Build Markdown table
+
+def _render_export_table(items: list[ExportRow]) -> str:
     header = "| brand | mpn | name | category | supplier | price | in_stock | lead_time_days |"
     sep = "|---|---|---|---|---|---:|---:|---:|"
     lines: list[str] = [header, sep]
@@ -146,8 +165,7 @@ def dump_md(
             )
             + " |"
         )
-
-    print("\n".join(lines))
+    return "\n".join(lines)
 
 
 @app.command("pn-alias-import")
@@ -166,65 +184,79 @@ def pn_alias_import(
           confidence: 0.98
     """
     import yaml
-    from .pn import normalize_pn
 
     data = yaml.safe_load(yaml_file.read_text(encoding="utf-8")) or []
     if not isinstance(data, list):
         raise typer.BadParameter("YAML root must be a list of dealer blocks")
     create_all()
-    inserted = 0
-    updated = 0
     with SessionLocal() as db:
-        # Build normalized MPN → product map once to avoid O(N*M) scans
-        rows = db.query(Product.id, Product.mpn).filter(Product.mpn.isnot(None)).all()
-        norm_to_product: dict[str, int] = {}
-        for pid, mpn in rows:
-            try:
-                key = normalize_pn(str(mpn))
-            except Exception:
-                continue
-            if key:
-                norm_to_product[key] = int(pid)
-
-        for block in data:
-            dealer = str(block.get("dealer") or "").strip() or None
-            for a in block.get("aliases", []) or []:
-                maker = normalize_pn(str(a.get("maker_pn") or ""))
-                dealer_pn = str(a.get("dealer_pn") or "").strip()
-                dealer_norm = normalize_pn(dealer_pn) if dealer_pn else None
-                if not maker:
-                    continue
-                target_id = norm_to_product.get(maker)
-                if not target_id:
-                    # Product not present yet; skip and allow re-import later
-                    continue
-                # Upsert on (dealer, dealer_pn_norm): update product_id/confidence if exists
-                q = db.query(PNMapping).filter(
-                    PNMapping.dealer == dealer,
-                    PNMapping.dealer_pn_norm == dealer_norm,
-                )
-                row = q.first()
-                conf = float(a.get("confidence") or 1.0)
-                if row:
-                    row.product_id = int(target_id)
-                    row.maker_pn_norm = maker
-                    row.confidence = conf
-                    updated += 1
-                else:
-                    db.add(
-                        PNMapping(
-                            product_id=int(target_id),
-                            dealer=dealer,
-                            maker_pn_norm=maker,
-                            dealer_pn_norm=dealer_norm,
-                            confidence=conf,
-                        )
-                    )
-                    inserted += 1
-        db.commit()
+        norm_to_product = _build_norm_mpn_index(db)
+        inserted, updated = _apply_pn_alias_blocks(db, data, norm_to_product)
     rich.print(
         f"[green]Alias PN importati da {yaml_file} — inseriti: {inserted}, aggiornati: {updated}[/green]"
     )
+
+
+def _build_norm_mpn_index(db: SessionLocal) -> dict[str, int]:
+    from .pn import normalize_pn
+
+    rows = db.query(Product.id, Product.mpn).filter(Product.mpn.isnot(None)).all()
+    norm_to_product: dict[str, int] = {}
+    for pid, mpn in rows:
+        try:
+            key = normalize_pn(str(mpn))
+        except Exception:
+            continue
+        if key:
+            norm_to_product[key] = int(pid)
+    return norm_to_product
+
+
+def _apply_pn_alias_blocks(
+    db: SessionLocal,
+    data: list[dict[str, object]],
+    norm_to_product: dict[str, int],
+) -> tuple[int, int]:
+    from .pn import normalize_pn
+
+    inserted = 0
+    updated = 0
+    for block in data:
+        dealer = str(block.get("dealer") or "").strip() or None  # type: ignore[union-attr]
+        aliases = block.get("aliases", []) or []  # type: ignore[assignment]
+        for a in aliases:  # type: ignore[assignment]
+            maker = normalize_pn(str(a.get("maker_pn") or ""))  # type: ignore[call-arg]
+            dealer_pn = str(a.get("dealer_pn") or "").strip()  # type: ignore[call-arg]
+            dealer_norm = normalize_pn(dealer_pn) if dealer_pn else None
+            if not maker:
+                continue
+            target_id = norm_to_product.get(maker)
+            if not target_id:
+                continue
+            q = db.query(PNMapping).filter(
+                PNMapping.dealer == dealer,
+                PNMapping.dealer_pn_norm == dealer_norm,
+            )
+            row = q.first()
+            conf = float(a.get("confidence") or 1.0)  # type: ignore[call-arg]
+            if row:
+                row.product_id = int(target_id)
+                row.maker_pn_norm = maker
+                row.confidence = conf
+                updated += 1
+            else:
+                db.add(
+                    PNMapping(
+                        product_id=int(target_id),
+                        dealer=dealer,
+                        maker_pn_norm=maker,
+                        dealer_pn_norm=dealer_norm,
+                        confidence=conf,
+                    )
+                )
+                inserted += 1
+    db.commit()
+    return inserted, updated
 
 
 @app.command("fetch-policy")
