@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# REQ-001: Complexity gate (repo-wide)
+# Implements the CI acceptance "CI runs complexity gate" by enforcing
+# McCabe, Cognitive Complexity (CCR) and function LOC thresholds.
 from __future__ import annotations
 
 import argparse
