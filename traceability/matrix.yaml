@@ -4,6 +4,7 @@ REQ-001:
   - docs/architecture/ARC-001-ci-cd.md
   - docs/requirements/REQ-001.standards-adoption.md
   - docs/requirements/REQ-INDEX.md
+  - scripts/complexity_gate.py
   prs: []
   tests: []
 REQ-002:
