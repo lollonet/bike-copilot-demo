@@ -6,6 +6,7 @@ import json
 import subprocess
 import sys
 from dataclasses import dataclass
+import os
 from pathlib import Path
 from typing import Any, Iterable
 
@@ -62,7 +63,19 @@ def existing_paths(paths: Iterable[str]) -> list[str]:
 
 
 def run(cmd: list[str]) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(cmd, text=True, capture_output=True, check=False)
+    """Run a command with uv tool caches confined to the workspace.
+
+    This avoids permission issues on CI/sandboxes and ensures deterministic paths.
+    """
+    env = os.environ.copy()
+    root = Path.cwd()
+    env.setdefault("UV_CACHE_DIR", str(root / ".uv-cache"))
+    env.setdefault("UV_TOOL_DIR", str(root / ".uv-tools"))
+    env.setdefault("UV_PYTHON_INSTALL_DIR", str(root / ".uv-cache" / "python"))
+    env.setdefault("XDG_CACHE_HOME", str(root / ".uv-cache"))
+    return subprocess.run(
+        cmd, text=True, capture_output=True, check=False, env=env
+    )
 
 
 def radon_cc(paths: list[str]) -> dict[str, list[dict[str, Any]]]:
@@ -89,44 +102,83 @@ def radon_cc(paths: list[str]) -> dict[str, list[dict[str, Any]]]:
         sys.exit(2)
 
 
-def flake8_cognitive(paths: list[str], max_cog: int) -> tuple[bool, list[str]]:
-    """Run flake8 with cognitive complexity plugin.
-
-    Returns (has_violations, violation_lines).
-    """
+def _flake8_cmd(paths: list[str], warn_cog: int) -> list[str]:
+    """Build flake8 command for cognitive-complexity WARN threshold."""
     exclude = ",".join(EXCLUDE_DIRS)
-    cmd = [
+    return [
         "uvx",
         "--from",
         "flake8",
         "--with",
         "flake8-cognitive-complexity",
         "flake8",
-        f"--max-cognitive-complexity={max_cog}",
+        f"--max-cognitive-complexity={warn_cog}",
         "--select",
         "CCR",
         "--exclude",
         exclude,
         *paths,
     ]
-    res = run(cmd)
+
+def _only_cog_lines(text: str) -> list[str]:
+    """Extract only plugin violation lines containing the CCR code."""
+    return [l for l in text.splitlines() if "CCR" in l]
+
+
+def _split_warn_fail(lines: list[str], fail_cog: int) -> tuple[list[str], list[str]]:
+    """Split lines into (warn, fail) by parsing "(X > Y)" numbers."""
+    import re
+    warn_lines: list[str] = []
+    fail_lines: list[str] = []
+    pat = re.compile(r"\((\d+)\s*>\s*(\d+)\)")
+    for l in lines:
+        m = pat.search(l)
+        if not m:
+            warn_lines.append(l)
+            continue
+        lvl = int(m.group(1))
+        if lvl > fail_cog:
+            fail_lines.append(l)
+        else:
+            warn_lines.append(l)
+    return warn_lines, fail_lines
+
+
+def flake8_cognitive_both(
+    paths: list[str], warn_cog: int, fail_cog: int
+) -> tuple[list[str], list[str]]:
+    """Run flake8 once and return (warn_lines, fail_lines)."""
+    res = run(_flake8_cmd(paths, warn_cog))
     text = (res.stdout or "") + ("\n" + res.stderr if res.stderr else "")
-    # Keep only plugin violation lines (contain CCR)
-    lines = [line for line in text.splitlines() if "CCR" in line]
+    lines = _only_cog_lines(text)
     if res.returncode not in (0, 1) or (res.returncode != 0 and not lines):
         details = text.strip() or "(no output)"
         print("[complexity] flake8 cognitive-complexity failed:\n" + details)
         sys.exit(2)
-    return (len(lines) > 0), lines
+    return _split_warn_fail(lines, fail_cog)
+
+
+def _add_mccabe_loc(
+    ident: str, complexity: int, loc: int, th: Thresholds,
+    m_warn: list[str], m_fail: list[str], l_warn: list[str], l_fail: list[str]
+) -> None:
+    if complexity > th.mccabe_fail:
+        m_fail.append(f"{ident} McCabe={complexity} > {th.mccabe_fail}")
+    elif complexity >= th.mccabe_warn:
+        m_warn.append(f"{ident} McCabe={complexity} ≥ {th.mccabe_warn}")
+    if loc > th.loc_fail:
+        l_fail.append(f"{ident} LOC≈{loc} > {th.loc_fail}")
+    elif loc >= th.loc_warn:
+        l_warn.append(f"{ident} LOC≈{loc} ≥ {th.loc_warn}")
 
 
 def _summarize_cc(
     cc: dict[str, list[dict[str, Any]]], th: Thresholds
 ) -> tuple[list[str], list[str], list[str], list[str]]:
-    mccabe_warn: list[str] = []
-    mccabe_fail: list[str] = []
-    loc_warn: list[str] = []
-    loc_fail: list[str] = []
+    m_warn: list[str] = []
+    m_fail: list[str] = []
+    l_warn: list[str] = []
+    l_fail: list[str] = []
     for file, blocks in cc.items():
         for b in blocks:
             complexity = int(b.get("complexity", 0))
@@ -134,15 +186,8 @@ def _summarize_cc(
             endline = int(b.get("endline", lineno))
             loc = max(0, endline - lineno + 1)
             ident = f"{file}:{lineno} {b.get('type', 'func')} {b.get('name', '?')}"
-            if complexity > th.mccabe_fail:
-                mccabe_fail.append(f"{ident} McCabe={complexity} > {th.mccabe_fail}")
-            elif complexity >= th.mccabe_warn:
-                mccabe_warn.append(f"{ident} McCabe={complexity} ≥ {th.mccabe_warn}")
-            if loc > th.loc_fail:
-                loc_fail.append(f"{ident} LOC≈{loc} > {th.loc_fail}")
-            elif loc >= th.loc_warn:
-                loc_warn.append(f"{ident} LOC≈{loc} ≥ {th.loc_warn}")
-    return mccabe_warn, mccabe_fail, loc_warn, loc_fail
+            _add_mccabe_loc(ident, complexity, loc, th, m_warn, m_fail, l_warn, l_fail)
+    return m_warn, m_fail, l_warn, l_fail
 
 
 def _format_sections(
@@ -150,8 +195,8 @@ def _format_sections(
     m_fail: list[str],
     l_warn: list[str],
     l_fail: list[str],
-    cog_fail: bool,
-    cog_lines: list[str],
+    cog_warn_lines: list[str],
+    cog_fail_lines: list[str],
 ) -> list[str]:
     out: list[str] = []
 
@@ -162,8 +207,9 @@ def _format_sections(
 
     add("[McCabe WARN]", m_warn)
     add("[LOC WARN]", l_warn)
-    if cog_fail and cog_lines:
-        add("[Cognitive FAIL] violations:", cog_lines)
+    add("[Cognitive WARN]", cog_warn_lines)
+    if cog_fail_lines:
+        add("[Cognitive FAIL] violations:", cog_fail_lines)
     add("[McCabe FAIL]", m_fail)
     add("[LOC FAIL]", l_fail)
     return out
@@ -172,9 +218,13 @@ def _format_sections(
 def evaluate(th: Thresholds, targets: list[str]) -> tuple[bool, list[str]]:
     cc = radon_cc(targets)
     m_warn, m_fail, l_warn, l_fail = _summarize_cc(cc, th)
-    cog_fail, cog_lines = flake8_cognitive(targets, th.cog_fail)
-    out = _format_sections(m_warn, m_fail, l_warn, l_fail, cog_fail, cog_lines)
-    return bool(m_fail or l_fail or cog_fail), out
+    cog_warn_lines, cog_fail_lines = flake8_cognitive_both(
+        targets, th.cog_warn, th.cog_fail
+    )
+    out = _format_sections(
+        m_warn, m_fail, l_warn, l_fail, cog_warn_lines, cog_fail_lines
+    )
+    return bool(m_fail or l_fail or cog_fail_lines), out
 
 
 def main() -> None:
