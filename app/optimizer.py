@@ -21,6 +21,7 @@ from typing import Dict, List, Tuple
 from .models import DealerPolicy, SessionLocal
 from .pn import search_pn_batch
 from .types import (
+    OptimizeItem,
     OptimizeRequest,
     OptimizeResponse,
     OptimizeLine,
@@ -97,141 +98,175 @@ def _pick_fastest(offers: List[PNOfferItem]) -> PNOfferItem | None:
 
 
 def optimize(req: OptimizeRequest) -> OptimizeResponse:
+    """Optimize an order given PN items and heuristic params.
+
+    Public semantics are preserved: the same scenarios and cost model apply.
+    """
     items = req.items
     params: OptimizeParams = req.params
-    # Resolve offers per PN via batch search (preserve multiplicity)
     batch = search_pn_batch(SearchPNBatchRequest(items=[it.maker_pn for it in items]))
-    # Build candidate lists
     per_pn: List[List[PNOfferItem]] = [res.offers for res in batch.results]
     qty_list: List[int] = [max(1, int(it.qty)) for it in items]
 
-    lines: List[OptimizeLine] = []
-    notes: List[str] = []
+    lines, notes = _lines_for_scenario(items, per_pn, qty_list, params)
+    dealers, costs = _compute_costs(lines, params)
+    return OptimizeResponse(lines=lines, dealers=dealers, costs=costs, notes=notes)
 
+
+def _lines_for_scenario(
+    items: List[OptimizeItem],
+    per_pn: List[List[PNOfferItem]],
+    qty_list: List[int],
+    params: OptimizeParams,
+) -> Tuple[List[OptimizeLine], List[str]]:
     scenario = (params.scenario or "miglior-prezzo").lower()
-
     if scenario == "miglior-prezzo":
-        for offers, q, pn in zip(per_pn, qty_list, [it.maker_pn for it in items]):
-            o = _pick_cheapest(offers)
-            if not o:
-                continue
-            unit = float(o.price or 0.0)
-            lines.append(
-                OptimizeLine(
-                    maker_pn=pn,
-                    dealer=o.dealer,
-                    unit_price=o.price,
-                    qty=q,
-                    line_total=unit * q,
-                    lead_time_days=o.lead_time_days,
-                )
-            )
-    elif scenario == "piu-veloce":
-        for offers, q, pn in zip(per_pn, qty_list, [it.maker_pn for it in items]):
-            o = _pick_fastest(offers)
-            if not o:
-                continue
-            unit = float(o.price or 0.0)
-            lines.append(
-                OptimizeLine(
-                    maker_pn=pn,
-                    dealer=o.dealer,
-                    unit_price=o.price,
-                    qty=q,
-                    line_total=unit * q,
-                    lead_time_days=o.lead_time_days,
-                )
-            )
-    elif scenario == "un-solo-dealer":
-        # Find dealers that can serve all PNs
-        # Gather set of dealers per PN
-        per_pn_dealers: List[set[str]] = [
-            set(o.dealer for o in offers) for offers in per_pn
-        ]
-        common = set.intersection(*per_pn_dealers) if per_pn_dealers else set()
-        if not common:
-            notes.append(
-                "Nessun dealer singolo copre tutti i PN; fallback miglior-prezzo"
-            )
-            params = OptimizeParams(
-                scenario="miglior-prezzo",
-                penale_dealer=params.penale_dealer,
-                penale_lead=params.penale_lead,
-            )
-            return optimize(OptimizeRequest(items=req.items, params=params))
-        # For each candidate dealer, compute cost choosing its offers
-        best: Tuple[float, str, List[OptimizeLine]] | None = None
-        for d in common:
-            cand_lines: List[OptimizeLine] = []
-            ok = True
-            for offers, q, pn in zip(per_pn, qty_list, [it.maker_pn for it in items]):
-                # choose offer for dealer d
-                cand = [o for o in offers if o.dealer == d]
-                sel = _pick_cheapest(cand)
-                if not sel:
-                    ok = False
-                    break
-                unit = float(sel.price or 0.0)
-                cand_lines.append(
-                    OptimizeLine(
-                        maker_pn=pn,
-                        dealer=sel.dealer,
-                        unit_price=sel.price,
-                        qty=q,
-                        line_total=unit * q,
-                        lead_time_days=sel.lead_time_days,
-                    )
-                )
-            if not ok:
-                continue
-            subtotal = sum(l.line_total for l in cand_lines)
-            ship = _shipping_costs(cand_lines)
-            lead_avg = _avg_lead(cand_lines)
-            penalties = params.penale_lead * lead_avg
-            tot = subtotal + ship + penalties
-            if best is None or tot < best[0]:
-                best = (tot, d, cand_lines)
-        if best:
-            _, _, lines = best
-    elif scenario == "max-n-dealer":
-        N = int(params.max_dealer or 1)
-        # Start from best price per PN
-        base_lines: List[OptimizeLine] = []
-        base_idx: List[int] = []
-        for idx, (offers, q, pn) in enumerate(
-            zip(per_pn, qty_list, [it.maker_pn for it in items])
-        ):
-            o = _pick_cheapest(offers)
-            if not o:
-                continue
-            unit = float(o.price or 0.0)
-            base_lines.append(
-                OptimizeLine(
-                    maker_pn=pn,
-                    dealer=o.dealer,
-                    unit_price=o.price,
-                    qty=q,
-                    line_total=unit * q,
-                    lead_time_days=o.lead_time_days,
-                )
-            )
-            base_idx.append(idx)
-        lines = _reduce_dealers_greedy(
-            base_lines, base_idx, per_pn, qty_list, N, params
-        )
-    else:
-        # default fallback
-        return optimize(
-            OptimizeRequest(
-                items=req.items,
-                params=OptimizeParams(
-                    scenario="miglior-prezzo",
-                    penale_dealer=params.penale_dealer,
-                    penale_lead=params.penale_lead,
-                ),
-            )
-        )
+        return _scenario_miglior_prezzo(items, per_pn, qty_list)
+    if scenario == "piu-veloce":
+        return _scenario_piu_veloce(items, per_pn, qty_list)
+    if scenario == "un-solo-dealer":
+        return _scenario_un_solo_dealer(items, per_pn, qty_list, params)
+    if scenario == "max-n-dealer":
+        return _scenario_max_n_dealer(items, per_pn, qty_list, params)
+    # Fallback: behave like 'miglior-prezzo'
+    return _scenario_miglior_prezzo(items, per_pn, qty_list)
 
+
+def _scenario_miglior_prezzo(
+    items: List[OptimizeItem],
+    per_pn: List[List[PNOfferItem]],
+    qty_list: List[int],
+) -> Tuple[List[OptimizeLine], List[str]]:
+    lines: List[OptimizeLine] = []
+    for offers, q, pn in zip(per_pn, qty_list, [it.maker_pn for it in items]):
+        o = _pick_cheapest(offers)
+        if not o:
+            continue
+        unit = float(o.price or 0.0)
+        lines.append(
+            OptimizeLine(
+                maker_pn=pn,
+                dealer=o.dealer,
+                unit_price=o.price,
+                qty=q,
+                line_total=unit * q,
+                lead_time_days=o.lead_time_days,
+            )
+        )
+    return lines, []
+
+
+def _scenario_piu_veloce(
+    items: List[OptimizeItem],
+    per_pn: List[List[PNOfferItem]],
+    qty_list: List[int],
+) -> Tuple[List[OptimizeLine], List[str]]:
+    lines: List[OptimizeLine] = []
+    for offers, q, pn in zip(per_pn, qty_list, [it.maker_pn for it in items]):
+        o = _pick_fastest(offers)
+        if not o:
+            continue
+        unit = float(o.price or 0.0)
+        lines.append(
+            OptimizeLine(
+                maker_pn=pn,
+                dealer=o.dealer,
+                unit_price=o.price,
+                qty=q,
+                line_total=unit * q,
+                lead_time_days=o.lead_time_days,
+            )
+        )
+    return lines, []
+
+
+def _scenario_un_solo_dealer(
+    items: List[OptimizeItem],
+    per_pn: List[List[PNOfferItem]],
+    qty_list: List[int],
+    params: OptimizeParams,
+) -> Tuple[List[OptimizeLine], List[str]]:
+    notes: List[str] = []
+    per_pn_dealers: List[set[str]] = [set(o.dealer for o in offers) for offers in per_pn]
+    common = set.intersection(*per_pn_dealers) if per_pn_dealers else set()
+    if not common:
+        notes.append("Nessun dealer singolo copre tutti i PN; fallback miglior-prezzo")
+        lines, _ = _scenario_miglior_prezzo(items, per_pn, qty_list)
+        return lines, notes
+    best: Tuple[float, str, List[OptimizeLine]] | None = None
+    for d in common:
+        cand_lines: List[OptimizeLine] = []
+        ok = True
+        for offers, q, pn in zip(per_pn, qty_list, [it.maker_pn for it in items]):
+            cand = [o for o in offers if o.dealer == d]
+            sel = _pick_cheapest(cand)
+            if not sel:
+                ok = False
+                break
+            unit = float(sel.price or 0.0)
+            cand_lines.append(
+                OptimizeLine(
+                    maker_pn=pn,
+                    dealer=sel.dealer,
+                    unit_price=sel.price,
+                    qty=q,
+                    line_total=unit * q,
+                    lead_time_days=sel.lead_time_days,
+                )
+            )
+        if not ok:
+            continue
+        subtotal = sum(l.line_total for l in cand_lines)
+        ship = _shipping_costs(cand_lines)
+        lead_avg = _avg_lead(cand_lines)
+        penalties = params.penale_lead * lead_avg
+        tot = subtotal + ship + penalties
+        if best is None or tot < best[0]:
+            best = (tot, d, cand_lines)
+    if best:
+        _, _, lines = best
+        return lines, notes
+    # If no consistent candidate, fall back to miglior-prezzo
+    lines, _ = _scenario_miglior_prezzo(items, per_pn, qty_list)
+    return lines, notes
+
+
+def _scenario_max_n_dealer(
+    items: List[OptimizeItem],
+    per_pn: List[List[PNOfferItem]],
+    qty_list: List[int],
+    params: OptimizeParams,
+) -> Tuple[List[OptimizeLine], List[str]]:
+    N = int(params.max_dealer or 1)
+    base_lines: List[OptimizeLine] = []
+    base_idx: List[int] = []
+    for idx, (offers, q, pn) in enumerate(
+        zip(per_pn, qty_list, [it.maker_pn for it in items])
+    ):
+        o = _pick_cheapest(offers)
+        if not o:
+            continue
+        unit = float(o.price or 0.0)
+        base_lines.append(
+            OptimizeLine(
+                maker_pn=pn,
+                dealer=o.dealer,
+                unit_price=o.price,
+                qty=q,
+                line_total=unit * q,
+                lead_time_days=o.lead_time_days,
+            )
+        )
+        base_idx.append(idx)
+    if not base_lines:
+        return [], []
+    lines = _reduce_dealers_greedy(base_lines, base_idx, per_pn, qty_list, N, params)
+    return lines, []
+
+
+def _compute_costs(
+    lines: List[OptimizeLine], params: OptimizeParams
+) -> Tuple[List[str], OptimizeCost]:
     dealers = sorted(list({l.dealer for l in lines}))
     subtotal = sum(l.line_total for l in lines)
     ship = _shipping_costs(lines)
@@ -240,13 +275,8 @@ def optimize(req: OptimizeRequest) -> OptimizeResponse:
         params.penale_dealer * max(0, len(dealers) - 1) + params.penale_lead * lead_avg
     )
     total = subtotal + ship + penalties
-    return OptimizeResponse(
-        lines=lines,
-        dealers=dealers,
-        costs=OptimizeCost(
-            subtotal=subtotal, shipping=ship, penalties=penalties, total=total
-        ),
-        notes=notes,
+    return dealers, OptimizeCost(
+        subtotal=subtotal, shipping=ship, penalties=penalties, total=total
     )
 
 
