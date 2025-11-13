@@ -119,18 +119,6 @@ def _flake8_cmd(paths: list[str], warn_cog: int) -> list[str]:
         exclude,
         *paths,
     ]
-<<<<<<< HEAD
-    res = run(cmd)
-    text = (res.stdout or "") + ("\n" + res.stderr if res.stderr else "")
-    # Keep only plugin violation lines (contain CCR)
-    lines = [l for l in text.splitlines() if "CCR" in l]
-    if res.returncode not in (0, 1) or (res.returncode != 0 and not lines):
-        details = text.strip() or "(no output)"
-        print("[complexity] flake8 cognitive-complexity failed:\n" + details)
-        sys.exit(2)
-    # Parse "(X > Y)" and split
-=======
-
 
 def _only_cog_lines(text: str) -> list[str]:
     """Extract only plugin violation lines containing the CCR code."""
@@ -139,9 +127,7 @@ def _only_cog_lines(text: str) -> list[str]:
 
 def _split_warn_fail(lines: list[str], fail_cog: int) -> tuple[list[str], list[str]]:
     """Split lines into (warn, fail) by parsing "(X > Y)" numbers."""
->>>>>>> 50b13b1 (REQ-001: complexity gate — usa cache uv locale e riduci divergenze CI; confermato PASS su 'src scripts')
     import re
-
     warn_lines: list[str] = []
     fail_lines: list[str] = []
     pat = re.compile(r"\((\d+)\s*>\s*(\d+)\)")
@@ -172,25 +158,27 @@ def flake8_cognitive_both(
     return _split_warn_fail(lines, fail_cog)
 
 
+def _add_mccabe_loc(
+    ident: str, complexity: int, loc: int, th: Thresholds,
+    m_warn: list[str], m_fail: list[str], l_warn: list[str], l_fail: list[str]
+) -> None:
+    if complexity > th.mccabe_fail:
+        m_fail.append(f"{ident} McCabe={complexity} > {th.mccabe_fail}")
+    elif complexity >= th.mccabe_warn:
+        m_warn.append(f"{ident} McCabe={complexity} ≥ {th.mccabe_warn}")
+    if loc > th.loc_fail:
+        l_fail.append(f"{ident} LOC≈{loc} > {th.loc_fail}")
+    elif loc >= th.loc_warn:
+        l_warn.append(f"{ident} LOC≈{loc} ≥ {th.loc_warn}")
+
+
 def _summarize_cc(
     cc: dict[str, list[dict[str, Any]]], th: Thresholds
 ) -> tuple[list[str], list[str], list[str], list[str]]:
-    mccabe_warn: list[str] = []
-    mccabe_fail: list[str] = []
-    loc_warn: list[str] = []
-    loc_fail: list[str] = []
-    def add_mccabe(ident: str, complexity: int) -> None:
-        if complexity > th.mccabe_fail:
-            mccabe_fail.append(f"{ident} McCabe={complexity} > {th.mccabe_fail}")
-        elif complexity >= th.mccabe_warn:
-            mccabe_warn.append(f"{ident} McCabe={complexity} ≥ {th.mccabe_warn}")
-
-    def add_loc(ident: str, loc: int) -> None:
-        if loc > th.loc_fail:
-            loc_fail.append(f"{ident} LOC≈{loc} > {th.loc_fail}")
-        elif loc >= th.loc_warn:
-            loc_warn.append(f"{ident} LOC≈{loc} ≥ {th.loc_warn}")
-
+    m_warn: list[str] = []
+    m_fail: list[str] = []
+    l_warn: list[str] = []
+    l_fail: list[str] = []
     for file, blocks in cc.items():
         for b in blocks:
             complexity = int(b.get("complexity", 0))
@@ -198,9 +186,8 @@ def _summarize_cc(
             endline = int(b.get("endline", lineno))
             loc = max(0, endline - lineno + 1)
             ident = f"{file}:{lineno} {b.get('type', 'func')} {b.get('name', '?')}"
-            add_mccabe(ident, complexity)
-            add_loc(ident, loc)
-    return mccabe_warn, mccabe_fail, loc_warn, loc_fail
+            _add_mccabe_loc(ident, complexity, loc, th, m_warn, m_fail, l_warn, l_fail)
+    return m_warn, m_fail, l_warn, l_fail
 
 
 def _format_sections(
