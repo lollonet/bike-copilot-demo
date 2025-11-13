@@ -15,6 +15,8 @@ concurrency:
 jobs:
   sanitize:
     runs-on: ubuntu-latest
+    # Run only for internal PRs; forked PRs are handled by pr-sanitize-target
+    if: ${{ github.event.pull_request.head.repo.full_name == github.repository }}
     steps:
       - name: Normalize PR title/body newlines
         uses: actions/github-script@v7
@@ -43,4 +45,3 @@ jobs:
             } else {
               core.info("PR text already clean");
             }
-
