@@ -6,6 +6,7 @@ import json
 import subprocess
 import sys
 from dataclasses import dataclass
+import os
 from pathlib import Path
 from typing import Any, Iterable
 
@@ -62,7 +63,19 @@ def existing_paths(paths: Iterable[str]) -> list[str]:
 
 
 def run(cmd: list[str]) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(cmd, text=True, capture_output=True, check=False)
+    """Run a command with uv tool caches confined to the workspace.
+
+    This avoids permission issues on CI/sandboxes and ensures deterministic paths.
+    """
+    env = os.environ.copy()
+    root = Path.cwd()
+    env.setdefault("UV_CACHE_DIR", str(root / ".uv-cache"))
+    env.setdefault("UV_TOOL_DIR", str(root / ".uv-tools"))
+    env.setdefault("UV_PYTHON_INSTALL_DIR", str(root / ".uv-cache" / "python"))
+    env.setdefault("XDG_CACHE_HOME", str(root / ".uv-cache"))
+    return subprocess.run(
+        cmd, text=True, capture_output=True, check=False, env=env
+    )
 
 
 def radon_cc(paths: list[str]) -> dict[str, list[dict[str, Any]]]:
@@ -89,19 +102,10 @@ def radon_cc(paths: list[str]) -> dict[str, list[dict[str, Any]]]:
         sys.exit(2)
 
 
-def flake8_cognitive_both(
-    paths: list[str], warn_cog: int, fail_cog: int
-) -> tuple[list[str], list[str]]:
-    """Run flake8 cognitive-complexity once at the warn threshold and split
-    results into WARN and FAIL groups.
-
-    Classification mirrors McCabe/LOC semantics:
-    - FAIL: complexity > fail_cog
-    - WARN: warn_cog <= complexity <= fail_cog
-    Returns (warn_lines, fail_lines).
-    """
+def _flake8_cmd(paths: list[str], warn_cog: int) -> list[str]:
+    """Build flake8 command for cognitive-complexity WARN threshold."""
     exclude = ",".join(EXCLUDE_DIRS)
-    cmd = [
+    return [
         "uvx",
         "--from",
         "flake8",
@@ -115,15 +119,27 @@ def flake8_cognitive_both(
         exclude,
         *paths,
     ]
+<<<<<<< HEAD
     res = run(cmd)
     text = (res.stdout or "") + ("\n" + res.stderr if res.stderr else "")
     # Keep only plugin violation lines (contain CCR)
-    lines = [line for line in text.splitlines() if "CCR" in line]
+    lines = [l for l in text.splitlines() if "CCR" in l]
     if res.returncode not in (0, 1) or (res.returncode != 0 and not lines):
         details = text.strip() or "(no output)"
         print("[complexity] flake8 cognitive-complexity failed:\n" + details)
         sys.exit(2)
     # Parse "(X > Y)" and split
+=======
+
+
+def _only_cog_lines(text: str) -> list[str]:
+    """Extract only plugin violation lines containing the CCR code."""
+    return [l for l in text.splitlines() if "CCR" in l]
+
+
+def _split_warn_fail(lines: list[str], fail_cog: int) -> tuple[list[str], list[str]]:
+    """Split lines into (warn, fail) by parsing "(X > Y)" numbers."""
+>>>>>>> 50b13b1 (REQ-001: complexity gate — usa cache uv locale e riduci divergenze CI; confermato PASS su 'src scripts')
     import re
 
     warn_lines: list[str] = []
@@ -132,7 +148,6 @@ def flake8_cognitive_both(
     for l in lines:
         m = pat.search(l)
         if not m:
-            # If we can't parse, conservatively treat as WARN
             warn_lines.append(l)
             continue
         lvl = int(m.group(1))
@@ -143,6 +158,20 @@ def flake8_cognitive_both(
     return warn_lines, fail_lines
 
 
+def flake8_cognitive_both(
+    paths: list[str], warn_cog: int, fail_cog: int
+) -> tuple[list[str], list[str]]:
+    """Run flake8 once and return (warn_lines, fail_lines)."""
+    res = run(_flake8_cmd(paths, warn_cog))
+    text = (res.stdout or "") + ("\n" + res.stderr if res.stderr else "")
+    lines = _only_cog_lines(text)
+    if res.returncode not in (0, 1) or (res.returncode != 0 and not lines):
+        details = text.strip() or "(no output)"
+        print("[complexity] flake8 cognitive-complexity failed:\n" + details)
+        sys.exit(2)
+    return _split_warn_fail(lines, fail_cog)
+
+
 def _summarize_cc(
     cc: dict[str, list[dict[str, Any]]], th: Thresholds
 ) -> tuple[list[str], list[str], list[str], list[str]]:
@@ -150,6 +179,18 @@ def _summarize_cc(
     mccabe_fail: list[str] = []
     loc_warn: list[str] = []
     loc_fail: list[str] = []
+    def add_mccabe(ident: str, complexity: int) -> None:
+        if complexity > th.mccabe_fail:
+            mccabe_fail.append(f"{ident} McCabe={complexity} > {th.mccabe_fail}")
+        elif complexity >= th.mccabe_warn:
+            mccabe_warn.append(f"{ident} McCabe={complexity} ≥ {th.mccabe_warn}")
+
+    def add_loc(ident: str, loc: int) -> None:
+        if loc > th.loc_fail:
+            loc_fail.append(f"{ident} LOC≈{loc} > {th.loc_fail}")
+        elif loc >= th.loc_warn:
+            loc_warn.append(f"{ident} LOC≈{loc} ≥ {th.loc_warn}")
+
     for file, blocks in cc.items():
         for b in blocks:
             complexity = int(b.get("complexity", 0))
@@ -157,14 +198,8 @@ def _summarize_cc(
             endline = int(b.get("endline", lineno))
             loc = max(0, endline - lineno + 1)
             ident = f"{file}:{lineno} {b.get('type', 'func')} {b.get('name', '?')}"
-            if complexity > th.mccabe_fail:
-                mccabe_fail.append(f"{ident} McCabe={complexity} > {th.mccabe_fail}")
-            elif complexity >= th.mccabe_warn:
-                mccabe_warn.append(f"{ident} McCabe={complexity} ≥ {th.mccabe_warn}")
-            if loc > th.loc_fail:
-                loc_fail.append(f"{ident} LOC≈{loc} > {th.loc_fail}")
-            elif loc >= th.loc_warn:
-                loc_warn.append(f"{ident} LOC≈{loc} ≥ {th.loc_warn}")
+            add_mccabe(ident, complexity)
+            add_loc(ident, loc)
     return mccabe_warn, mccabe_fail, loc_warn, loc_fail
 
 
