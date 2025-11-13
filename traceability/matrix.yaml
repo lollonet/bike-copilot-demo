@@ -4,6 +4,7 @@ REQ-001:
   - docs/architecture/ARC-001-ci-cd.md
   - docs/requirements/REQ-001.standards-adoption.md
   - docs/requirements/REQ-INDEX.md
+  - scripts/complexity_gate.py
   prs: []
   tests: []
 REQ-002:
@@ -23,6 +24,7 @@ REQ-003:
 REQ-004:
   commits: []
   files:
+  - MOCKUP-README.md
   - docs/architecture/ARC-020-ux-wireframes.md
   - docs/requirements/REQ-004.ui-pn-first.md
   - docs/requirements/REQ-INDEX.md
@@ -31,6 +33,7 @@ REQ-004:
 REQ-005:
   commits: []
   files:
+  - MOCKUP-README.md
   - docs/architecture/ARC-020-ux-wireframes.md
   - docs/requirements/REQ-005.order-optimizer.md
   - docs/requirements/REQ-INDEX.md
@@ -39,6 +42,7 @@ REQ-005:
 REQ-006:
   commits: []
   files:
+  - MOCKUP-README.md
   - docs/architecture/ARC-020-ux-wireframes.md
   - docs/requirements/REQ-006.quote-branding.md
   - docs/requirements/REQ-INDEX.md
