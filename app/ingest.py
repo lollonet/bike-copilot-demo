@@ -36,132 +36,148 @@ def upsert(core: list[ProductInput], offers: list[OfferInput]) -> IngestStats:
     create_all()
     stats = IngestStats()
     with SessionLocal() as db:
-        # Products
-        for p in core:
-            # Prefer EAN; fallback to brand+mpn exact match
-            existing: Product | None = None
-            if p.ean:
-                existing = db.scalar(select(Product).where(Product.ean == p.ean))
-            if existing is None:
-                existing = db.scalar(
-                    select(Product).where(
-                        Product.brand == p.brand, Product.mpn == p.mpn
-                    )
-                )
-            if existing is None:
-                obj = Product(
-                    brand=p.brand,
-                    mpn=p.mpn,
-                    ean=p.ean,
-                    name=p.name,
-                    category=p.category,
-                    speed=p.speed,
-                    brake=p.brake,
-                    axle=p.axle,
-                    rotor=p.rotor,
-                    freehub=p.freehub,
-                )
-                db.add(obj)
-                stats = IngestStats(
-                    products_new=stats.products_new + 1,
-                    products_updated=stats.products_updated,
-                    offers_upserted=stats.offers_upserted,
-                    offers_skipped=stats.offers_skipped,
-                )
-            else:
-                existing.name = p.name or existing.name
-                existing.category = p.category or existing.category
-                existing.speed = p.speed or existing.speed
-                existing.brake = p.brake or existing.brake
-                existing.axle = p.axle or existing.axle
-                existing.rotor = p.rotor or existing.rotor
-                existing.freehub = p.freehub or existing.freehub
-                stats = IngestStats(
-                    products_new=stats.products_new,
-                    products_updated=stats.products_updated + 1,
-                    offers_upserted=stats.offers_upserted,
-                    offers_skipped=stats.offers_skipped,
-                )
-        db.commit()
+        stats = _upsert_products(db, core, stats)
+        stats = _upsert_offers_and_mappings(db, offers, stats)
+    return stats
 
-        # Offers
-        for o in offers:
-            product = db.scalar(
-                select(Product).where(Product.brand == o.brand, Product.mpn == o.mpn)
-            )
-            if not product:
-                stats = IngestStats(
-                    products_new=stats.products_new,
-                    products_updated=stats.products_updated,
-                    offers_upserted=stats.offers_upserted,
-                    offers_skipped=stats.offers_skipped + 1,
-                )
-                continue
 
-            offer_existing = db.scalar(
-                select(SupplierOffer).where(
-                    SupplierOffer.product_id == product.id,
-                    SupplierOffer.supplier == o.supplier,
-                )
+def _upsert_products(
+    db: SessionLocal, core: list[ProductInput], stats: IngestStats
+) -> IngestStats:
+    for p in core:
+        existing = _find_existing_product(db, p)
+        if existing is None:
+            obj = Product(
+                brand=p.brand,
+                mpn=p.mpn,
+                ean=p.ean,
+                name=p.name,
+                category=p.category,
+                speed=p.speed,
+                brake=p.brake,
+                axle=p.axle,
+                rotor=p.rotor,
+                freehub=p.freehub,
             )
-            if offer_existing is None:
-                offer = SupplierOffer(
-                    product_id=product.id,
-                    supplier=o.supplier,
-                    price=o.price,
-                    in_stock=o.in_stock,
-                    lead_time_days=o.lead_time_days,
-                )
-                db.add(offer)
-            else:
-                # Price history on change
-                if offer_existing.price != o.price:
-                    db.add(
-                        PriceHistory(
-                            offer_id=offer_existing.id, price=o.price, source_hash=None
-                        )
-                    )
-                offer_existing.price = o.price
-                offer_existing.in_stock = o.in_stock
-                offer_existing.lead_time_days = o.lead_time_days
+            db.add(obj)
+            stats = IngestStats(
+                products_new=stats.products_new + 1,
+                products_updated=stats.products_updated,
+                offers_upserted=stats.offers_upserted,
+                offers_skipped=stats.offers_skipped,
+            )
+        else:
+            existing.name = p.name or existing.name
+            existing.category = p.category or existing.category
+            existing.speed = p.speed or existing.speed
+            existing.brake = p.brake or existing.brake
+            existing.axle = p.axle or existing.axle
+            existing.rotor = p.rotor or existing.rotor
+            existing.freehub = p.freehub or existing.freehub
+            stats = IngestStats(
+                products_new=stats.products_new,
+                products_updated=stats.products_updated + 1,
+                offers_upserted=stats.offers_upserted,
+                offers_skipped=stats.offers_skipped,
+            )
+    db.commit()
+    return stats
+
+
+def _find_existing_product(db: SessionLocal, p: ProductInput) -> Product | None:
+    existing: Product | None = None
+    if p.ean:
+        existing = db.scalar(select(Product).where(Product.ean == p.ean))
+    if existing is None:
+        existing = db.scalar(
+            select(Product).where(Product.brand == p.brand, Product.mpn == p.mpn)
+        )
+    return existing
+
+
+def _upsert_offers_and_mappings(
+    db: SessionLocal, offers: list[OfferInput], stats: IngestStats
+) -> IngestStats:
+    for o in offers:
+        product = db.scalar(
+            select(Product).where(Product.brand == o.brand, Product.mpn == o.mpn)
+        )
+        if not product:
             stats = IngestStats(
                 products_new=stats.products_new,
                 products_updated=stats.products_updated,
-                offers_upserted=stats.offers_upserted + 1,
-                offers_skipped=stats.offers_skipped,
+                offers_upserted=stats.offers_upserted,
+                offers_skipped=stats.offers_skipped + 1,
             )
-            # PN alias mapping: if the offer carries a dealer-specific code, upsert mapping
-            dealer_code = None
-            try:
-                dealer_code = (o.extra or {}).get("dealer_pn")  # type: ignore[union-attr]
-            except Exception:
-                dealer_code = None
-            if dealer_code:
-                maker_norm = normalize_pn(product.mpn)
-                dealer_norm = normalize_pn(str(dealer_code))
-                row = (
-                    db.query(PNMapping)
-                    .filter(
-                        PNMapping.dealer == o.supplier,
-                        PNMapping.dealer_pn_norm == dealer_norm,
+            continue
+
+        offer_existing = db.scalar(
+            select(SupplierOffer).where(
+                SupplierOffer.product_id == product.id,
+                SupplierOffer.supplier == o.supplier,
+            )
+        )
+        if offer_existing is None:
+            offer = SupplierOffer(
+                product_id=product.id,
+                supplier=o.supplier,
+                price=o.price,
+                in_stock=o.in_stock,
+                lead_time_days=o.lead_time_days,
+            )
+            db.add(offer)
+        else:
+            if offer_existing.price != o.price:
+                db.add(
+                    PriceHistory(
+                        offer_id=offer_existing.id, price=o.price, source_hash=None
                     )
-                    .first()
                 )
-                if row:
-                    row.product_id = int(product.id)
-                    row.maker_pn_norm = maker_norm
-                else:
-                    db.add(
-                        PNMapping(
-                            product_id=int(product.id),
-                            dealer=o.supplier,
-                            maker_pn_norm=maker_norm,
-                            dealer_pn_norm=dealer_norm,
-                            confidence=1.0,
-                        )
-                    )
-        db.commit()
+            offer_existing.price = o.price
+            offer_existing.in_stock = o.in_stock
+            offer_existing.lead_time_days = o.lead_time_days
+
+        stats = IngestStats(
+            products_new=stats.products_new,
+            products_updated=stats.products_updated,
+            offers_upserted=stats.offers_upserted + 1,
+            offers_skipped=stats.offers_skipped,
+        )
+        _upsert_pn_mapping(db, product, o)
+
+    db.commit()
     return stats
+
+
+def _upsert_pn_mapping(db: SessionLocal, product: Product, offer: OfferInput) -> None:
+    dealer_code: str | None = None
+    try:
+        dealer_code_raw = (offer.extra or {}).get("dealer_pn")  # type: ignore[union-attr]
+        dealer_code = str(dealer_code_raw) if dealer_code_raw is not None else None
+    except Exception:
+        dealer_code = None
+    if not dealer_code:
+        return
+    maker_norm = normalize_pn(product.mpn)
+    dealer_norm = normalize_pn(dealer_code)
+    row = (
+        db.query(PNMapping)
+        .filter(PNMapping.dealer == offer.supplier, PNMapping.dealer_pn_norm == dealer_norm)
+        .first()
+    )
+    if row:
+        row.product_id = int(product.id)
+        row.maker_pn_norm = maker_norm
+    else:
+        db.add(
+            PNMapping(
+                product_id=int(product.id),
+                dealer=offer.supplier,
+                maker_pn_norm=maker_norm,
+                dealer_pn_norm=dealer_norm,
+                confidence=1.0,
+            )
+        )
 
 
 def main() -> None:
