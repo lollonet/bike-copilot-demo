@@ -17,6 +17,15 @@ jobs:
       - name: Complexity Gate (repo-wide)
         run: |
           uv run python scripts/complexity_gate.py --paths src scripts
+      - name: Complexity (observe app)
+        continue-on-error: true
+        run: |
+          uv run python scripts/complexity_gate.py --paths app | tee complexity-app.txt || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: complexity-app-report
+          path: complexity-app.txt
       - name: Spec Lint & Traceability
         run: |
           uv run python scripts/spec_lint.py
