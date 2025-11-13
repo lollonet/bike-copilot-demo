@@ -107,79 +107,64 @@ def final_score(offer: SupplierOffer, comp_score: int, min_price: float) -> floa
 
 
 def _prefilter_products(request: SearchRequest) -> list[Product]:
+    """Load all products and apply text/attribute filters at product level."""
     synonyms = _load_synonyms()
     with SessionLocal() as db:
         products = db.scalars(
             select(Product).options(selectinload(Product.offers))
         ).all()
-    filtered: list[Product] = []
     qtext = (request.query_text or "").strip().lower()
     tokens = [t for t in qtext.split() if t]
+    filtered: list[Product] = []
     for p in products:
-        ok = True
-        if tokens:
-            hay = f"{p.brand or ''} {p.mpn or ''} {p.name or ''}".lower()
-            for t in tokens:
-                if t not in hay:
-                    ok = False
-                    break
-        # Category comparison uses canonical form to match facet labels
-        if request.category and canon_category(p.category) != canon_category(
-            request.category
-        ):
-            ok = False
-        if request.speed and apply_synonyms(
-            request.speed, "speed", synonyms
-        ) != apply_synonyms(p.speed, "speed", synonyms):
-            ok = False
-        if request.freehub and apply_synonyms(
-            request.freehub.value, "freehub", synonyms
-        ) != apply_synonyms(p.freehub, "freehub", synonyms):
-            ok = False
-        if request.brake and apply_synonyms(
-            request.brake.value, "brake", synonyms
-        ) != apply_synonyms(p.brake, "brake", synonyms):
-            ok = False
-        if request.axle and apply_synonyms(
-            request.axle, "axle", synonyms
-        ) != apply_synonyms(p.axle, "axle", synonyms):
-            ok = False
-        if request.rotor and apply_synonyms(
-            request.rotor.value, "rotor", synonyms
-        ) != apply_synonyms(p.rotor, "rotor", synonyms):
-            ok = False
-        if ok:
-            filtered.append(p)
+        if not _match_product_text(p, tokens):
+            continue
+        if not _match_product_category(request, p):
+            continue
+        if not _match_product_tech(request, p, synonyms):
+            continue
+        filtered.append(p)
     return filtered
+
+
+def _match_product_text(product: Product, tokens: list[str]) -> bool:
+    if not tokens:
+        return True
+    hay = f"{product.brand or ''} {product.mpn or ''} {product.name or ''}".lower()
+    return all(t in hay for t in tokens)
+
+
+def _match_product_category(req: SearchRequest, product: Product) -> bool:
+    if not req.category:
+        return True
+    return canon_category(product.category) == canon_category(req.category)
+
+
+def _match_product_tech(
+    req: SearchRequest, product: Product, synonyms: dict[str, dict[str, list[str]]]
+) -> bool:
+    def norm(cat: str, val: str | None) -> str | None:
+        return apply_synonyms(val, cat, synonyms)
+
+    if req.speed and norm("speed", req.speed) != norm("speed", product.speed):
+        return False
+    if req.freehub and norm("freehub", req.freehub.value) != norm(
+        "freehub", product.freehub
+    ):
+        return False
+    if req.brake and norm("brake", req.brake.value) != norm("brake", product.brake):
+        return False
+    if req.axle and norm("axle", req.axle) != norm("axle", product.axle):
+        return False
+    if req.rotor and norm("rotor", req.rotor.value) != norm("rotor", product.rotor):
+        return False
+    return True
 
 
 def search(request: SearchRequest) -> SearchResponse:
     synonyms = _load_synonyms()
     filtered = _prefilter_products(request)
-
-    # Gather offers
-    offers: list[tuple[SupplierOffer, int, list[str], list[str], str, str]] = []
-    for p in filtered:
-        for o in p.offers:
-            comp, pros, cons = compatibility_score(request, p, synonyms)
-            offers.append((o, comp, pros, cons, p.brand, p.mpn))
-
-    # Offer-level filters: suppliers, in_stock, budget (0 treated as no limit)
-    eff_budget = (
-        float(request.budget_max)
-        if (request.budget_max is not None and float(request.budget_max) > 0)
-        else None
-    )
-    if request.suppliers and len(request.suppliers) > 0:
-        offers = [t for t in offers if t[0].supplier in request.suppliers]
-    if request.in_stock_only:
-        offers = [t for t in offers if t[0].in_stock]
-    if eff_budget is not None:
-        offers = [
-            t
-            for t in offers
-            if (t[0].price is not None and float(t[0].price) <= eff_budget)
-        ]
+    offers = _gather_scored_offers(request, filtered, synonyms)
 
     if not offers:
         return SearchResponse(items=[])
@@ -228,10 +213,66 @@ def search(request: SearchRequest) -> SearchResponse:
     return SearchResponse(items=items)
 
 
+def _gather_scored_offers(
+    request: SearchRequest,
+    products: list[Product],
+    synonyms: dict[str, dict[str, list[str]]],
+) -> list[tuple[SupplierOffer, int, list[str], list[str], str, str]]:
+    """Collect offers with compatibility score and apply offer-level filters."""
+    offers: list[tuple[SupplierOffer, int, list[str], list[str], str, str]] = []
+    for p in products:
+        for o in p.offers:
+            comp, pros, cons = compatibility_score(request, p, synonyms)
+            offers.append((o, comp, pros, cons, p.brand, p.mpn))
+
+    eff_budget = (
+        float(request.budget_max)
+        if (request.budget_max is not None and float(request.budget_max) > 0)
+        else None
+    )
+    if request.suppliers:
+        allowed_sup = set(request.suppliers)
+        offers = [t for t in offers if t[0].supplier in allowed_sup]
+    if request.in_stock_only:
+        offers = [t for t in offers if t[0].in_stock]
+    if eff_budget is not None:
+        offers = [
+            t
+            for t in offers
+            if (t[0].price is not None and float(t[0].price) <= eff_budget)
+        ]
+    return offers
+
+
 def facets(request: SearchRequest) -> FacetsResponse:
     synonyms = _load_synonyms()
     filtered = _prefilter_products(request)
-    counts = {
+    counts, prices, offer_total = _compute_facets_for_products(
+        request, filtered, synonyms
+    )
+    price_info = {
+        "min": (min(prices) if prices else None),
+        "max": (max(prices) if prices else None),
+    }
+    return FacetsResponse(
+        speed=counts["speed"],
+        freehub=counts["freehub"],
+        brake=counts["brake"],
+        axle=counts["axle"],
+        rotor=counts["rotor"],
+        supplier=counts["supplier"],
+        category=counts["category"],
+        price=price_info,
+        totals={"products": len(filtered), "offers": offer_total},
+    )
+
+
+def _compute_facets_for_products(
+    request: SearchRequest,
+    products: list[Product],
+    synonyms: dict[str, dict[str, list[str]]],
+) -> tuple[dict[str, dict[str, int]], list[float], int]:
+    counts: dict[str, dict[str, int]] = {
         "speed": {},
         "freehub": {},
         "brake": {},
@@ -248,15 +289,13 @@ def facets(request: SearchRequest) -> FacetsResponse:
         else None
     )
 
-    for p in filtered:
-        # Category facet
+    for p in products:
         if p.category:
             keyc = canon_category(p.category)
             if keyc is None:
                 keyc = str(p.category)
             counts["category"][keyc] = counts["category"].get(keyc, 0) + 1
 
-        # Product-level facet counts (canonicalized)
         def bump(cat: str, value: str | None) -> None:
             if value is None:
                 return
@@ -272,16 +311,11 @@ def facets(request: SearchRequest) -> FacetsResponse:
         bump("brake", p.brake)
         bump("axle", p.axle)
         bump("rotor", p.rotor)
-        # Offer-level data for price range
+
         for o in p.offers:
-            # Apply supplier/in_stock filters for offer-level facets
             if request.in_stock_only and not o.in_stock:
                 continue
-            if (
-                request.suppliers
-                and len(request.suppliers) > 0
-                and o.supplier not in request.suppliers
-            ):
+            if request.suppliers and o.supplier not in set(request.suppliers):
                 continue
             if o.price is not None:
                 if eff_budget is None or float(o.price) <= eff_budget:
@@ -290,21 +324,7 @@ def facets(request: SearchRequest) -> FacetsResponse:
             sname = o.supplier
             counts["supplier"][sname] = counts["supplier"].get(sname, 0) + 1
 
-    price_info = {
-        "min": (min(prices) if prices else None),
-        "max": (max(prices) if prices else None),
-    }
-    return FacetsResponse(
-        speed=counts["speed"],
-        freehub=counts["freehub"],
-        brake=counts["brake"],
-        axle=counts["axle"],
-        rotor=counts["rotor"],
-        supplier=counts["supplier"],
-        category=counts["category"],
-        price=price_info,
-        totals={"products": len(filtered), "offers": offer_total},
-    )
+    return counts, prices, offer_total
 
 
 def dry_run() -> None:
