@@ -19,7 +19,14 @@ from .adapters.web_adapter import (
 )
 from .adapters.csv_mapped_adapter import parse_unified_csv
 from .ingest import IngestStats, upsert
-from .models import EventLog, SessionLocal, SupplierOffer, Product, create_all, PNMapping
+from .models import (
+    EventLog,
+    SessionLocal,
+    SupplierOffer,
+    Product,
+    create_all,
+    PNMapping,
+)
 from .quote import render_quote
 from .search import search
 from .types import Brake, Freehub, QuoteResponse, Rotor, SearchRequest
@@ -145,7 +152,9 @@ def dump_md(
 
 @app.command("pn-alias-import")
 def pn_alias_import(
-    yaml_file: Path = typer.Argument(..., exists=True, dir_okay=False, help="YAML con alias PN per dealer"),
+    yaml_file: Path = typer.Argument(
+        ..., exists=True, dir_okay=False, help="YAML con alias PN per dealer"
+    ),
 ) -> None:
     """Import PN alias pairs from a YAML file.
 
@@ -213,14 +222,16 @@ def pn_alias_import(
                     )
                     inserted += 1
         db.commit()
-    rich.print(f"[green]Alias PN importati da {yaml_file} — inseriti: {inserted}, aggiornati: {updated}[/green]")
+    rich.print(
+        f"[green]Alias PN importati da {yaml_file} — inseriti: {inserted}, aggiornati: {updated}[/green]"
+    )
 
 
 @app.command("fetch-policy")
 def fetch_policy(
     dealer: str = typer.Option(..., help="Dealer name"),
     url: str = typer.Option(..., help="URL pagina Spedizioni/Condizioni"),
-    header: list[str] = typer.Option(None, help='extra HTTP headers (key:value)'),
+    header: list[str] = typer.Option(None, help="extra HTTP headers (key:value)"),
 ) -> None:
     """Fetch a shipping policy page and upsert DealerPolicy using deterministic rules."""
     import httpx
@@ -231,7 +242,11 @@ def fetch_policy(
             k, v = h.split(":", 1)
             hdrs[k.strip()] = v.strip()
     create_all()
-    with httpx.Client(timeout=15.0, headers=hdrs or {"User-Agent": "BikeCopilotBot/0.1"}, follow_redirects=True) as client:
+    with httpx.Client(
+        timeout=15.0,
+        headers=hdrs or {"User-Agent": "BikeCopilotBot/0.1"},
+        follow_redirects=True,
+    ) as client:
         r = client.get(url)
         r.raise_for_status()
         ext = parse_policy_html(r.text)

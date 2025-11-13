@@ -28,6 +28,8 @@ from .types import (
     DealersResponse,
     OptimizeRequest,
     OptimizeResponse,
+    KPISummaryResponse,
+    KPIDealerEntry,
 )
 from .logging_utils import log_event
 from .pn import search_pn, search_pn_batch
@@ -113,7 +115,9 @@ def api_facets(req: SearchRequest, request: Request) -> FacetsResponse:
     return res
 
 
-@app.post("/search_pn", response_model=SearchPNResponse, responses={400: {"model": Problem}})
+@app.post(
+    "/search_pn", response_model=SearchPNResponse, responses={400: {"model": Problem}}
+)
 def api_search_pn(req: SearchPNRequest, request: Request) -> SearchPNResponse:
     res = search_pn(req)
     log_event(
@@ -132,7 +136,9 @@ def api_search_pn(req: SearchPNRequest, request: Request) -> SearchPNResponse:
     response_model=SearchPNBatchResponse,
     responses={400: {"model": Problem}},
 )
-def api_search_pn_batch(req: SearchPNBatchRequest, request: Request) -> SearchPNBatchResponse:
+def api_search_pn_batch(
+    req: SearchPNBatchRequest, request: Request
+) -> SearchPNBatchResponse:
     res = search_pn_batch(req)
     log_event(
         "INFO",
@@ -169,10 +175,12 @@ def api_dealers() -> DealersResponse:
         }
         for (name, cnt, upd) in rows
     ]
-    return DealersResponse(dealers=[
-        # pydantic will coerce dicts to DealerInfo
-        *dealers
-    ])
+    return DealersResponse(
+        dealers=[
+            # pydantic will coerce dicts to DealerInfo
+            *dealers
+        ]
+    )
 
 
 @app.post("/optimize", response_model=OptimizeResponse)
@@ -184,7 +192,11 @@ def api_optimize(req: OptimizeRequest, request: Request) -> OptimizeResponse:
         kind="api",
         message="optimize computed",
         trace_id=getattr(request.state, "trace_id", None),
-        extra={"dealers": len(res.dealers), "lines": len(res.lines), "total": res.costs.total},
+        extra={
+            "dealers": len(res.dealers),
+            "lines": len(res.lines),
+            "total": res.costs.total,
+        },
     )
     return res
 
@@ -310,3 +322,110 @@ def kpi_today(request: Request, _: None = Depends(require_auth)) -> dict[str, in
             extra={"counts": counts},
         )
         return counts
+
+
+@app.get("/kpi/summary", response_model=KPISummaryResponse)
+def kpi_summary(_: Request, __: None = Depends(require_auth)) -> KPISummaryResponse:
+    from datetime import datetime, timedelta, timezone
+    from sqlalchemy import func
+
+    create_all()
+    # Use naive UTC consistently to match SQLite naive timestamps
+    now = datetime.utcnow()
+    cutoff = now - timedelta(hours=24)
+    with SessionLocal() as db:
+        # Totali prodotti (via tabella Product)
+        from .models import Product
+
+        products_total = int(db.query(func.count(Product.id)).scalar() or 0)
+        # prodotti con almeno un'offerta
+        prod_with_offers = db.query(SupplierOffer.product_id).distinct().count()
+        # Offerte totale e aggiornate nelle 24h
+        offers_total = int(db.query(func.count(SupplierOffer.id)).scalar() or 0)
+        offers_24h = int(
+            db.query(func.count(SupplierOffer.id))
+            .filter(SupplierOffer.updated_at >= cutoff)
+            .scalar()
+            or 0
+        )
+
+        # Per-dealer: numero offerte, % aggiornate 24h, lag dal max(updated_at)
+        per_dealer: list[KPIDealerEntry] = []
+        rows = (
+            db.query(
+                SupplierOffer.supplier,
+                func.count(SupplierOffer.id),
+                func.max(SupplierOffer.updated_at),
+            )
+            .group_by(SupplierOffer.supplier)
+            .all()
+        )
+        for dealer, cnt, last_upd in rows:
+            cnt = int(cnt or 0)
+            upd_24h = int(
+                db.query(func.count(SupplierOffer.id))
+                .filter(
+                    SupplierOffer.supplier == dealer,
+                    SupplierOffer.updated_at >= cutoff,
+                )
+                .scalar()
+                or 0
+            )
+            pct_24 = (upd_24h / cnt * 100.0) if cnt > 0 else 0.0
+            lag_days = None
+            if last_upd is not None:
+                lu = last_upd.replace(tzinfo=None) if getattr(last_upd, "tzinfo", None) else last_upd
+                lag_days = max(0.0, (now - lu).total_seconds() / 86400.0)
+            per_dealer.append(
+                KPIDealerEntry(
+                    dealer=str(dealer),
+                    offers=cnt,
+                    updated_24h_pct=round(pct_24, 2),
+                    lag_days=round(lag_days, 2) if lag_days is not None else None,
+                )
+            )
+
+        # PN non mappati: offerte con extra.dealer_pn senza riga PNMapping corrispondente
+        # Carichiamo le offerte con dealer_pn e verifichiamo mapping in Python
+        from .pn import normalize_pn
+        from .models import PNMapping, Product
+
+        cand_offers = (
+            db.query(SupplierOffer).filter(SupplierOffer.extra.isnot(None)).all()
+        )
+        unmapped = 0
+        for off in cand_offers:
+            try:
+                dealer_code = None
+                if isinstance(off.extra, dict):
+                    dealer_code = off.extra.get("dealer_pn")  # type: ignore[assignment]
+                if not dealer_code:
+                    continue
+                dealer_norm = normalize_pn(str(dealer_code))
+                exists = (
+                    db.query(PNMapping.id)
+                    .filter(
+                        PNMapping.dealer == off.supplier,
+                        PNMapping.dealer_pn_norm == dealer_norm,
+                    )
+                    .first()
+                )
+                if not exists:
+                    unmapped += 1
+            except Exception:
+                continue
+
+    coverage = (
+        (prod_with_offers / products_total * 100.0) if products_total > 0 else 0.0
+    )
+    upd_pct = (offers_24h / offers_total * 100.0) if offers_total > 0 else 0.0
+    return KPISummaryResponse(
+        products_total=int(products_total),
+        products_with_offers=int(prod_with_offers),
+        coverage_pn_pct=round(coverage, 2),
+        offers_total=offers_total,
+        offers_updated_24h=offers_24h,
+        updated_24h_pct=round(upd_pct, 2),
+        pn_unmapped=int(unmapped),
+        per_dealer=per_dealer,
+    )

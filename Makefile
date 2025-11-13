@@ -1,7 +1,7 @@
 status:
-	UV_CACHE_DIR=.uv-cache XDG_CACHE_HOME=.uv-cache PYTHONPATH=. uv run ruff check --fix || true
-	UV_CACHE_DIR=.uv-cache XDG_CACHE_HOME=.uv-cache PYTHONPATH=. uv run ruff format || true
-	UV_CACHE_DIR=.uv-cache XDG_CACHE_HOME=.uv-cache PYTHONPATH=. uv run basedpyright --level error app || true
+	UV_CACHE_DIR=.uv-cache XDG_CACHE_HOME=.uv-cache PYTHONPATH=. uvx ruff check --fix || true
+	UV_CACHE_DIR=.uv-cache XDG_CACHE_HOME=.uv-cache PYTHONPATH=. uvx ruff format || true
+	UV_CACHE_DIR=.uv-cache XDG_CACHE_HOME=.uv-cache PYTHONPATH=. uvx basedpyright --level error app || true
 
 api:
 	uv run uvicorn app.api:app --host 0.0.0.0 --port 8000
@@ -11,6 +11,10 @@ seed:
 
 ui:
 	uv run python -m app.ui
+
+# PN-first UI (porta :7861)
+ui-pn:
+	uv run python -m app.ui_pn
 
 test:
 	UV_CACHE_DIR=.uv-cache XDG_CACHE_HOME=.uv-cache PYTHONPATH=. uv run pytest -q

@@ -6,7 +6,14 @@ from pathlib import Path
 
 from sqlalchemy import select
 
-from .models import PriceHistory, Product, SupplierOffer, SessionLocal, create_all, PNMapping
+from .models import (
+    PriceHistory,
+    Product,
+    SupplierOffer,
+    SessionLocal,
+    create_all,
+    PNMapping,
+)
 from .pn import normalize_pn
 from .types import OfferInput, ProductInput
 from .adapters.csv_adapter import parse_offers_csv, parse_products_csv
@@ -134,7 +141,10 @@ def upsert(core: list[ProductInput], offers: list[OfferInput]) -> IngestStats:
                 dealer_norm = normalize_pn(str(dealer_code))
                 row = (
                     db.query(PNMapping)
-                    .filter(PNMapping.dealer == o.supplier, PNMapping.dealer_pn_norm == dealer_norm)
+                    .filter(
+                        PNMapping.dealer == o.supplier,
+                        PNMapping.dealer_pn_norm == dealer_norm,
+                    )
                     .first()
                 )
                 if row:
