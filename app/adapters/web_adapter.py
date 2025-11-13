@@ -298,24 +298,18 @@ def fetch_and_parse_urls(
             r.raise_for_status()
             return r.text
 
-    for seed in urls:
-        if seed in seen_pages:
-            continue
-        seen_pages.add(seed)
-        try:
-            html = _fetch(seed)
-        except Exception:
-            continue
-        # Prefer detail follow if configured (to ensure MPN presence)
+    # Helpers to reduce complexity
+    def _parse_listing_or_detail(base_url: str, html_text: str) -> None:
+        """Parse a listing page, optionally following detail links if mapping provides them."""
         item_link_sel = mapping.get("item_link")
         has_detail = bool(mapping.get("detail"))
         if item_link_sel and has_detail:
-            soup = BeautifulSoup(html, "html.parser")
+            soup = BeautifulSoup(html_text, "html.parser")
             rows = soup.select(mapping["root"])  # type: ignore[index]
             for r in rows:
                 a = r.select_one(item_link_sel)
                 href_attr = a.get("href") if a else None
-                href = _abs_url(seed, str(href_attr) if href_attr is not None else None)
+                href = _abs_url(base_url, str(href_attr) if href_attr is not None else None)
                 if not href or href in seen_pages:
                     continue
                 seen_pages.add(href)
@@ -326,87 +320,61 @@ def fetch_and_parse_urls(
                     continue
                 p1, o1 = parse_detail_html(dhtml, mapping)
                 if p1 and o1:
-                    # Deduplicate by (brand, mpn)
-                    if not any(
-                        (pp.brand, pp.mpn) == (p1.brand, p1.mpn) for pp in all_products
-                    ):
+                    if not any((pp.brand, pp.mpn) == (p1.brand, p1.mpn) for pp in all_products):
                         all_products.append(p1)
-                    if not any(
-                        (oo.brand, oo.mpn, oo.supplier)
-                        == (o1.brand, o1.mpn, o1.supplier)
-                        for oo in all_offers
-                    ):
+                    if not any((oo.brand, oo.mpn, oo.supplier) == (o1.brand, o1.mpn, o1.supplier) for oo in all_offers):
                         all_offers.append(o1)
         else:
-            p, o = parse_html(html, mapping)
+            p, o = parse_html(html_text, mapping)
             all_products.extend(p)
             all_offers.extend(o)
 
-        if (
-            follow_next
-            and "pagination" in mapping
-            and isinstance(mapping["pagination"], dict)
-        ):
-            next_sel = mapping["pagination"].get("next")  # type: ignore[index]
-            if next_sel:
-                soup = BeautifulSoup(html, "html.parser")
-                page_count = 1
-                current_url = seed
-                nxt = soup.select_one(next_sel)
-                while nxt is not None and page_count < max_pages:
-                    href_attr = nxt.get("href") if nxt else None
-                    # Normalize relative pagination links to absolute
-                    href = _abs_url(
-                        current_url, str(href_attr) if href_attr is not None else None
-                    )
-                    if not href or href in seen_pages:
-                        break
-                    seen_pages.add(href)
-                    time.sleep(max(0.0, delay_sec))
-                    try:
-                        html = _fetch(href)
-                    except Exception:
-                        break
-                    # Track current page URL for subsequent pagination joins
-                    current_url = href
-                    if item_link_sel and has_detail:
-                        soup = BeautifulSoup(html, "html.parser")
-                        rows = soup.select(mapping["root"])  # type: ignore[index]
-                        for r in rows:
-                            a = r.select_one(item_link_sel)
-                            href_attr2 = a.get("href") if a else None
-                            href2 = _abs_url(
-                                href,
-                                str(href_attr2) if href_attr2 is not None else None,
-                            )
-                            if not href2 or href2 in seen_pages:
-                                continue
-                            seen_pages.add(href2)
-                            time.sleep(max(0.0, delay_sec))
-                            try:
-                                dhtml = _fetch(href2)
-                            except Exception:
-                                continue
-                            p1, o1 = parse_detail_html(dhtml, mapping)
-                            if p1 and o1:
-                                if not any(
-                                    (pp.brand, pp.mpn) == (p1.brand, p1.mpn)
-                                    for pp in all_products
-                                ):
-                                    all_products.append(p1)
-                                if not any(
-                                    (oo.brand, oo.mpn, oo.supplier)
-                                    == (o1.brand, o1.mpn, o1.supplier)
-                                    for oo in all_offers
-                                ):
-                                    all_offers.append(o1)
-                    else:
-                        p2, o2 = parse_html(html, mapping)
-                        all_products.extend(p2)
-                        all_offers.extend(o2)
-                    soup = BeautifulSoup(html, "html.parser")
-                    nxt = soup.select_one(next_sel)
-                    page_count += 1
+    def _pagination_chain(first_html: str, first_url: str) -> list[tuple[str, str]]:
+        """Return list of (url, html) for next pages up to max_pages-1 (excluding the first).
+
+        Joins relative links to absolute using the last fetched page as base.
+        """
+        out: list[tuple[str, str]] = []
+        if not (follow_next and isinstance(mapping.get("pagination"), dict)):
+            return out
+        next_sel = mapping.get("pagination", {}).get("next")  # type: ignore[union-attr]
+        if not next_sel:
+            return out
+        page_count = 1
+        current_html = first_html
+        current_url = first_url
+        while page_count < max_pages:
+            soup = BeautifulSoup(current_html, "html.parser")
+            nxt = soup.select_one(next_sel)
+            if nxt is None:
+                break
+            href_attr = nxt.get("href") if nxt else None
+            href = _abs_url(current_url, str(href_attr) if href_attr is not None else None)
+            if not href or href in seen_pages:
+                break
+            seen_pages.add(href)
+            time.sleep(max(0.0, delay_sec))
+            try:
+                next_html = _fetch(href)
+            except Exception:
+                break
+            out.append((href, next_html))
+            current_html = next_html
+            current_url = href
+            page_count += 1
+        return out
+
+    for seed in urls:
+        if seed in seen_pages:
+            continue
+        seen_pages.add(seed)
+        try:
+            html = _fetch(seed)
+        except Exception:
+            continue
+        _parse_listing_or_detail(seed, html)
+        for href, html2 in _pagination_chain(html, seed):
+            _parse_listing_or_detail(href, html2)
 
     return all_products, all_offers
 
