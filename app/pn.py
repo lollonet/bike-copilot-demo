@@ -62,23 +62,10 @@ def search_pn(req: SearchPNRequest) -> SearchPNResponse:
     """
     target = normalize_pn(req.maker_pn)
     with SessionLocal() as db:
-        # First, try direct product match by normalized maker PN
         products = db.scalars(
             select(Product).options(selectinload(Product.offers))
         ).all()
-        matches = [p for p in products if normalize_pn(p.mpn) == target]
-        # If no direct match, consult PNMapping using either maker or dealer normalized PN
-        if not matches:
-            pids: set[int] = set()
-            rows = db.scalars(
-                select(PNMapping.product_id).where(
-                    (PNMapping.maker_pn_norm == target)
-                    | (PNMapping.dealer_pn_norm == target)
-                )
-            ).all()
-            pids.update(int(pid) for pid in rows)
-            if pids:
-                matches = [p for p in products if p.id in pids]
+        matches = _match_products_single(target, products, db)
         offers = _gather_offers(matches)
 
     # Filters
@@ -99,6 +86,30 @@ def search_pn(req: SearchPNRequest) -> SearchPNResponse:
     return SearchPNResponse(maker_pn=req.maker_pn, offers=offers_sorted)
 
 
+def _match_products_single(
+    target_norm: str, products: list[Product], db
+) -> list[Product]:
+    """Locate products for a single normalized PN.
+
+    Strategy: try direct normalized Product.mpn match, then PNMapping fallback.
+    """
+    direct = [p for p in products if normalize_pn(p.mpn) == target_norm]
+    if direct:
+        return direct
+    pids: set[int] = set()
+    rows = db.scalars(
+        select(PNMapping.product_id).where(
+            (PNMapping.maker_pn_norm == target_norm)
+            | (PNMapping.dealer_pn_norm == target_norm)
+        )
+    ).all()
+    for pid in rows:
+        pids.add(int(pid))
+    if not pids:
+        return []
+    return [p for p in products if p.id in pids]
+
+
 def search_pn_batch(req: SearchPNBatchRequest) -> SearchPNBatchResponse:
     """Batch PN search avoiding repeated full-table scans.
 
@@ -116,70 +127,102 @@ def search_pn_batch(req: SearchPNBatchRequest) -> SearchPNBatchResponse:
     target_set = set(t for t in targets if t)
 
     with SessionLocal() as db:
-        # Load products once with offers
         products = db.scalars(
             select(Product).options(selectinload(Product.offers))
         ).all()
-        # Build helper indexes
-        norm_map: dict[str, list[Product]] = {}
-        id_index: dict[int, Product] = {}
-        for p in products:
-            id_index[p.id] = p
-            key = normalize_pn(p.mpn)
-            if key:
-                norm_map.setdefault(key, []).append(p)
+        norm_map, id_index, pid_by_norm = _build_pn_indexes(products, target_set, db)
 
-        # Load PNMapping rows for requested set
-        pid_by_norm: dict[str, set[int]] = {k: set() for k in target_set}
-        if target_set:
-            rows = (
-                db.query(
-                    PNMapping.maker_pn_norm,
-                    PNMapping.dealer_pn_norm,
-                    PNMapping.product_id,
-                )
-                .filter(
-                    (PNMapping.maker_pn_norm.in_(list(target_set)))
-                    | (PNMapping.dealer_pn_norm.in_(list(target_set)))
-                )
-                .all()
-            )
-            for maker_norm, dealer_norm, pid in rows:
-                if maker_norm in pid_by_norm:
-                    pid_by_norm[maker_norm].add(int(pid))
-                if dealer_norm in pid_by_norm:
-                    pid_by_norm[dealer_norm].add(int(pid))
-
-    # Build responses per requested PN (preserve input order)
     results: list[SearchPNResponse] = []
     for original, norm in zip(items, targets):
-        prods = list(norm_map.get(norm, []))
-        # Keep semantics consistent with single-item search:
-        # use PNMapping only as fallback when there is no direct Product match
-        if not prods:
-            ids_present: set[int] = set()
-            for pid in pid_by_norm.get(norm, set()):
-                if pid not in ids_present and pid in id_index:
-                    prods.append(id_index[pid])
-                    ids_present.add(pid)
-
-        # Gather offers and apply filters
+        prods = _match_products_batch(norm, norm_map, pid_by_norm, id_index)
         offers = _gather_offers(prods)
-        # Filters
-        if req.dealers:
-            allowed = set(req.dealers)
-            offers = [it for it in offers if it.dealer in allowed]
-        if req.in_stock_only:
-            offers = [it for it in offers if it.in_stock]
-
-        # Sort
-        def _key(it: PNOfferItem) -> tuple[int, float, int]:
-            instock_rank = 0 if it.in_stock else 1
-            price = it.price if it.price is not None else float("inf")
-            lead = it.lead_time_days if it.lead_time_days is not None else 9999
-            return (instock_rank, price, lead)
-
-        offers_sorted = sorted(offers, key=_key)
+        offers = _apply_filters(offers, req.dealers, req.in_stock_only)
+        offers_sorted = _sort_offers(offers)
         results.append(SearchPNResponse(maker_pn=original, offers=offers_sorted))
 
     return SearchPNBatchResponse(results=results)
+
+
+def _build_pn_indexes(
+    products: list[Product], target_set: set[str], db
+) -> tuple[dict[str, list[Product]], dict[int, Product], dict[str, set[int]]]:
+    """Build helper indexes for batch PN search.
+
+    Returns:
+    - norm_map: normalized mpn -> products
+    - id_index: product id -> product
+    - pid_by_norm: normalized PN (maker/dealer) -> product ids
+    """
+    norm_map: dict[str, list[Product]] = {}
+    id_index: dict[int, Product] = {}
+    for p in products:
+        id_index[p.id] = p
+        key = normalize_pn(p.mpn)
+        if key:
+            norm_map.setdefault(key, []).append(p)
+
+    pid_by_norm: dict[str, set[int]] = {k: set() for k in target_set}
+    if target_set:
+        rows = (
+            db.query(
+                PNMapping.maker_pn_norm,
+                PNMapping.dealer_pn_norm,
+                PNMapping.product_id,
+            )
+            .filter(
+                (PNMapping.maker_pn_norm.in_(list(target_set)))
+                | (PNMapping.dealer_pn_norm.in_(list(target_set)))
+            )
+            .all()
+        )
+        for maker_norm, dealer_norm, pid in rows:
+            value = int(pid)
+            if maker_norm in pid_by_norm:
+                pid_by_norm[maker_norm].add(value)
+            if dealer_norm in pid_by_norm:
+                pid_by_norm[dealer_norm].add(value)
+    return norm_map, id_index, pid_by_norm
+
+
+def _match_products_batch(
+    norm: str,
+    norm_map: dict[str, list[Product]],
+    pid_by_norm: dict[str, set[int]],
+    id_index: dict[int, Product],
+) -> list[Product]:
+    """Match products for one PN in batch mode.
+
+    Semantics: identical a search_pn, ma con indici precalcolati.
+    """
+    prods = list(norm_map.get(norm, []))
+    if prods:
+        return prods
+    ids_present: set[int] = set()
+    out: list[Product] = []
+    for pid in pid_by_norm.get(norm, set()):
+        if pid not in ids_present and pid in id_index:
+            out.append(id_index[pid])
+            ids_present.add(pid)
+    return out
+
+
+def _apply_filters(
+    offers: list[PNOfferItem], dealers: list[str] | None, in_stock_only: bool | None
+) -> list[PNOfferItem]:
+    filtered = offers
+    if dealers:
+        allowed = set(dealers)
+        filtered = [it for it in filtered if it.dealer in allowed]
+    if in_stock_only:
+        filtered = [it for it in filtered if it.in_stock]
+    return filtered
+
+
+def _sort_offers(offers: list[PNOfferItem]) -> list[PNOfferItem]:
+    def _key(it: PNOfferItem) -> tuple[int, float, int]:
+        instock_rank = 0 if it.in_stock else 1
+        price = it.price if it.price is not None else float("inf")
+        lead = it.lead_time_days if it.lead_time_days is not None else 9999
+        return (instock_rank, price, lead)
+
+    return sorted(offers, key=_key)
