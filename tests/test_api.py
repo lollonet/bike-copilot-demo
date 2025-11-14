@@ -102,3 +102,31 @@ def test_quote_and_files(client: TestClient) -> None:
     # Block non-allowed extension
     fr2 = client.get("/files/README.md", auth=auth)
     assert fr2.status_code == 404
+
+
+def test_kpi_today_requires_auth(client: TestClient) -> None:
+    """kpi/today must be protected by basic auth."""
+    r = client.get("/kpi/today")
+    assert r.status_code in (401, 403)
+
+
+def test_kpi_today_counts_events(client: TestClient) -> None:
+    """kpi/today should count quote_created events created by this test."""
+    auth = ("demo", "demo123")
+    # Trigger one quote (will emit quote_created)
+    r = client.post(
+        "/quote",
+        auth=auth,
+        json={
+            "items": [{"offer_id": 1, "qty": 1}],
+            "customer_name": "A",
+            "customer_contact": "B",
+        },
+    )
+    assert r.status_code == 200
+    # Now read KPI with auth
+    r2 = client.get("/kpi/today", auth=auth)
+    assert r2.status_code == 200
+    data = r2.json()
+    # At least one quote_created must be recorded for today
+    assert data.get("quote_created", 0) >= 1

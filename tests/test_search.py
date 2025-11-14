@@ -1,5 +1,6 @@
 import os
 from pathlib import Path
+import importlib
 
 import yaml
 
@@ -13,7 +14,14 @@ def test_synonyms():
 
 def _setup_db(tmp_name: str):
     os.environ["APP_DB_URL"] = f"sqlite:///./{tmp_name}"
-    # Import after setting env to pick up new DB URL
+    # Reload config and models so SessionLocal binds to the fresh DB URL
+    import app.config as app_config
+    import app.models as app_models
+    import app.search as app_search
+
+    importlib.reload(app_config)
+    importlib.reload(app_models)
+    importlib.reload(app_search)
     from app.models import Product, SupplierOffer, SessionLocal, create_all
 
     create_all()
@@ -160,3 +168,53 @@ def test_category_canonicalization_match():
     res = search(SearchRequest(category="Trasmissione Mtb"))
     assert res.items, "Expected results to match canonicalized category label"
     assert any(it.mpn == "C1" for it in res.items), "Should include product C1"
+
+
+def test_facets_apply_budget_and_supplier_filters():
+    """Facets must respect budget_max and suppliers filters when counting offers."""
+    Product, SupplierOffer, SessionLocal = _setup_db("test_facets.db")
+
+    with SessionLocal() as db:
+        p = Product(
+            brand="Shimano",
+            mpn="C1",
+            ean=None,
+            name="Catena 11v",
+            category="Catene",
+        )
+        db.add(p)
+        db.commit()
+        db.refresh(p)
+        db.add_all(
+            [
+                SupplierOffer(
+                    product_id=p.id,
+                    supplier="DealerA",
+                    price=10.0,
+                    in_stock=True,
+                    lead_time_days=1,
+                ),
+                SupplierOffer(
+                    product_id=p.id,
+                    supplier="DealerB",
+                    price=20.0,
+                    in_stock=True,
+                    lead_time_days=2,
+                ),
+            ]
+        )
+        db.commit()
+
+    from app.types import SearchRequest
+    from app.search import facets
+
+    # With budget_max=15 and suppliers=["DealerA"], only DealerA offer should count.
+    req = SearchRequest(
+        budget_max=15.0,
+        suppliers=["DealerA"],
+        in_stock_only=True,
+    )
+    res = facets(req)
+    # Supplier counts must include only DealerA after filters.
+    assert res.supplier.get("DealerA", 0) >= 1
+    assert res.supplier.get("DealerB", 0) == 0

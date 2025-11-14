@@ -7,9 +7,16 @@ import pytest
 from fastapi.testclient import TestClient
 
 
-def _prepare_env(tmp_db: str, out_dir: str) -> None:
+def _prepare_env(tmp_db: str, out_dir: str, with_auth: bool = False) -> None:
     os.environ["APP_DB_URL"] = f"sqlite:///./{tmp_db}"
     os.environ["APP_OUT_DIR"] = out_dir
+    if with_auth:
+        os.environ["APP_BASIC_USER"] = "demo"
+        os.environ["APP_BASIC_PASS"] = "demo123"
+    else:
+        # Clear auth env vars to ensure no auth is required
+        os.environ.pop("APP_BASIC_USER", None)
+        os.environ.pop("APP_BASIC_PASS", None)
 
 
 def _seed_db():
@@ -59,7 +66,28 @@ def _seed_db():
 
 @pytest.fixture()
 def client(tmp_path: Path) -> TestClient:
-    _prepare_env("test_api_batch.db", str(tmp_path / "out"))
+    _prepare_env("test_api_batch.db", str(tmp_path / "out"), with_auth=False)
+    # Reload modules to bind settings/SessionLocal to the fresh DB URL
+    import importlib
+    import app.config as app_config
+    import app.models as app_models
+    import app.pn as app_pn
+    import app.api as app_api
+
+    importlib.reload(app_config)
+    importlib.reload(app_models)
+    # Reload PN first so API can import fresh search_pn bound to new SessionLocal
+    importlib.reload(app_pn)
+    importlib.reload(app_api)
+    _seed_db()
+    from app.api import app
+
+    return TestClient(app)
+
+
+@pytest.fixture()
+def client_with_auth(tmp_path: Path) -> TestClient:
+    _prepare_env("test_api_batch.db", str(tmp_path / "out"), with_auth=True)
     # Reload modules to bind settings/SessionLocal to the fresh DB URL
     import importlib
     import app.config as app_config
@@ -98,3 +126,62 @@ def test_dealers(client: TestClient) -> None:
     data = r.json()
     names = {d["name"] for d in data["dealers"]}
     assert {"DealerA", "DealerB"}.issubset(names)
+
+
+def test_facets_endpoint_basic(client: TestClient) -> None:
+    """Exercise /facets endpoint for a simple query; shape only."""
+    r = client.post(
+        "/facets",
+        json={
+            "query_text": "Catena",
+            "speed": None,
+            "freehub": None,
+            "brake": None,
+            "axle": None,
+            "rotor": None,
+            "budget_max": None,
+            "category": None,
+            "suppliers": [],
+            "in_stock_only": False,
+        },
+    )
+    assert r.status_code == 200
+    data = r.json()
+    assert "totals" in data
+    assert "products" in data["totals"]
+
+
+def test_kpi_summary_endpoint_requires_auth(client_with_auth: TestClient) -> None:
+    """kpi/summary must enforce auth when basic credentials are configured."""
+    # Without credentials, should get 401
+    r = client_with_auth.get("/kpi/summary")
+    assert r.status_code == 401
+
+    # With wrong credentials, should also get 401
+    r = client_with_auth.get("/kpi/summary", auth=("wrong", "credentials"))
+    assert r.status_code == 401
+
+    # With correct credentials, should get 200
+    r = client_with_auth.get("/kpi/summary", auth=("demo", "demo123"))
+    assert r.status_code == 200
+
+
+def test_kpi_summary_endpoint_shape_without_auth(client: TestClient) -> None:
+    """Exercise /kpi/summary without auth for response shape (auth disabled)."""
+    # Since client fixture doesn't set auth env vars, the endpoint should work without auth
+    r = client.get("/kpi/summary")
+    assert r.status_code == 200
+    data = r.json()
+    # Required top-level fields
+    for key in [
+        "products_total",
+        "products_with_offers",
+        "coverage_pn_pct",
+        "offers_total",
+        "offers_updated_24h",
+        "updated_24h_pct",
+        "pn_unmapped",
+        "per_dealer",
+    ]:
+        assert key in data
+    assert isinstance(data["per_dealer"], list)

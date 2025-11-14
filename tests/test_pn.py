@@ -83,3 +83,53 @@ def test_search_pn_filters_and_sort():
     res2 = search_pn(SearchPNRequest(maker_pn="CN-HG601", dealers=["DealerB"]))
     assert res2.offers, "Expected filtered offers for DealerB"
     assert all(o.dealer == "DealerB" for o in res2.offers)
+
+
+def test_search_pn_batch_preserves_order_and_duplicates():
+    Product, SupplierOffer, SessionLocal = _setup_db("test_pn_batch.db")
+    with SessionLocal() as db:
+        p1 = Product(brand="Shimano", mpn="CN-HG601", ean=None, name="Catena 11v")
+        p2 = Product(brand="SRAM", mpn="PG-1230", ean=None, name="Cassetta 12v")
+        db.add_all([p1, p2])
+        db.commit()
+        db.refresh(p1)
+        db.refresh(p2)
+        db.add_all(
+            [
+                SupplierOffer(
+                    product_id=p1.id,
+                    supplier="DealerA",
+                    price=24.9,
+                    in_stock=True,
+                    lead_time_days=1,
+                ),
+                SupplierOffer(
+                    product_id=p2.id,
+                    supplier="DealerB",
+                    price=89.0,
+                    in_stock=True,
+                    lead_time_days=2,
+                ),
+            ]
+        )
+        db.commit()
+
+    from app.types import SearchPNBatchRequest
+    from app.pn import search_pn_batch
+
+    req = SearchPNBatchRequest(
+        items=["CN-HG601", "PG-1230", "CN-HG601", "UNKNOWN"],
+        dealers=None,
+        in_stock_only=None,
+    )
+    res = search_pn_batch(req)
+    # The order and multiplicity of input items must be preserved
+    assert [r.maker_pn for r in res.results] == [
+        "CN-HG601",
+        "PG-1230",
+        "CN-HG601",
+        "UNKNOWN",
+    ]
+    # Offers exist only for known PNs
+    counts = [len(r.offers) for r in res.results]
+    assert counts[0] >= 1 and counts[1] >= 1 and counts[2] >= 1 and counts[3] == 0
