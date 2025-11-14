@@ -6,7 +6,7 @@ This module reads providers/dealers.yaml and exposes typed configurations
 for higher-level CLI commands (dealer-sync, dealer-snapshot).
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -28,6 +28,16 @@ class DealerSeeds:
 
 
 @dataclass(frozen=True)
+class DealerLoginConfig:
+    mode: str
+    url: str | None = None
+    method: str = "POST"
+    username_field: str | None = None
+    password_field: str | None = None
+    extra_fields: dict[str, str] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
 class DealerConfig:
     key: str
     name: str
@@ -38,6 +48,7 @@ class DealerConfig:
     policy_url: str | None
     auth: DealerAuthConfig
     seeds: DealerSeeds
+    login: DealerLoginConfig | None
 
 
 def _repo_root() -> Path:
@@ -102,6 +113,23 @@ def load_dealers() -> list[DealerConfig]:
         sitemap = str(seeds_raw.get("sitemap") or "").strip() or None  # type: ignore[union-attr]
         seeds = DealerSeeds(urls=urls, sitemap=sitemap)
 
+        login_raw = entry.get("login") or {}
+        login_cfg: DealerLoginConfig | None = None
+        if isinstance(login_raw, dict) and login_raw.get("mode"):
+            login_cfg = DealerLoginConfig(
+                mode=str(login_raw.get("mode")).strip().lower(),
+                url=str(login_raw.get("url") or "").strip() or None,
+                method=str(login_raw.get("method") or "POST").strip().upper(),
+                username_field=str(login_raw.get("username_field") or "").strip()
+                or None,
+                password_field=str(login_raw.get("password_field") or "").strip()
+                or None,
+                extra_fields={
+                    str(k): str(v)
+                    for k, v in ((login_raw.get("extra_fields") or {}).items())  # type: ignore[union-attr]
+                },
+            )
+
         dealers.append(
             DealerConfig(
                 key=key,
@@ -113,6 +141,7 @@ def load_dealers() -> list[DealerConfig]:
                 policy_url=policy_url,
                 auth=auth,
                 seeds=seeds,
+                login=login_cfg,
             )
         )
     return dealers
@@ -124,4 +153,3 @@ def find_dealer(key: str) -> DealerConfig | None:
         if d.key.lower() == target or d.name.lower() == target:
             return d
     return None
-
