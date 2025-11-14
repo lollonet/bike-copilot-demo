@@ -5,9 +5,11 @@ import pytest
 from app.adapters.web_adapter import (
     parse_file,
     parse_detail_html,
+    parse_html,
     build_search_urls,
     fetch_and_parse_urls,
     parse_sitemap_urls,
+    _load_mapping,
 )
 
 
@@ -236,3 +238,26 @@ def test_parse_sitemap_urls_index_and_urlset(monkeypatch: pytest.MonkeyPatch) ->
     # Limit should truncate the list.
     urls_limited = parse_sitemap_urls("https://example.com/sitemap.xml", limit=1)
     assert urls_limited == ["https://example.com/page1"]
+
+
+def test_ciclopromo_listing_basic(tmp_path: Path) -> None:
+    """Ensure CicloPromo listing mapping extracts at least one product/offer."""
+    # Use the committed fixture file for reproducible testing
+    html_path = Path("providers/html/ciclopromo-fixture.html")
+    mapping_yaml = Path("providers/web-ciclopromo.yaml")
+
+    # Skip test if mapping doesn't exist (not all environments have it)
+    if not mapping_yaml.is_file():
+        pytest.skip(f"Mapping file {mapping_yaml} not found")
+
+    # Ensure fixture exists
+    assert html_path.is_file(), f"Test fixture {html_path} not found"
+
+    mp = _load_mapping(mapping_yaml)
+    html = html_path.read_text(encoding="utf-8")
+    products, offers = parse_html(html, mp)
+
+    # Basic validation that parser works with the mapping
+    assert products, "No products extracted from CicloPromo fixture"
+    assert offers, "No offers extracted from CicloPromo fixture"
+    assert all(o.supplier == "CicloPromo" for o in offers), "Supplier mismatch in offers"

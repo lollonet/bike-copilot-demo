@@ -1,0 +1,7 @@
+supplier: CicloPromo
+root: ".card.product-card.product-list"
+name: ".product-title a"
+price: ".product-price .text-accent"
+brand: ".product-price small:nth-of-type(2) b"
+mpn: ".product-price small:nth-of-type(1) b"
+
