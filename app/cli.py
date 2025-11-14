@@ -839,15 +839,16 @@ def _build_dealer_session(cfg: DealerConfig) -> DealerSession:
             payload_items.append((cfg.login.username_field, username))
         if cfg.login.password_field:
             payload_items.append((cfg.login.password_field, password))
-        form_data = httpx.FormData()
-        for k, v in payload_items:
-            form_data.add(k, v)
+
         method = (cfg.login.method or "POST").upper()
-        login_kwargs: dict[str, object] = {"data": form_data}
         if method == "POST":
-            resp = client.post(cfg.login.url, **login_kwargs)
+            # For POST requests, send as form-encoded data
+            form_data = dict(payload_items)
+            resp = client.post(cfg.login.url, data=form_data)
         elif method == "GET":
-            resp = client.get(cfg.login.url, params=payload)
+            # For GET requests, use query parameters instead of form data
+            query_params = dict(payload_items)
+            resp = client.get(cfg.login.url, params=query_params)
         else:
             raise typer.BadParameter(f"Metodo login {method} non supportato per {cfg.name}.")
         if resp.status_code >= 400:
