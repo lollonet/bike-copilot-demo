@@ -8,6 +8,7 @@ import typer
 from rich.table import Table
 import os
 import random
+import httpx
 
 from .adapters.csv_adapter import parse_offers_csv, parse_products_csv
 from .adapters.pdf_adapter import extract_from_pdf
@@ -32,7 +33,7 @@ from .search import search
 from .types import Brake, Freehub, QuoteResponse, Rotor, SearchRequest
 from .policy import parse_policy_html
 from .models import DealerPolicy
-from .dealers import DealerConfig, find_dealer
+from .dealers import DealerConfig, DealerLoginConfig, find_dealer
 
 
 app = typer.Typer(add_completion=True, no_args_is_help=True, help="Bike Copilot CLI")
@@ -771,19 +772,89 @@ def api(port: int = typer.Option(8000), host: str = typer.Option("0.0.0.0")) -> 
     uvicorn.run("app.api:app", host=host, port=port, reload=False)
 
 
-def _dealer_headers(cfg: DealerConfig) -> dict[str, str]:
-    """Build HTTP headers for a dealer based on env configuration.
+def _env_value(name: str | None) -> str:
+    if not name:
+        return ""
+    return os.getenv(name, "").strip()
 
-    We currently support cookie-based auth via COOKIE env; other modes can be added.
-    """
-    headers: dict[str, str] = {}
-    mode = None
+
+def _login_mode(cfg: DealerConfig) -> str | None:
+    if cfg.login:
+        return cfg.login.mode
     if cfg.auth.mode_env:
         mode = os.getenv(cfg.auth.mode_env, "").strip().lower()
-    cookie = os.getenv(cfg.auth.cookie_env, "").strip() if cfg.auth.cookie_env else ""
-    if mode == "cookie" and cookie:
-        headers["Cookie"] = cookie
-    return headers
+        return mode or None
+    return None
+
+
+class DealerSession:
+    def __init__(self, client: httpx.Client, login_cfg: DealerLoginConfig | None):
+        self.client = client
+        self.login_cfg = login_cfg
+
+    def close(self) -> None:
+        self.client.close()
+
+
+def _build_dealer_session(cfg: DealerConfig) -> DealerSession:
+    headers = {"User-Agent": "BikeCopilotBot/0.1"}
+    mode = _login_mode(cfg)
+    username = _env_value(cfg.auth.username_env)
+    password = _env_value(cfg.auth.password_env)
+    cookie = _env_value(cfg.auth.cookie_env)
+
+    client = httpx.Client(
+        timeout=15.0,
+        headers=headers,
+        follow_redirects=True,
+    )
+
+    if mode == "cookie":
+        if not cookie:
+            raise typer.BadParameter(
+                f"Nessun cookie impostato per {cfg.name}; definisci {cfg.auth.cookie_env}."
+            )
+        client.headers["Cookie"] = cookie
+    elif mode == "basic":
+        if not username or not password:
+            raise typer.BadParameter(
+                f"Credenziali mancanti per {cfg.name}; definisci {cfg.auth.username_env} e {cfg.auth.password_env}."
+            )
+        client.auth = (username, password)  # type: ignore[assignment]
+    elif mode == "form":
+        if not cfg.login:
+            raise typer.BadParameter(
+                f"Configurazione login mancante per {cfg.name} (section login in providers/dealers.yaml)."
+            )
+        if not cfg.login.url:
+            raise typer.BadParameter(
+                f"login.url non impostato per {cfg.name}."
+            )
+        if not username or not password:
+            raise typer.BadParameter(
+                f"Credenziali mancanti per {cfg.name}; definisci {cfg.auth.username_env} e {cfg.auth.password_env}."
+            )
+        payload_items: list[tuple[str, str]] = list(cfg.login.extra_fields.items())
+        if cfg.login.username_field:
+            payload_items.append((cfg.login.username_field, username))
+        if cfg.login.password_field:
+            payload_items.append((cfg.login.password_field, password))
+        form_data = httpx.FormData()
+        for k, v in payload_items:
+            form_data.add(k, v)
+        method = (cfg.login.method or "POST").upper()
+        login_kwargs: dict[str, object] = {"data": form_data}
+        if method == "POST":
+            resp = client.post(cfg.login.url, **login_kwargs)
+        elif method == "GET":
+            resp = client.get(cfg.login.url, params=payload)
+        else:
+            raise typer.BadParameter(f"Metodo login {method} non supportato per {cfg.name}.")
+        if resp.status_code >= 400:
+            raise typer.BadParameter(
+                f"Login fallito per {cfg.name}: HTTP {resp.status_code}"
+            )
+    return DealerSession(client, cfg.login)
 
 
 @app.command("dealer-sync")
@@ -810,103 +881,104 @@ def dealer_sync(
     if cfg is None:
         raise typer.BadParameter(f"Dealer '{dealer}' non trovato in providers/dealers.yaml")
 
-    headers = _dealer_headers(cfg)
     rich.print(f"[bold]Dealer[/bold]: {cfg.name} (tipo={cfg.type}, platform={cfg.platform})")
 
-    # Policy
-    if mode_l in ("all", "policy") and cfg.policy_url:
-        rich.print(f"[cyan]Scarico policy da[/cyan] {cfg.policy_url}")
-        import httpx
-
-        with httpx.Client(
-            timeout=15.0,
-            headers=headers or {"User-Agent": "BikeCopilotBot/0.1"},
-            follow_redirects=True,
-        ) as client:
-            r = client.get(cfg.policy_url)
+    session = _build_dealer_session(cfg)
+    try:
+        # Policy
+        if mode_l in ("all", "policy") and cfg.policy_url:
+            rich.print(f"[cyan]Scarico policy da[/cyan] {cfg.policy_url}")
+            r = session.client.get(cfg.policy_url)
             r.raise_for_status()
             ext = parse_policy_html(r.text)
-        create_all()
-        with SessionLocal() as db:
-            row = (
-                db.query(DealerPolicy)
-                .filter(DealerPolicy.dealer == cfg.name)
-                .first()
-            )
-            if row is None:
-                db.add(
-                    DealerPolicy(
-                        dealer=cfg.name,
-                        base_cost=ext.base_cost,
-                        free_threshold=ext.free_threshold,
-                        lead_days_std=ext.lead_days_std,
-                        source="rules",
-                        confidence=ext.confidence,
+            create_all()
+            with SessionLocal() as db:
+                row = (
+                    db.query(DealerPolicy)
+                    .filter(DealerPolicy.dealer == cfg.name)
+                    .first()
+                )
+                if row is None:
+                    db.add(
+                        DealerPolicy(
+                            dealer=cfg.name,
+                            base_cost=ext.base_cost,
+                            free_threshold=ext.free_threshold,
+                            lead_days_std=ext.lead_days_std,
+                            source="rules",
+                            confidence=ext.confidence,
+                        )
                     )
+                else:
+                    row.base_cost = ext.base_cost
+                    row.free_threshold = ext.free_threshold
+                    row.lead_days_std = ext.lead_days_std
+                    row.source = "rules"
+                    row.confidence = ext.confidence
+                db.commit()
+            rich.print(
+                {
+                    "dealer": cfg.name,
+                    "base_cost": ext.base_cost,
+                    "free_threshold": ext.free_threshold,
+                    "lead_days_std": ext.lead_days_std,
+                    "confidence": ext.confidence,
+                }
+            )
+
+        # Catalog ingest (solo web v1)
+        if mode_l in ("all", "catalogo"):
+            if cfg.type != "web":
+                rich.print(
+                    f"[yellow]Tipo '{cfg.type}' non ancora supportato per ingest automatico[/yellow]"
+                )
+            elif not cfg.mapping:
+                rich.print(
+                    "[yellow]Nessun mapping configurato per questo dealer (campo 'mapping' mancante).[/yellow]"
                 )
             else:
-                row.base_cost = ext.base_cost
-                row.free_threshold = ext.free_threshold
-                row.lead_days_std = ext.lead_days_std
-                row.source = "rules"
-                row.confidence = ext.confidence
-            db.commit()
-        rich.print(
-            {
-                "dealer": cfg.name,
-                "base_cost": ext.base_cost,
-                "free_threshold": ext.free_threshold,
-                "lead_days_std": ext.lead_days_std,
-                "confidence": ext.confidence,
-            }
-        )
+                from .adapters.web_adapter import fetch_and_parse_urls, parse_sitemap_urls
+                from .dealers import _repo_root
 
-    # Catalog ingest (solo web v1)
-    if mode_l in ("all", "catalogo"):
-        if cfg.type != "web":
-            rich.print(
-                f"[yellow]Tipo '{cfg.type}' non ancora supportato per ingest automatico[/yellow]"
-            )
-        elif not cfg.mapping:
-            rich.print(
-                "[yellow]Nessun mapping configurato per questo dealer (campo 'mapping' mancante).[/yellow]"
-            )
-        else:
-            from .adapters.web_adapter import fetch_and_parse_urls, parse_sitemap_urls
+                # Resolve mapping path relative to repository root
+                mapping_path = _repo_root() / cfg.mapping
 
-            urls: list[str] = []
-            # Seeds diretti
-            urls.extend(cfg.seeds.urls)
-            # Seeds via sitemap, se presente
-            if cfg.seeds.sitemap:
-                rich.print(f"[cyan]Leggo sitemap[/cyan] {cfg.seeds.sitemap}")
-                more = parse_sitemap_urls(cfg.seeds.sitemap, headers=headers, limit=None)
-                urls.extend(more)
+                urls: list[str] = []
+                urls.extend(cfg.seeds.urls)
+                if cfg.seeds.sitemap:
+                    rich.print(f"[cyan]Leggo sitemap[/cyan] {cfg.seeds.sitemap}")
+                    more = parse_sitemap_urls(
+                        cfg.seeds.sitemap, headers=None, limit=None, session=session.client
+                    )
+                    urls.extend(more)
 
-            if not urls:
-                rich.print(
-                    "[yellow]Nessun URL seed configurato per il dealer; salta ingest catalogo.[/yellow]"
-                )
-            else:
-                rich.print(f"[cyan]Ingest catalogo[/cyan] da {len(urls)} seed")
-                products, offers = fetch_and_parse_urls(
-                    urls=urls,
-                    mapping_yaml=Path(cfg.mapping),
-                    follow_next=True,
-                    max_pages=max_pages,
-                    delay_sec=delay,
-                    headers=headers,
-                )
-                stats: IngestStats = upsert(products, offers)
-                rich.print(
-                    {
-                        "dealer": cfg.name,
-                        "products_new": stats.products_new,
-                        "products_updated": stats.products_updated,
-                        "offers_upserted": stats.offers_upserted,
-                        "offers_skipped": stats.offers_skipped,
-                    }
-                )
+                if not urls:
+                    rich.print(
+                        "[yellow]Nessun URL seed configurato per il dealer; salta ingest catalogo.[/yellow]"
+                    )
+                else:
+                    rich.print(f"[cyan]Ingest catalogo[/cyan] da {len(urls)} seed")
+                    products, offers = fetch_and_parse_urls(
+                        urls=urls,
+                        mapping_yaml=mapping_path,
+                        follow_next=True,
+                        max_pages=max_pages,
+                        delay_sec=delay,
+                        headers=None,
+                        session=session.client,
+                    )
+                    stats: IngestStats = upsert(products, offers)
+                    rich.print(
+                        {
+                            "dealer": cfg.name,
+                            "products_new": stats.products_new,
+                            "products_updated": stats.products_updated,
+                            "offers_upserted": stats.offers_upserted,
+                            "offers_skipped": stats.offers_skipped,
+                        }
+                    )
+    finally:
+        session.close()
 
 
 def main() -> None:
