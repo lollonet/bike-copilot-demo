@@ -46,7 +46,7 @@ def load_dealers() -> List[str]:
 
 def do_search(
     pn_text: str, dealers: List[str], in_stock_only: bool
-) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
+) -> Tuple[List[List[Any]], Dict[str, Any]]:
     items = _parse_pn_lines(pn_text)
     if not items:
         return [], {"results": []}
@@ -57,20 +57,21 @@ def do_search(
         payload["in_stock_only"] = True
     data = _api_post("/search_pn_batch", payload)
     # Flatten offers to a simple table per PN for preview
-    rows: List[Dict[str, Any]] = []
+    rows: List[List[Any]] = []
     for res in data.get("results", []):
         pn = res.get("maker_pn")
         offers = res.get("offers", [])
         for o in offers:
             rows.append(
-                {
-                    "PN": pn,
-                    "Dealer": o.get("dealer"),
-                    "Prezzo": o.get("price"),
-                    "Stock": "✓" if o.get("in_stock") else "✗",
-                    "Lead": o.get("lead_time_days"),
-                    "OfferID": o.get("offer_id"),
-                }
+                [
+                    pn,
+                    o.get("name"),
+                    o.get("dealer"),
+                    o.get("price"),
+                    "✓" if o.get("in_stock") else "✗",
+                    o.get("lead_time_days"),
+                    o.get("offer_id"),
+                ]
             )
     return rows, data
 
@@ -88,6 +89,7 @@ def add_best_to_cart(
         cart.append(
             {
                 "PN": pn,
+                "Descrizione": o.get("name"),
                 "Dealer": o.get("dealer"),
                 "Prezzo": float(o.get("price") or 0.0),
                 "Qty": 1,
@@ -121,6 +123,14 @@ def ui() -> None:
     dealers = load_dealers()
     with gr.Blocks(title="PN-first — Preventivo") as demo:
         gr.Markdown("## Preventivo PN‑first")
+        scenario_options = [
+            ("Miglior prezzo (multi-dealer)", "miglior-prezzo"),
+            ("Un solo dealer", "un-solo-dealer"),
+            ("Al massimo N dealer", "max-n-dealer"),
+            ("Più veloce", "piu-veloce"),
+        ]
+        scenario_value_map = {label: value for label, value in scenario_options}
+
         with gr.Row():
             pn_text = gr.Textbox(lines=6, label="PN (uno per riga)")
             with gr.Column(scale=1):
@@ -128,24 +138,63 @@ def ui() -> None:
                 in_stock = gr.Checkbox(label="Solo in stock", value=True)
                 search_btn = gr.Button("Cerca", variant="primary")
                 add_btn = gr.Button("Aggiungi migliori al carrello")
+        notes_box = gr.Textbox(
+            label="Descrizione preventivo (facoltativa)",
+            placeholder="Note per il cliente / condizioni particolari",
+            lines=2,
+        )
+        with gr.Row():
+            scenario_dd = gr.Radio(
+                choices=[label for label, _ in scenario_options],
+                value=scenario_options[0][0],
+                label="Scenario ottimizzazione",
+            )
+            max_dealer_slider = gr.Slider(
+                minimum=1,
+                maximum=5,
+                value=2,
+                step=1,
+                label="Dealer max (solo scenario 'Al massimo N dealer')",
+            )
+        with gr.Row():
+            penale_dealer_input = gr.Number(
+                value=3.5, label="Penale per dealer aggiuntivo (€)"
+            )
+            penale_lead_input = gr.Number(
+                value=0.5, label="Penale per giorno di lead time (€)"
+            )
         results = gr.Dataframe(
-            headers=["PN", "Dealer", "Prezzo", "Stock", "Lead", "OfferID"],
+            headers=[
+                "PN",
+                "Descrizione",
+                "Dealer",
+                "Prezzo",
+                "Stock",
+                "Lead",
+                "OfferID",
+            ],
             interactive=False,
             wrap=True,
         )
         batch_state = gr.State({})
         cart_state = gr.State([])  # list of rows
+        opt_state = gr.State({})
         gr.Markdown("### Carrello")
         cart_df = gr.Dataframe(
-            headers=["PN", "Dealer", "Prezzo", "Qty", "Lead", "OfferID"],
+            headers=["PN", "Descrizione", "Dealer", "Prezzo", "Qty", "Lead", "OfferID"],
             interactive=True,
         )
         with gr.Row():
             quote_btn = gr.Button("Crea preventivo")
-            quote_out = gr.JSON(label="Esito preventivo")
+            quote_out = gr.Markdown(
+                "_Premi **Crea preventivo** per generare l'offerta con i link._"
+            )
         with gr.Row():
             opt_btn = gr.Button("Ottimizza (anteprima)")
-            opt_json = gr.JSON(label="Piano ottimizzato")
+            apply_btn = gr.Button("Applica piano al carrello")
+        opt_json = gr.Markdown(
+            "_Premi **Ottimizza** per vedere la proposta multi-dealer._"
+        )
 
         def _on_search(text: str, dlrs: List[str], stock: bool):
             rows, data = do_search(text, dlrs, stock)
@@ -155,25 +204,35 @@ def ui() -> None:
             new_cart = add_best_to_cart(batch, cart or [])
             return new_cart
 
-        def _on_quote(cart: List[Dict[str, Any]]):
+        def _on_quote(cart: List[Dict[str, Any]], notes: str):
             items = to_quote_items(cart or [])
             if not items:
                 return {"error": "carrello vuoto"}
             try:
+                payload = {
+                    "items": items,
+                    "customer_name": "Cliente",
+                    "customer_contact": "",
+                    "validity_days": 7,
+                }
+                note_txt = (notes or "").strip()
+                if note_txt:
+                    payload["notes"] = note_txt
                 data = _api_post(
                     "/quote",
-                    {
-                        "items": items,
-                        "customer_name": "Cliente",
-                        "customer_contact": "",
-                        "validity_days": 7,
-                    },
+                    payload,
                 )
                 return data
             except Exception as e:
                 return {"error": str(e)}
 
-        def _on_optimize(cart: List[Dict[str, Any]]):
+        def _on_optimize(
+            cart: List[Dict[str, Any]],
+            scenario_label: str,
+            max_dealer: float,
+            penale_dealer: float,
+            penale_lead: float,
+        ):
             # Use PN+qty from cart; ignore locked dealers (v1)
             if not cart:
                 return {"error": "carrello vuoto"}
@@ -184,9 +243,18 @@ def ui() -> None:
                 if pn and q > 0:
                     items.append({"maker_pn": pn, "qty": q})
             try:
+                scenario_code = scenario_value_map.get(scenario_label, "miglior-prezzo")
                 data = _api_post(
                     "/optimize",
-                    {"items": items, "params": {"scenario": "miglior-prezzo"}},
+                    {
+                        "items": items,
+                        "params": {
+                            "scenario": scenario_code,
+                            "max_dealer": int(max_dealer),
+                            "penale_dealer": float(penale_dealer),
+                            "penale_lead": float(penale_lead),
+                        },
+                    },
                 )
                 return data
             except Exception as e:
@@ -199,9 +267,150 @@ def ui() -> None:
         )
         add_btn.click(
             _on_add, inputs=[batch_state, cart_state], outputs=[cart_state]
-        ).then(lambda c: c, cart_state, cart_df)
-        quote_btn.click(_on_quote, inputs=[cart_state], outputs=[quote_out])
-        opt_btn.click(_on_optimize, inputs=[cart_state], outputs=[opt_json])
+        ).then(
+            lambda cart: [
+                [
+                    row.get("PN"),
+                    row.get("Descrizione"),
+                    row.get("Dealer"),
+                    row.get("Prezzo"),
+                    row.get("Qty"),
+                    row.get("Lead"),
+                    row.get("OfferID"),
+                ]
+                for row in (cart or [])
+            ],
+            cart_state,
+            cart_df,
+        )
+
+        def _render_quote(cart: List[Dict[str, Any]], notes: str) -> str:
+            payload = _on_quote(cart, notes)
+            if "error" in payload:
+                return f"**Errore:** {payload['error']}"
+            html_path = payload.get("html_path") or "(n/d)"
+            pdf_path = payload.get("pdf_path")
+            file_url = payload.get("file_url")
+            rows = [
+                "### Esito preventivo",
+                f"- HTML: `{html_path}`",
+                f"- PDF: `{pdf_path or 'non generato'}`",
+            ]
+            if file_url:
+                rows.append(f"- Link: [{file_url}]({file_url})")
+            note_txt = (notes or "").strip()
+            if note_txt:
+                rows.append(f"- Note: {note_txt}")
+            return "\n".join(rows)
+
+        def _render_opt_payload(payload: Dict[str, Any], scenario_label: str) -> str:
+            rows = [f"### Piano ottimizzato ({scenario_label})"]
+            notes = payload.get("notes") or []
+            if notes:
+                rows.append("\n".join(f"- {n}" for n in notes))
+            offer_lines = payload.get("lines") or []
+            if offer_lines:
+                rows.append(
+                    "| PN | Descrizione | Dealer | Qty | Prezzo | Lead | Totale |"
+                )
+                rows.append("| --- | --- | --- | --- | --- | --- | --- |")
+                for line in offer_lines:
+                    rows.append(
+                        "| {pn} | {name} | {dealer} | {qty} | {price:.2f} | {lead} | {total:.2f} |".format(
+                            pn=line.get("maker_pn", ""),
+                            name=line.get("name") or "",
+                            dealer=line.get("dealer", ""),
+                            qty=line.get("qty") or 0,
+                            price=float(line.get("unit_price") or 0.0),
+                            lead=line.get("lead_time_days") or "-",
+                            total=float(line.get("line_total") or 0.0),
+                        )
+                    )
+            costs = payload.get("costs") or {}
+            if costs:
+                rows.append(
+                    "\n**Costi** — Subtotale: {sub:.2f} € · Spedizione: {ship:.2f} € · Penalità: {pen:.2f} € · Totale: {tot:.2f} €".format(
+                        sub=float(costs.get("subtotal") or 0.0),
+                        ship=float(costs.get("shipping") or 0.0),
+                        pen=float(costs.get("penalties") or 0.0),
+                        tot=float(costs.get("total") or 0.0),
+                    )
+                )
+            dealers = payload.get("dealers") or []
+            if dealers:
+                rows.append("**Dealer coinvolti:** " + ", ".join(dealers))
+            return "\n".join(rows)
+
+        def _format_optimize(
+            cart: List[Dict[str, Any]],
+            scenario_label: str,
+            max_dealer: float,
+            penale_dealer: float,
+            penale_lead: float,
+        ) -> Tuple[str, Dict[str, Any]]:
+            payload = _on_optimize(
+                cart, scenario_label, max_dealer, penale_dealer, penale_lead
+            )
+            if "error" in payload:
+                return f"**Errore:** {payload['error']}", {}
+            scenario_code = scenario_value_map.get(scenario_label, "miglior-prezzo")
+            label = scenario_label or scenario_code
+            md = _render_opt_payload(payload, label)
+            return md, payload
+
+        def _apply_plan(plan: Dict[str, Any], cart: List[Dict[str, Any]]):
+            if not isinstance(plan, dict) or not plan.get("lines"):
+                return cart or []
+            new_cart: List[Dict[str, Any]] = []
+            for line in plan.get("lines", []):
+                offer_id = line.get("offer_id")
+                if offer_id is None:
+                    continue
+                new_cart.append(
+                    {
+                        "PN": line.get("maker_pn"),
+                        "Descrizione": line.get("name") or line.get("maker_pn"),
+                        "Dealer": line.get("dealer"),
+                        "Prezzo": float(line.get("unit_price") or 0.0),
+                        "Qty": int(line.get("qty") or 1),
+                        "Lead": line.get("lead_time_days"),
+                        "OfferID": offer_id,
+                    }
+                )
+            return new_cart
+
+        quote_btn.click(
+            _render_quote, inputs=[cart_state, notes_box], outputs=[quote_out]
+        )
+        opt_btn.click(
+            _format_optimize,
+            inputs=[
+                cart_state,
+                scenario_dd,
+                max_dealer_slider,
+                penale_dealer_input,
+                penale_lead_input,
+            ],
+            outputs=[opt_json, opt_state],
+        )
+        apply_btn.click(
+            _apply_plan, inputs=[opt_state, cart_state], outputs=[cart_state]
+        ).then(
+            lambda cart: [
+                [
+                    row.get("PN"),
+                    row.get("Descrizione"),
+                    row.get("Dealer"),
+                    row.get("Prezzo"),
+                    row.get("Qty"),
+                    row.get("Lead"),
+                    row.get("OfferID"),
+                ]
+                for row in (cart or [])
+            ],
+            cart_state,
+            cart_df,
+        )
 
     demo.launch(server_name="0.0.0.0", server_port=7861)
 

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import TypedDict
+from urllib.parse import parse_qs, urlparse
 
 import rich
 from pydantic import BaseModel
@@ -1000,6 +1001,25 @@ def dealer_sync(
                     )
                 else:
                     rich.print(f"[cyan]Ingest catalogo[/cyan] da {len(urls)} seed")
+
+                    def _progress_cb(
+                        page_url: str,
+                        page_idx: int,
+                        products_total: int,
+                        offers_total: int,
+                    ) -> None:
+                        parsed = urlparse(page_url)
+                        params = parse_qs(parsed.query or "")
+                        page_hint = (
+                            params.get("page", [""])[0] or params.get("skip", [""])[0]
+                        )
+                        label = page_hint or str(page_idx)
+                        location = parsed.path or page_url
+                        rich.print(
+                            f"[dim]  ↳ pagina {label} ({location}) "
+                            f"prodotti={products_total} offerte={offers_total}[/dim]"
+                        )
+
                     products, offers = fetch_and_parse_urls(
                         urls=urls,
                         mapping_yaml=mapping_path,
@@ -1008,6 +1028,7 @@ def dealer_sync(
                         delay_sec=delay,
                         headers=None,
                         session=session.client,
+                        progress_cb=_progress_cb,
                     )
                     stats: IngestStats = upsert(products, offers)
                     rich.print(
