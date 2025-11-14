@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from sqlalchemy import select
+from sqlalchemy.orm import Session
 
 from .models import (
     PriceHistory,
@@ -42,7 +43,7 @@ def upsert(core: list[ProductInput], offers: list[OfferInput]) -> IngestStats:
 
 
 def _upsert_products(
-    db: SessionLocal, core: list[ProductInput], stats: IngestStats
+    db: Session, core: list[ProductInput], stats: IngestStats
 ) -> IngestStats:
     for p in core:
         existing = _find_existing_product(db, p)
@@ -84,7 +85,7 @@ def _upsert_products(
     return stats
 
 
-def _find_existing_product(db: SessionLocal, p: ProductInput) -> Product | None:
+def _find_existing_product(db: Session, p: ProductInput) -> Product | None:
     existing: Product | None = None
     if p.ean:
         existing = db.scalar(select(Product).where(Product.ean == p.ean))
@@ -96,8 +97,9 @@ def _find_existing_product(db: SessionLocal, p: ProductInput) -> Product | None:
 
 
 def _upsert_offers_and_mappings(
-    db: SessionLocal, offers: list[OfferInput], stats: IngestStats
+    db: Session, offers: list[OfferInput], stats: IngestStats
 ) -> IngestStats:
+    existing_offers: dict[tuple[int, str], SupplierOffer] = {}
     for o in offers:
         product = db.scalar(
             select(Product).where(Product.brand == o.brand, Product.mpn == o.mpn)
@@ -111,28 +113,36 @@ def _upsert_offers_and_mappings(
             )
             continue
 
-        offer_existing = db.scalar(
-            select(SupplierOffer).where(
-                SupplierOffer.product_id == product.id,
-                SupplierOffer.supplier == o.supplier,
+        product_id = int(product.id)
+        cache_key = (product_id, o.supplier)
+        offer_existing = existing_offers.get(cache_key)
+        if offer_existing is None:
+            offer_existing = db.scalar(
+                select(SupplierOffer).where(
+                    SupplierOffer.product_id == product_id,
+                    SupplierOffer.supplier == o.supplier,
+                )
             )
-        )
+            if offer_existing is not None:
+                existing_offers[cache_key] = offer_existing
         if offer_existing is None:
             offer = SupplierOffer(
-                product_id=product.id,
+                product_id=product_id,
                 supplier=o.supplier,
                 price=o.price,
                 in_stock=o.in_stock,
                 lead_time_days=o.lead_time_days,
             )
             db.add(offer)
+            existing_offers[cache_key] = offer
         else:
             if offer_existing.price != o.price:
-                db.add(
-                    PriceHistory(
-                        offer_id=offer_existing.id, price=o.price, source_hash=None
+                if offer_existing.id is not None:
+                    db.add(
+                        PriceHistory(
+                            offer_id=offer_existing.id, price=o.price, source_hash=None
+                        )
                     )
-                )
             offer_existing.price = o.price
             offer_existing.in_stock = o.in_stock
             offer_existing.lead_time_days = o.lead_time_days
@@ -149,7 +159,7 @@ def _upsert_offers_and_mappings(
     return stats
 
 
-def _upsert_pn_mapping(db: SessionLocal, product: Product, offer: OfferInput) -> None:
+def _upsert_pn_mapping(db: Session, product: Product, offer: OfferInput) -> None:
     dealer_code: str | None = None
     try:
         dealer_code_raw = (offer.extra or {}).get("dealer_pn")  # type: ignore[union-attr]
@@ -162,7 +172,9 @@ def _upsert_pn_mapping(db: SessionLocal, product: Product, offer: OfferInput) ->
     dealer_norm = normalize_pn(dealer_code)
     row = (
         db.query(PNMapping)
-        .filter(PNMapping.dealer == offer.supplier, PNMapping.dealer_pn_norm == dealer_norm)
+        .filter(
+            PNMapping.dealer == offer.supplier, PNMapping.dealer_pn_norm == dealer_norm
+        )
         .first()
     )
     if row:

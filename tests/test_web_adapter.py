@@ -91,7 +91,9 @@ def test_build_search_urls_missing_template_raises(tmp_path: Path) -> None:
         build_search_urls("foo", mapping_yaml)
 
 
-def test_fetch_and_parse_urls_with_pagination(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_fetch_and_parse_urls_with_pagination(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     """fetch_and_parse_urls should follow relative next links and aggregate offers."""
     mapping_yaml = tmp_path / "web_map.yaml"
     mapping_yaml.write_text(
@@ -148,7 +150,9 @@ def test_fetch_and_parse_urls_with_pagination(monkeypatch: pytest.MonkeyPatch, t
             return None
 
     class DummyClient:
-        def __init__(self, timeout: float, headers: dict[str, str], follow_redirects: bool):
+        def __init__(
+            self, timeout: float, headers: dict[str, str], follow_redirects: bool
+        ):
             self._timeout = timeout
             self._headers = headers
             self._follow = follow_redirects
@@ -176,6 +180,104 @@ def test_fetch_and_parse_urls_with_pagination(monkeypatch: pytest.MonkeyPatch, t
         delay_sec=0.0,
     )
     # We expect two products and two offers from seed + page2
+    assert len(products) == 2
+    assert len(offers) == 2
+    brands = {p.brand for p in products}
+    assert {"Shimano", "SRAM"}.issubset(brands)
+
+
+def test_fetch_and_parse_urls_query_pagination(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Query-based pagination should append skip=N results until empty."""
+    mapping_yaml = tmp_path / "web_query.yaml"
+    mapping_yaml.write_text(
+        "\n".join(
+            [
+                "supplier: DemoWeb",
+                "root: .item",
+                "brand: .brand",
+                "mpn: .mpn",
+                "name: .name",
+                "price: .price",
+                "pagination:",
+                "  mode: query",
+                "  param: skip",
+                "  limit_selector: '#pagination'",
+                "  limit: 1",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    first_page = """
+    <html><body>
+      <div id="pagination" style="display:none">1</div>
+      <div class="item">
+        <span class="brand">Shimano</span>
+        <span class="mpn">C1</span>
+        <span class="name">Catena 11v</span>
+        <span class="price">10,50 €</span>
+      </div>
+    </body></html>
+    """
+    second_page = """
+    <html><body>
+      <div id="pagination" style="display:none">1</div>
+      <div class="item">
+        <span class="brand">SRAM</span>
+        <span class="mpn">PG-1230</span>
+        <span class="name">Cassetta 12v</span>
+        <span class="price">89,00 €</span>
+      </div>
+    </body></html>
+    """
+
+    mapping_html: dict[str, str] = {
+        "https://shop.example/list?publicPrices=true": first_page,
+        "https://shop.example/list?publicPrices=true&skip=1": second_page,
+    }
+
+    import httpx
+    import time
+
+    class DummyResp:
+        def __init__(self, text: str):
+            self.text = text
+
+        def raise_for_status(self) -> None:
+            return None
+
+    class DummyClient:
+        def __init__(
+            self, timeout: float, headers: dict[str, str], follow_redirects: bool
+        ):
+            self._timeout = timeout
+            self._headers = headers
+            self._follow = follow_redirects
+
+        def get(self, url: str) -> DummyResp:
+            html = mapping_html.get(url)
+            if html is None:
+                raise RuntimeError(f"Unexpected URL {url}")
+            return DummyResp(html)
+
+        def __enter__(self) -> "DummyClient":
+            return self
+
+        def __exit__(self, exc_type, exc, tb) -> None:
+            return None
+
+    monkeypatch.setattr(httpx, "Client", DummyClient, raising=False)
+    monkeypatch.setattr(time, "sleep", lambda _s: None, raising=False)
+
+    products, offers = fetch_and_parse_urls(
+        ["https://shop.example/list?publicPrices=true"],
+        mapping_yaml,
+        follow_next=True,
+        max_pages=2,
+        delay_sec=0.0,
+    )
     assert len(products) == 2
     assert len(offers) == 2
     brands = {p.brand for p in products}
@@ -213,7 +315,9 @@ def test_parse_sitemap_urls_index_and_urlset(monkeypatch: pytest.MonkeyPatch) ->
             return None
 
     class DummyClient:
-        def __init__(self, timeout: float, headers: dict[str, str], follow_redirects: bool):
+        def __init__(
+            self, timeout: float, headers: dict[str, str], follow_redirects: bool
+        ):
             self._timeout = timeout
             self._headers = headers
             self._follow = follow_redirects
@@ -260,4 +364,6 @@ def test_ciclopromo_listing_basic(tmp_path: Path) -> None:
     # Basic validation that parser works with the mapping
     assert products, "No products extracted from CicloPromo fixture"
     assert offers, "No offers extracted from CicloPromo fixture"
-    assert all(o.supplier == "CicloPromo" for o in offers), "Supplier mismatch in offers"
+    assert all(o.supplier == "CicloPromo" for o in offers), (
+        "Supplier mismatch in offers"
+    )

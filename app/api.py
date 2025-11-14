@@ -25,6 +25,7 @@ from .types import (
     SearchPNResponse,
     SearchPNBatchRequest,
     SearchPNBatchResponse,
+    DealerInfo,
     DealersResponse,
     OptimizeRequest,
     OptimizeResponse,
@@ -168,19 +169,10 @@ def api_dealers() -> DealersResponse:
             .all()
         )
     dealers = [
-        {
-            "name": str(name),
-            "offers": int(cnt),
-            "last_updated": upd,
-        }
+        DealerInfo(name=str(name), offers=int(cnt), last_updated=upd)
         for (name, cnt, upd) in rows
     ]
-    return DealersResponse(
-        dealers=[
-            # pydantic will coerce dicts to DealerInfo
-            *dealers
-        ]
-    )
+    return DealersResponse(dealers=dealers)
 
 
 @app.post("/optimize", response_model=OptimizeResponse)
@@ -326,7 +318,7 @@ def kpi_today(request: Request, _: None = Depends(require_auth)) -> dict[str, in
 
 @app.get("/kpi/summary", response_model=KPISummaryResponse)
 def kpi_summary(_: Request, __: None = Depends(require_auth)) -> KPISummaryResponse:
-    from datetime import datetime, timedelta, timezone
+    from datetime import datetime, timedelta
     from sqlalchemy import func
 
     create_all()
@@ -374,7 +366,11 @@ def kpi_summary(_: Request, __: None = Depends(require_auth)) -> KPISummaryRespo
             pct_24 = (upd_24h / cnt * 100.0) if cnt > 0 else 0.0
             lag_days = None
             if last_upd is not None:
-                lu = last_upd.replace(tzinfo=None) if getattr(last_upd, "tzinfo", None) else last_upd
+                lu = (
+                    last_upd.replace(tzinfo=None)
+                    if getattr(last_upd, "tzinfo", None)
+                    else last_upd
+                )
                 lag_days = max(0.0, (now - lu).total_seconds() / 86400.0)
             per_dealer.append(
                 KPIDealerEntry(

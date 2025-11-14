@@ -19,7 +19,9 @@ def _prepare_env(tmp_db: str) -> None:
     importlib.reload(app_ingest_pdf)
 
 
-def test_ingest_pdf_main(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+def test_ingest_pdf_main(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
     """Smoke test: ingest_pdf.main wires stage_file, extract_from_pdf and upsert."""
     _prepare_env("test_ingest_pdf.db")
 
@@ -102,4 +104,3 @@ def test_ingest_pdf_main(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys
     assert "IngestStats" in out
     assert "products_new=1" in out
     assert "offers_upserted=1" in out
-

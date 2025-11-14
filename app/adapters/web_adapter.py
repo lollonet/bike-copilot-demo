@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import NotRequired, TypedDict, TYPE_CHECKING
+from urllib.parse import parse_qsl, urlencode, urlparse
 
 from bs4 import BeautifulSoup
 import yaml
@@ -14,6 +15,10 @@ if TYPE_CHECKING:
 
 class PaginationMapping(TypedDict, total=False):
     next: str  # CSS selector for the "next page" link
+    mode: str  # "link" (default) or "query"
+    param: str  # query parameter name for skip-based pagination
+    limit: int  # fallback items per page for query pagination
+    limit_selector: str  # CSS selector whose text is the per-page limit
 
 
 class SearchMapping(TypedDict, total=False):
@@ -67,10 +72,21 @@ def _to_bool(s: str) -> bool:
 
 
 def _to_price(s: str) -> float:
-    t = s.strip().replace("€", "").replace(" ", "")
+    t = (
+        s.strip()
+        .replace("€", "")
+        .replace("\xa0", "")
+        .replace(" ", "")
+        .replace("\u202f", "")
+    )
+    # Handle thousands separator "." with decimal "," (e.g. 1.349,00)
+    if "," in t and "." in t and t.find(",") > t.find("."):
+        t = t.replace(".", "")
     # handle 12,34 and 12.34
-    if "," in t and t.count(",") == 1 and "." not in t:
+    if "," in t and t.count(",") == 1:
         t = t.replace(",", ".")
+    else:
+        t = t.replace(",", "")
     return float(t)
 
 
@@ -94,6 +110,24 @@ def _price_text(el) -> str:
     return el.get_text(strip=True)
 
 
+def _safe_int(value: str | None, default: int = 0) -> int:
+    try:
+        return int(value) if value is not None else default
+    except (TypeError, ValueError):
+        return default
+
+
+def _page_has_results(html: str, selector: str) -> bool:
+    soup = BeautifulSoup(html, "html.parser")
+    return bool(soup.select(selector))
+
+
+def _build_query_url(base_url: str, query: dict[str, str]) -> str:
+    parts = urlparse(base_url)
+    encoded = urlencode(query, doseq=True)
+    return parts._replace(query=encoded).geturl()
+
+
 def parse_html(
     html: str, mapping: WebMapping
 ) -> tuple[list[ProductInput], list[OfferInput]]:
@@ -107,6 +141,9 @@ def parse_html(
         name = _text(r.select_one(mapping["name"]))
         price_s = _price_text(r.select_one(mapping["price"]))
         if not brand or not mpn or not price_s:
+            continue
+        if not any(ch.isdigit() for ch in price_s):
+            # Listing senza prezzo: saltiamo per evitare ValueError
             continue
         in_stock = True
         if "in_stock" in mapping:
@@ -297,7 +334,6 @@ def fetch_and_parse_urls(
             r = session.get(u)
             r.raise_for_status()
             return r.text
-        import httpx
 
         with httpx.Client(
             timeout=10.0,
@@ -319,7 +355,9 @@ def fetch_and_parse_urls(
             for r in rows:
                 a = r.select_one(item_link_sel)
                 href_attr = a.get("href") if a else None
-                href = _abs_url(base_url, str(href_attr) if href_attr is not None else None)
+                href = _abs_url(
+                    base_url, str(href_attr) if href_attr is not None else None
+                )
                 if not href or href in seen_pages:
                     continue
                 seen_pages.add(href)
@@ -330,9 +368,15 @@ def fetch_and_parse_urls(
                     continue
                 p1, o1 = parse_detail_html(dhtml, mapping)
                 if p1 and o1:
-                    if not any((pp.brand, pp.mpn) == (p1.brand, p1.mpn) for pp in all_products):
+                    if not any(
+                        (pp.brand, pp.mpn) == (p1.brand, p1.mpn) for pp in all_products
+                    ):
                         all_products.append(p1)
-                    if not any((oo.brand, oo.mpn, oo.supplier) == (o1.brand, o1.mpn, o1.supplier) for oo in all_offers):
+                    if not any(
+                        (oo.brand, oo.mpn, oo.supplier)
+                        == (o1.brand, o1.mpn, o1.supplier)
+                        for oo in all_offers
+                    ):
                         all_offers.append(o1)
         else:
             p, o = parse_html(html_text, mapping)
@@ -340,39 +384,97 @@ def fetch_and_parse_urls(
             all_offers.extend(o)
 
     def _pagination_chain(first_html: str, first_url: str) -> list[tuple[str, str]]:
-        """Return list of (url, html) for next pages up to max_pages-1 (excluding the first).
+        """Return list of (url, html) for next pages up to max_pages-1 (excluding the first)."""
 
-        Joins relative links to absolute using the last fetched page as base.
-        """
-        out: list[tuple[str, str]] = []
-        if not (follow_next and isinstance(mapping.get("pagination"), dict)):
+        def _pagination_chain_link(next_sel: str) -> list[tuple[str, str]]:
+            out: list[tuple[str, str]] = []
+            page_count = 1
+            current_html = first_html
+            current_url = first_url
+            while page_count < max_pages:
+                soup = BeautifulSoup(current_html, "html.parser")
+                nxt = soup.select_one(next_sel)
+                if nxt is None:
+                    break
+                href_attr = nxt.get("href") if nxt else None
+                href = _abs_url(
+                    current_url, str(href_attr) if href_attr is not None else None
+                )
+                if not href or href in seen_pages:
+                    break
+                seen_pages.add(href)
+                time.sleep(max(0.0, delay_sec))
+                try:
+                    next_html = _fetch(href)
+                except Exception:
+                    break
+                out.append((href, next_html))
+                current_html = next_html
+                current_url = href
+                page_count += 1
             return out
-        next_sel = mapping.get("pagination", {}).get("next")  # type: ignore[union-attr]
-        if not next_sel:
+
+        def _resolve_query_limit(pcfg: PaginationMapping) -> int | None:
+            selector = pcfg.get("limit_selector")
+            if isinstance(selector, str) and selector:
+                soup = BeautifulSoup(first_html, "html.parser")
+                node = soup.select_one(selector)
+                if node:
+                    limit_candidate = _safe_int(node.get_text(strip=True), 0)
+                    if limit_candidate > 0:
+                        return limit_candidate
+            limit_cfg = pcfg.get("limit")
+            if isinstance(limit_cfg, int) and limit_cfg > 0:
+                return limit_cfg
+            return None
+
+        def _pagination_chain_query(pcfg: PaginationMapping) -> list[tuple[str, str]]:
+            out: list[tuple[str, str]] = []
+            limit = _resolve_query_limit(pcfg)
+            if limit is None or limit <= 0:
+                return out
+            param_raw = pcfg.get("param")
+            param_name = (
+                param_raw if isinstance(param_raw, str) and param_raw else "skip"
+            )
+            base_parts = urlparse(first_url)
+            base_query = dict(parse_qsl(base_parts.query, keep_blank_values=True))
+            start_skip = _safe_int(base_query.get(param_name), 0)
+            page_count = 1
+            current_skip = start_skip
+            root_selector = mapping["root"]
+            while page_count < max_pages:
+                next_skip = current_skip + limit
+                query = dict(base_query)
+                query[param_name] = str(next_skip)
+                next_url = _build_query_url(first_url, query)
+                if next_url in seen_pages:
+                    break
+                seen_pages.add(next_url)
+                time.sleep(max(0.0, delay_sec))
+                try:
+                    next_html = _fetch(next_url)
+                except Exception:
+                    break
+                if not _page_has_results(next_html, root_selector):
+                    break
+                out.append((next_url, next_html))
+                current_skip = next_skip
+                page_count += 1
             return out
-        page_count = 1
-        current_html = first_html
-        current_url = first_url
-        while page_count < max_pages:
-            soup = BeautifulSoup(current_html, "html.parser")
-            nxt = soup.select_one(next_sel)
-            if nxt is None:
-                break
-            href_attr = nxt.get("href") if nxt else None
-            href = _abs_url(current_url, str(href_attr) if href_attr is not None else None)
-            if not href or href in seen_pages:
-                break
-            seen_pages.add(href)
-            time.sleep(max(0.0, delay_sec))
-            try:
-                next_html = _fetch(href)
-            except Exception:
-                break
-            out.append((href, next_html))
-            current_html = next_html
-            current_url = href
-            page_count += 1
-        return out
+
+        pagination_raw = mapping.get("pagination")
+        if not (follow_next and isinstance(pagination_raw, dict)):
+            return []
+        pagination_cfg: PaginationMapping = pagination_raw
+        mode_value = pagination_cfg.get("mode")
+        mode = mode_value.lower() if isinstance(mode_value, str) else "link"
+        if mode == "query":
+            return _pagination_chain_query(pagination_cfg)
+        next_sel = pagination_cfg.get("next")
+        if not isinstance(next_sel, str) or not next_sel:
+            return []
+        return _pagination_chain_link(next_sel)
 
     for seed in urls:
         if seed in seen_pages:

@@ -87,8 +87,7 @@ def test_ingest_csv_mapped_cli(runner: CliRunner, tmp_path: Path) -> None:
 
     csv_path = tmp_path / "demo.csv"
     csv_path.write_text(
-        "Codice;Categoria;Descrizione;Prezzo\n"
-        "C1;Catena MTB;Catena 11v;10,50\n",
+        "Codice;Categoria;Descrizione;Prezzo\nC1;Catena MTB;Catena 11v;10,50\n",
         encoding="utf-8",
     )
     mapping_path = tmp_path / "mapping.yaml"
@@ -133,8 +132,7 @@ def test_ingest_csv_synth_cli(runner: CliRunner, tmp_path: Path) -> None:
 
     csv_path = tmp_path / "demo_synth.csv"
     csv_path.write_text(
-        "Codice;Categoria;Descrizione;Prezzo\n"
-        "C1;Catena MTB;Catena 11v;10,50\n",
+        "Codice;Categoria;Descrizione;Prezzo\nC1;Catena MTB;Catena 11v;10,50\n",
         encoding="utf-8",
     )
     mapping_path = tmp_path / "mapping_synth.yaml"
@@ -177,7 +175,9 @@ def test_ingest_csv_synth_cli(runner: CliRunner, tmp_path: Path) -> None:
     assert "suppliers" in result.stdout
 
 
-def test_fetch_policy_cli(runner: CliRunner, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_fetch_policy_cli(
+    runner: CliRunner, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """Exercise fetch-policy wiring without real HTTP."""
     from app.cli import app
 
@@ -193,7 +193,9 @@ def test_fetch_policy_cli(runner: CliRunner, tmp_path: Path, monkeypatch: pytest
             return None
 
     class DummyClient:
-        def __init__(self, timeout: float, headers: dict[str, str], follow_redirects: bool):
+        def __init__(
+            self, timeout: float, headers: dict[str, str], follow_redirects: bool
+        ):
             self._timeout = timeout
             self._headers = headers
             self._follow = follow_redirects
@@ -219,7 +221,9 @@ def test_fetch_policy_cli(runner: CliRunner, tmp_path: Path, monkeypatch: pytest
             confidence=0.9,
         )
 
-    monkeypatch.setattr(app_cli, "parse_policy_html", fake_parse_policy_html, raising=False)
+    monkeypatch.setattr(
+        app_cli, "parse_policy_html", fake_parse_policy_html, raising=False
+    )
 
     result = runner.invoke(
         app,
@@ -237,7 +241,9 @@ def test_fetch_policy_cli(runner: CliRunner, tmp_path: Path, monkeypatch: pytest
     assert "base_cost" in out
 
 
-def test_fetch_web_url_cli(runner: CliRunner, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_fetch_web_url_cli(
+    runner: CliRunner, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """Exercise fetch-web-url wiring with synthetic HTML and mapping."""
     from app.cli import app
 
@@ -279,7 +285,9 @@ def test_fetch_web_url_cli(runner: CliRunner, tmp_path: Path, monkeypatch: pytes
             return None
 
     class DummyClient:
-        def __init__(self, timeout: float, headers: dict[str, str], follow_redirects: bool):
+        def __init__(
+            self, timeout: float, headers: dict[str, str], follow_redirects: bool
+        ):
             self._timeout = timeout
             self._headers = headers
             self._follow = follow_redirects

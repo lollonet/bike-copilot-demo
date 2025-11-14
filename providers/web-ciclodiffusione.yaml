@@ -8,12 +8,17 @@ item_link: "a[href^='/product/']"
 # placeholders for schema completeness; detail overrides with OG meta
 brand: ".product_preview_title strong"
 mpn: ".product_preview_description"
+pagination:
+  mode: query
+  param: page
+  limit: 1
 detail:
   root: "html"
   name: "meta[property='og:title']"
   price: "meta[property='og:price:amount']"
   brand: "meta[property='og:title']"
-  mpn: "meta[property='og:description']"
+  mpn: "[itemprop='sku']"
   in_stock: "meta[property='og:availability']"
   category: "#breadcrumb .breadcrumb li a:last-child"
   lead_time_days: ""
+  dealer_code: "[itemprop='sku']"

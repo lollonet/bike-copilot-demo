@@ -56,4 +56,3 @@ def test_sha256_path_and_stage_file(tmp_path: Path) -> None:
         row = rows[0]
         assert row.id == entry.id
         assert row.content_hash == digest
-

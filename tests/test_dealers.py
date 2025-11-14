@@ -1,7 +1,6 @@
 """Test dealer registry functionality."""
 
 from pathlib import Path
-import tempfile
 from unittest.mock import patch
 
 import pytest
@@ -11,12 +10,9 @@ from app.dealers import (
     DealerAuthConfig,
     DealerSeeds,
     DealerConfig,
-    DealerLoginConfig,
     load_dealers,
     find_dealer,
-    _repo_root,
     _dealers_yaml_path,
-    _load_raw,
 )
 
 
@@ -26,7 +22,7 @@ def test_dealer_config_dataclasses():
         mode_env="TEST_MODE",
         username_env="TEST_USER",
         password_env="TEST_PASS",
-        cookie_env="TEST_COOKIE"
+        cookie_env="TEST_COOKIE",
     )
     assert auth.mode_env == "TEST_MODE"
     assert auth.username_env == "TEST_USER"
@@ -37,7 +33,7 @@ def test_dealer_config_dataclasses():
 
     seeds = DealerSeeds(
         urls=["http://test.com/page1", "http://test.com/page2"],
-        sitemap="http://test.com/sitemap.xml"
+        sitemap="http://test.com/sitemap.xml",
     )
     assert len(seeds.urls) == 2
     assert seeds.sitemap == "http://test.com/sitemap.xml"
@@ -52,7 +48,7 @@ def test_dealer_config_dataclasses():
         policy_url="http://test.com/policy",
         auth=auth,
         seeds=seeds,
-        login=None
+        login=None,
     )
     assert config.key == "test"
     assert config.name == "Test Dealer"
@@ -75,13 +71,13 @@ def test_load_dealers_from_yaml(tmp_path: Path):
                     "mode_env": "DEALER1_AUTH_MODE",
                     "username_env": "DEALER1_USER",
                     "password_env": "DEALER1_PASS",
-                    "cookie_env": "DEALER1_COOKIE"
+                    "cookie_env": "DEALER1_COOKIE",
                 },
                 "seeds": {
                     "urls": ["http://dealer1.com/products"],
-                    "sitemap": "http://dealer1.com/sitemap.xml"
+                    "sitemap": "http://dealer1.com/sitemap.xml",
                 },
-                "login": None
+                "login": None,
             },
             {
                 "key": "dealer2",
@@ -89,8 +85,8 @@ def test_load_dealers_from_yaml(tmp_path: Path):
                 "type": "csv",
                 "auth": {},
                 "seeds": {},
-                "login": None
-            }
+                "login": None,
+            },
         ]
     }
 
@@ -127,7 +123,9 @@ def test_load_dealers_from_yaml(tmp_path: Path):
 
 def test_load_dealers_missing_file():
     """Test loading dealers when file doesn't exist."""
-    with patch("app.dealers._dealers_yaml_path", return_value=Path("/nonexistent/dealers.yaml")):
+    with patch(
+        "app.dealers._dealers_yaml_path", return_value=Path("/nonexistent/dealers.yaml")
+    ):
         dealers = load_dealers()
         assert dealers == []
 
@@ -155,7 +153,7 @@ def test_find_dealer(tmp_path: Path):
         "dealers": [
             {"key": "rms", "name": "RMS Italia"},
             {"key": "ciclo", "name": "CicloDiffusione"},
-            {"key": "promo", "name": "CicloPromo"}
+            {"key": "promo", "name": "CicloPromo"},
         ]
     }
 
@@ -235,7 +233,7 @@ def test_dealer_seeds_urls_parsing(tmp_path: Path):
                         "http://example.com/page2",
                         123,  # Should be converted to string
                     ]
-                }
+                },
             }
         ]
     }

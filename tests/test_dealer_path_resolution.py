@@ -1,11 +1,5 @@
 """Test that dealer mapping paths are resolved correctly."""
 
-import tempfile
-from pathlib import Path
-from unittest.mock import patch, Mock
-
-import pytest
-
 from app.dealers import (
     DealerConfig,
     DealerAuthConfig,
@@ -27,16 +21,10 @@ def test_dealer_mapping_path_is_resolved_from_repo_root():
         mapping="providers/test-mapping.yaml",  # Relative path
         policy_url=None,
         auth=DealerAuthConfig(
-            mode_env=None,
-            username_env=None,
-            password_env=None,
-            cookie_env=None
+            mode_env=None, username_env=None, password_env=None, cookie_env=None
         ),
-        seeds=DealerSeeds(
-            urls=[],
-            sitemap=None
-        ),
-        login=None
+        seeds=DealerSeeds(urls=[], sitemap=None),
+        login=None,
     )
 
     # The repo root function should return the parent of app/ directory
@@ -69,7 +57,10 @@ def test_dealer_sync_uses_correct_path_resolution():
     source = inspect.getsource(dealer_sync)
 
     # Verify that it imports _repo_root from dealers module
-    assert "from .dealers import _repo_root" in source or "from app.dealers import _repo_root" in source
+    assert (
+        "from .dealers import _repo_root" in source
+        or "from app.dealers import _repo_root" in source
+    )
 
     # Verify that it uses _repo_root() to resolve the mapping path
     assert "_repo_root() /" in source

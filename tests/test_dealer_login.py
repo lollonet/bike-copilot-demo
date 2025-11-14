@@ -28,7 +28,7 @@ def test_form_login_get_method_uses_query_params():
             mode_env="DEALER_TEST_AUTH_MODE",
             username_env="DEALER_TEST_USER",
             password_env="DEALER_TEST_PASS",
-            cookie_env=None
+            cookie_env=None,
         ),
         seeds=DealerSeeds(urls=[], sitemap=None),
         login=DealerLoginConfig(
@@ -37,8 +37,8 @@ def test_form_login_get_method_uses_query_params():
             method="GET",
             username_field="user",
             password_field="pass",
-            extra_fields={"remember": "1", "redirect": "/dashboard"}
-        )
+            extra_fields={"remember": "1", "redirect": "/dashboard"},
+        ),
     )
 
     # Mock environment variables
@@ -46,7 +46,7 @@ def test_form_login_get_method_uses_query_params():
         mock_getenv.side_effect = lambda key, default="": {
             "DEALER_TEST_AUTH_MODE": "form",
             "DEALER_TEST_USER": "testuser",
-            "DEALER_TEST_PASS": "testpass"
+            "DEALER_TEST_PASS": "testpass",
         }.get(key, default)
 
         # Mock httpx.Client to verify the correct params are passed
@@ -60,7 +60,7 @@ def test_form_login_get_method_uses_query_params():
             mock_client_class.return_value = mock_client
 
             # Build the session - this should not raise NameError
-            session = _build_dealer_session(dealer)
+            _build_dealer_session(dealer)
 
             # Verify GET was called with correct params
             mock_client.get.assert_called_once()
@@ -71,7 +71,7 @@ def test_form_login_get_method_uses_query_params():
                 "remember": "1",
                 "redirect": "/dashboard",
                 "user": "testuser",
-                "pass": "testpass"
+                "pass": "testpass",
             }
             assert call_args[0][0] == "https://example.com/login"
             assert call_args[1]["params"] == expected_params
@@ -93,7 +93,7 @@ def test_form_login_post_method_uses_form_data():
             mode_env="DEALER_TEST_AUTH_MODE",
             username_env="DEALER_TEST_USER",
             password_env="DEALER_TEST_PASS",
-            cookie_env=None
+            cookie_env=None,
         ),
         seeds=DealerSeeds(urls=[], sitemap=None),
         login=DealerLoginConfig(
@@ -102,15 +102,15 @@ def test_form_login_post_method_uses_form_data():
             method="POST",
             username_field="username",
             password_field="password",
-            extra_fields={"csrf_token": "abc123"}
-        )
+            extra_fields={"csrf_token": "abc123"},
+        ),
     )
 
     with patch("app.cli.os.getenv") as mock_getenv:
         mock_getenv.side_effect = lambda key, default="": {
             "DEALER_TEST_AUTH_MODE": "form",
             "DEALER_TEST_USER": "testuser",
-            "DEALER_TEST_PASS": "testpass"
+            "DEALER_TEST_PASS": "testpass",
         }.get(key, default)
 
         with patch("app.cli.httpx.Client") as mock_client_class:
@@ -122,7 +122,7 @@ def test_form_login_post_method_uses_form_data():
             mock_client_class.return_value = mock_client
 
             # Build the session
-            session = _build_dealer_session(dealer)
+            _build_dealer_session(dealer)
 
             # Verify POST was called with form data
             mock_client.post.assert_called_once()
@@ -149,7 +149,7 @@ def test_unsupported_login_method_raises_error():
             mode_env="DEALER_TEST_AUTH_MODE",
             username_env="DEALER_TEST_USER",
             password_env="DEALER_TEST_PASS",
-            cookie_env=None
+            cookie_env=None,
         ),
         seeds=DealerSeeds(urls=[], sitemap=None),
         login=DealerLoginConfig(
@@ -158,15 +158,15 @@ def test_unsupported_login_method_raises_error():
             method="PUT",  # Unsupported method
             username_field="user",
             password_field="pass",
-            extra_fields={}
-        )
+            extra_fields={},
+        ),
     )
 
     with patch("app.cli.os.getenv") as mock_getenv:
         mock_getenv.side_effect = lambda key, default="": {
             "DEALER_TEST_AUTH_MODE": "form",
             "DEALER_TEST_USER": "testuser",
-            "DEALER_TEST_PASS": "testpass"
+            "DEALER_TEST_PASS": "testpass",
         }.get(key, default)
 
         with patch("app.cli.httpx.Client") as mock_client_class:

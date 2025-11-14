@@ -183,3 +183,64 @@ def test_upsert_skips_offers_without_product():
         assert db.query(Product).count() == 0
         assert db.query(SupplierOffer).count() == 0
 
+
+def test_upsert_deduplicates_offers_in_single_batch():
+    from app.ingest import upsert
+
+    (
+        Product,  # noqa: F401
+        SupplierOffer,
+        PriceHistory,
+        PNMapping,  # noqa: F401
+        SessionLocal,
+    ) = _setup_db("test_ingest4.db")
+
+    core = [
+        ProductInput(
+            brand="Shimano",
+            mpn="CN-HG601",
+            ean=None,
+            name="Catena 11v",
+            category=None,
+            speed=None,
+            brake=None,
+            axle=None,
+            rotor=None,
+            freehub=None,
+        )
+    ]
+    offers = [
+        OfferInput(
+            brand="Shimano",
+            mpn="CN-HG601",
+            supplier="DealerA",
+            price=24.9,
+            in_stock=True,
+            lead_time_days=1,
+            currency="EUR",
+            extra={},
+        ),
+        OfferInput(
+            brand="Shimano",
+            mpn="CN-HG601",
+            supplier="DealerA",
+            price=23.5,
+            in_stock=False,
+            lead_time_days=2,
+            currency="EUR",
+            extra={},
+        ),
+    ]
+
+    stats = upsert(core, offers)
+    assert stats.offers_upserted == 2
+    assert stats.offers_skipped == 0
+
+    with SessionLocal() as db:
+        offers_db = db.query(SupplierOffer).all()
+        history = db.query(PriceHistory).all()
+        assert len(offers_db) == 1
+        assert offers_db[0].price == 23.5
+        assert offers_db[0].in_stock is False
+        assert offers_db[0].lead_time_days == 2
+        assert history == []
