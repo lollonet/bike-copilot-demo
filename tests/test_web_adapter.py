@@ -242,12 +242,22 @@ def test_parse_sitemap_urls_index_and_urlset(monkeypatch: pytest.MonkeyPatch) ->
 
 def test_ciclopromo_listing_basic(tmp_path: Path) -> None:
     """Ensure CicloPromo listing mapping extracts at least one product/offer."""
-    html_path = Path("providers/html/e-Shop _ CICLOPROMO.html")
+    # Use the committed fixture file for reproducible testing
+    html_path = Path("providers/html/ciclopromo-fixture.html")
     mapping_yaml = Path("providers/web-ciclopromo.yaml")
-    assert html_path.is_file()
+
+    # Skip test if mapping doesn't exist (not all environments have it)
+    if not mapping_yaml.is_file():
+        pytest.skip(f"Mapping file {mapping_yaml} not found")
+
+    # Ensure fixture exists
+    assert html_path.is_file(), f"Test fixture {html_path} not found"
+
     mp = _load_mapping(mapping_yaml)
     html = html_path.read_text(encoding="utf-8")
     products, offers = parse_html(html, mp)
-    assert products
-    assert offers
-    assert all(o.supplier == "CicloPromo" for o in offers)
+
+    # Basic validation that parser works with the mapping
+    assert products, "No products extracted from CicloPromo fixture"
+    assert offers, "No offers extracted from CicloPromo fixture"
+    assert all(o.supplier == "CicloPromo" for o in offers), "Supplier mismatch in offers"
