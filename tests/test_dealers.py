@@ -11,6 +11,7 @@ from app.dealers import (
     DealerAuthConfig,
     DealerSeeds,
     DealerConfig,
+    DealerLoginConfig,
     load_dealers,
     find_dealer,
     _repo_root,
@@ -50,7 +51,8 @@ def test_dealer_config_dataclasses():
         mapping="providers/test.yaml",
         policy_url="http://test.com/policy",
         auth=auth,
-        seeds=seeds
+        seeds=seeds,
+        login=None
     )
     assert config.key == "test"
     assert config.name == "Test Dealer"
@@ -78,14 +80,16 @@ def test_load_dealers_from_yaml(tmp_path: Path):
                 "seeds": {
                     "urls": ["http://dealer1.com/products"],
                     "sitemap": "http://dealer1.com/sitemap.xml"
-                }
+                },
+                "login": None
             },
             {
                 "key": "dealer2",
                 "name": "Dealer Two",
                 "type": "csv",
                 "auth": {},
-                "seeds": {}
+                "seeds": {},
+                "login": None
             }
         ]
     }
