@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import NotRequired, TypedDict
+from typing import NotRequired, TypedDict, TYPE_CHECKING
 
 from bs4 import BeautifulSoup
 import yaml
 
 from ..types import OfferInput, ProductInput
+
+if TYPE_CHECKING:
+    import httpx
 
 
 class PaginationMapping(TypedDict, total=False):
@@ -274,6 +277,7 @@ def fetch_and_parse_urls(
     max_pages: int = 1,
     delay_sec: float = 0.0,
     headers: dict[str, str] | None = None,
+    session: "httpx.Client | None" = None,
 ) -> tuple[list[ProductInput], list[OfferInput]]:
     """Fetch one or more URLs and parse them using the provided mapping.
 
@@ -289,6 +293,12 @@ def fetch_and_parse_urls(
     seen_pages: set[str] = set()
 
     def _fetch(u: str) -> str:
+        if session is not None:
+            r = session.get(u)
+            r.raise_for_status()
+            return r.text
+        import httpx
+
         with httpx.Client(
             timeout=10.0,
             headers=headers or {"User-Agent": "BikeCopilotBot/0.1"},
@@ -391,7 +401,10 @@ def build_search_urls(query: str, mapping_yaml: Path) -> list[str]:
 
 
 def parse_sitemap_urls(
-    sitemap_url: str, headers: dict[str, str] | None = None, limit: int | None = None
+    sitemap_url: str,
+    headers: dict[str, str] | None = None,
+    limit: int | None = None,
+    session: "httpx.Client | None" = None,
 ) -> list[str]:
     """Parse a sitemap index or urlset and return a list of <loc> URLs.
 
@@ -403,6 +416,10 @@ def parse_sitemap_urls(
     seen: set[str] = set()
 
     def _fetch(u: str) -> str:
+        if session is not None:
+            r = session.get(u)
+            r.raise_for_status()
+            return r.text
         with httpx.Client(
             timeout=10.0,
             headers=headers or {"User-Agent": "BikeCopilotBot/0.1"},
