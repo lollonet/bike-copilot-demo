@@ -1,0 +1,69 @@
+dealers:
+  - key: rms
+    name: "RMS"
+    type: "web"
+    base_url_env: "DEALER_RMS_BASE_URL"
+    platform: "custom-spa"
+    mapping: null          # TODO: aggiungere providers/web-rms-b2b.yaml quando disponibile
+    policy_url: null       # es. https://rms.it/it/spedizioni (da confermare)
+    auth:
+      mode_env: "DEALER_RMS_AUTH_MODE"
+      username_env: "DEALER_RMS_USERNAME"
+      password_env: "DEALER_RMS_PASSWORD"
+      cookie_env: "DEALER_RMS_COOKIE"
+    seeds:
+      urls: []             # URL seed verranno aggiunti dopo esplorazione B2B
+      sitemap: null
+
+  - key: ciclodiffusione
+    name: "Ciclodiffusione"
+    type: "web"
+    base_url_env: "DEALER_CICLODIFFUSIONE_BASE_URL"
+    platform: "storeden"
+    mapping: "providers/web-ciclodiffusione.yaml"
+    policy_url: null       # es. https://www.ciclodiffusione.com/spedizioni (da confermare)
+    auth:
+      mode_env: "DEALER_CICLODIFFUSIONE_AUTH_MODE"
+      username_env: "DEALER_CICLODIFFUSIONE_USERNAME"
+      password_env: "DEALER_CICLODIFFUSIONE_PASSWORD"
+      cookie_env: "DEALER_CICLODIFFUSIONE_COOKIE"
+    seeds:
+      urls: []             # da popolare con URL B2B dopo login
+      sitemap: null
+
+  - key: ciclopromo
+    name: "CicloPromo"
+    type: "web"
+    base_url_env: "DEALER_CICLOPROMO_BASE_URL"
+    platform: "custom-cartzilla"
+    mapping: "providers/web-ciclopromo.yaml"
+    policy_url: "https://www.ciclopromo-b2b.com/?mod=cond"
+    auth:
+      mode_env: "DEALER_CICLOPROMO_AUTH_MODE"
+      username_env: "DEALER_CICLOPROMO_USERNAME"
+      password_env: "DEALER_CICLOPROMO_PASSWORD"
+      cookie_env: "DEALER_CICLOPROMO_COOKIE"
+    seeds:
+      urls:
+        - "https://shop.ciclopromo.com/it/shop?text=topeak&publicPrices=true"
+        - "https://shop.ciclopromo.com/it/shop?brands=SHIMANO%7C&publicPrices=true"
+        - "https://shop.ciclopromo.com/it/shop?brands=LIMAR%7C&publicPrices=true"
+        - "https://shop.ciclopromo.com/it/shop/abbigliamento/abbigliamento-occhiali?brands=LIMAR%7C&colors=Nero+opaco%7C&publicPrices=true"
+        - "https://shop.ciclopromo.com/it/shop/accessori/accessori-luci?brands=TOPEAK%7C&publicPrices=true"
+      sitemap: null
+
+  - key: bikeparts
+    name: "Bikeparts"
+    type: "web"
+    base_url_env: "DEALER_BIKEPARTS_BASE_URL"
+    platform: "unknown"
+    mapping: null
+    policy_url: null
+    auth:
+      mode_env: "DEALER_BIKEPARTS_AUTH_MODE"
+      username_env: "DEALER_BIKEPARTS_USERNAME"
+      password_env: "DEALER_BIKEPARTS_PASSWORD"
+      cookie_env: "DEALER_BIKEPARTS_COOKIE"
+    seeds:
+      urls: []
+      sitemap: null

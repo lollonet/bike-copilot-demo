@@ -32,6 +32,7 @@ from .search import search
 from .types import Brake, Freehub, QuoteResponse, Rotor, SearchRequest
 from .policy import parse_policy_html
 from .models import DealerPolicy
+from .dealers import DealerConfig, find_dealer
 
 
 app = typer.Typer(add_completion=True, no_args_is_help=True, help="Bike Copilot CLI")
@@ -768,6 +769,144 @@ def api(port: int = typer.Option(8000), host: str = typer.Option("0.0.0.0")) -> 
     import uvicorn
 
     uvicorn.run("app.api:app", host=host, port=port, reload=False)
+
+
+def _dealer_headers(cfg: DealerConfig) -> dict[str, str]:
+    """Build HTTP headers for a dealer based on env configuration.
+
+    We currently support cookie-based auth via COOKIE env; other modes can be added.
+    """
+    headers: dict[str, str] = {}
+    mode = None
+    if cfg.auth.mode_env:
+        mode = os.getenv(cfg.auth.mode_env, "").strip().lower()
+    cookie = os.getenv(cfg.auth.cookie_env, "").strip() if cfg.auth.cookie_env else ""
+    if mode == "cookie" and cookie:
+        headers["Cookie"] = cookie
+    return headers
+
+
+@app.command("dealer-sync")
+def dealer_sync(
+    dealer: str = typer.Argument(..., help="Dealer key o nome (es. ciclodiffusione)"),
+    mode: str = typer.Option(
+        "all", help="Modalità: policy, catalogo o all", case_sensitive=False
+    ),
+    max_pages: int = typer.Option(
+        3, min=1, help="Max pagine da seguire per seed (solo web)"
+    ),
+    delay: float = typer.Option(
+        0.5, min=0.0, help="Delay (secondi) tra richieste web (solo web)"
+    ),
+) -> None:
+    """Sincronizza un dealer usando providers/dealers.yaml (policy + catalogo).
+
+    - Legge configurazione dealer (mapping, URL policy, seeds).
+    - Se mode include 'policy', estrae/aggiorna DealerPolicy.
+    - Se mode include 'catalogo', esegue ingest del catalogo (per ora solo web).
+    """
+    mode_l = mode.strip().lower()
+    cfg = find_dealer(dealer)
+    if cfg is None:
+        raise typer.BadParameter(f"Dealer '{dealer}' non trovato in providers/dealers.yaml")
+
+    headers = _dealer_headers(cfg)
+    rich.print(f"[bold]Dealer[/bold]: {cfg.name} (tipo={cfg.type}, platform={cfg.platform})")
+
+    # Policy
+    if mode_l in ("all", "policy") and cfg.policy_url:
+        rich.print(f"[cyan]Scarico policy da[/cyan] {cfg.policy_url}")
+        import httpx
+
+        with httpx.Client(
+            timeout=15.0,
+            headers=headers or {"User-Agent": "BikeCopilotBot/0.1"},
+            follow_redirects=True,
+        ) as client:
+            r = client.get(cfg.policy_url)
+            r.raise_for_status()
+            ext = parse_policy_html(r.text)
+        create_all()
+        with SessionLocal() as db:
+            row = (
+                db.query(DealerPolicy)
+                .filter(DealerPolicy.dealer == cfg.name)
+                .first()
+            )
+            if row is None:
+                db.add(
+                    DealerPolicy(
+                        dealer=cfg.name,
+                        base_cost=ext.base_cost,
+                        free_threshold=ext.free_threshold,
+                        lead_days_std=ext.lead_days_std,
+                        source="rules",
+                        confidence=ext.confidence,
+                    )
+                )
+            else:
+                row.base_cost = ext.base_cost
+                row.free_threshold = ext.free_threshold
+                row.lead_days_std = ext.lead_days_std
+                row.source = "rules"
+                row.confidence = ext.confidence
+            db.commit()
+        rich.print(
+            {
+                "dealer": cfg.name,
+                "base_cost": ext.base_cost,
+                "free_threshold": ext.free_threshold,
+                "lead_days_std": ext.lead_days_std,
+                "confidence": ext.confidence,
+            }
+        )
+
+    # Catalog ingest (solo web v1)
+    if mode_l in ("all", "catalogo"):
+        if cfg.type != "web":
+            rich.print(
+                f"[yellow]Tipo '{cfg.type}' non ancora supportato per ingest automatico[/yellow]"
+            )
+        elif not cfg.mapping:
+            rich.print(
+                "[yellow]Nessun mapping configurato per questo dealer (campo 'mapping' mancante).[/yellow]"
+            )
+        else:
+            from .adapters.web_adapter import fetch_and_parse_urls, parse_sitemap_urls
+
+            urls: list[str] = []
+            # Seeds diretti
+            urls.extend(cfg.seeds.urls)
+            # Seeds via sitemap, se presente
+            if cfg.seeds.sitemap:
+                rich.print(f"[cyan]Leggo sitemap[/cyan] {cfg.seeds.sitemap}")
+                more = parse_sitemap_urls(cfg.seeds.sitemap, headers=headers, limit=None)
+                urls.extend(more)
+
+            if not urls:
+                rich.print(
+                    "[yellow]Nessun URL seed configurato per il dealer; salta ingest catalogo.[/yellow]"
+                )
+            else:
+                rich.print(f"[cyan]Ingest catalogo[/cyan] da {len(urls)} seed")
+                products, offers = fetch_and_parse_urls(
+                    urls=urls,
+                    mapping_yaml=Path(cfg.mapping),
+                    follow_next=True,
+                    max_pages=max_pages,
+                    delay_sec=delay,
+                    headers=headers,
+                )
+                stats: IngestStats = upsert(products, offers)
+                rich.print(
+                    {
+                        "dealer": cfg.name,
+                        "products_new": stats.products_new,
+                        "products_updated": stats.products_updated,
+                        "offers_upserted": stats.offers_upserted,
+                        "offers_skipped": stats.offers_skipped,
+                    }
+                )
 
 
 def main() -> None:
