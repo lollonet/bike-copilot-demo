@@ -6,7 +6,9 @@ import pytest
 
 
 @pytest.mark.parametrize("have_auth", [False, True])
-def test_ui_pn_builds_interface(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, have_auth: bool) -> None:
+def test_ui_pn_builds_interface(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, have_auth: bool
+) -> None:
     """Smoke test: ui_pn.ui() must build Blocks without hitting real HTTP APIs."""
     # Avoid real HTTP calls to /dealers and other endpoints.
     import app.ui_pn as ui_pn
@@ -42,7 +44,12 @@ def test_ui_pn_builds_interface(monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
             return {
                 "lines": [],
                 "dealers": [],
-                "costs": {"subtotal": 0.0, "shipping": 0.0, "penalties": 0.0, "total": 0.0},
+                "costs": {
+                    "subtotal": 0.0,
+                    "shipping": 0.0,
+                    "penalties": 0.0,
+                    "total": 0.0,
+                },
                 "notes": [],
             }
         if path == "/quote":

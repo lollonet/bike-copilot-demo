@@ -11,13 +11,13 @@ from .models import EventLog, Product, SessionLocal, SupplierOffer
 from .types import OfferItem, SearchRequest, SearchResponse, FacetsResponse
 
 
-_CATEGORY_SYNONYMS: dict[str, str] = {}
+_category_synonyms_cache: dict[str, str] = {}
 
 
 def _load_category_synonyms() -> dict[str, str]:
-    global _CATEGORY_SYNONYMS
-    if _CATEGORY_SYNONYMS:
-        return _CATEGORY_SYNONYMS
+    global _category_synonyms_cache
+    if _category_synonyms_cache:
+        return _category_synonyms_cache
     mapping: dict[str, str] = {}
     try:
         if os.path.exists(settings.category_synonyms_path):
@@ -29,8 +29,8 @@ def _load_category_synonyms() -> dict[str, str]:
                         mapping[str(a).lower().strip()] = str(canon)
     except Exception:
         mapping = {}
-    _CATEGORY_SYNONYMS = mapping
-    return _CATEGORY_SYNONYMS
+    _category_synonyms_cache = mapping
+    return _category_synonyms_cache
 
 
 def canon_category(value: str | None) -> str | None:

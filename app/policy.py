@@ -1,9 +1,9 @@
-from __future__ import annotations
-
 """Dealer shipping policy extractor (deterministic, regex-based).
 
 All comments in English; UI strings remain Italian.
 """
+
+from __future__ import annotations
 
 import re
 from dataclasses import dataclass

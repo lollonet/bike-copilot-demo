@@ -52,4 +52,3 @@ def test_parse_unified_csv_basic(tmp_path: Path) -> None:
     assert o0.in_stock is True
     assert o0.lead_time_days == 2
     assert o0.extra.get("dealer_pn") == "ICNHG601116"
-

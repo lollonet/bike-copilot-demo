@@ -71,4 +71,3 @@ def test_extract_from_pdf_with_mapping(monkeypatch, tmp_path: Path) -> None:
     assert abs(o.price - 24.90) < 0.01
     assert o.in_stock is True
     assert o.lead_time_days == 2
-

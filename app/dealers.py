@@ -1,10 +1,10 @@
-from __future__ import annotations
-
 """Dealer registry loader.
 
 This module reads providers/dealers.yaml and exposes typed configurations
 for higher-level CLI commands (dealer-sync, dealer-snapshot).
 """
+
+from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -35,6 +35,8 @@ class DealerLoginConfig:
     username_field: str | None = None
     password_field: str | None = None
     extra_fields: dict[str, str] = field(default_factory=dict)
+    preflight_url: str | None = None
+    encoding: str = "form"  # form | multipart
 
 
 @dataclass(frozen=True)
@@ -128,6 +130,9 @@ def load_dealers() -> list[DealerConfig]:
                     str(k): str(v)
                     for k, v in ((login_raw.get("extra_fields") or {}).items())  # type: ignore[union-attr]
                 },
+                preflight_url=str(login_raw.get("preflight_url") or "").strip() or None,
+                encoding=str(login_raw.get("encoding") or "form").strip().lower()
+                or "form",
             )
 
         dealers.append(

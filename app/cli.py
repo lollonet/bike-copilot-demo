@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import TypedDict
 
 import rich
 from pydantic import BaseModel
@@ -9,6 +10,7 @@ from rich.table import Table
 import os
 import random
 import httpx
+from sqlalchemy.orm import Session
 
 from .adapters.csv_adapter import parse_offers_csv, parse_products_csv
 from .adapters.pdf_adapter import extract_from_pdf
@@ -77,6 +79,17 @@ def _escape_md(text: str) -> str:
     return text.replace("|", "\\|")
 
 
+class AliasEntry(TypedDict, total=False):
+    maker_pn: str
+    dealer_pn: str
+    confidence: float
+
+
+class AliasBlock(TypedDict, total=False):
+    dealer: str | None
+    aliases: list[AliasEntry]
+
+
 @app.command("dump-md")
 def dump_md(
     limit: int | None = typer.Option(None, help="Max rows; omit for all"),
@@ -96,7 +109,9 @@ def _query_export_rows(
     supplier: str | None,
     brand: str | None,
     category: str | None,
-) -> list[tuple[SupplierOffer, str, float, bool, int | None, str, str, str, str | None]]:
+) -> list[
+    tuple[SupplierOffer, str, float, bool, int | None, str, str, str, str | None]
+]:
     from sqlalchemy import asc
 
     with SessionLocal() as db:
@@ -127,7 +142,9 @@ def _query_export_rows(
 
 
 def _build_export_rows(
-    rows: list[tuple[SupplierOffer, str, float, bool, int | None, str, str, str, str | None]]
+    rows: list[
+        tuple[SupplierOffer, str, float, bool, int | None, str, str, str, str | None]
+    ],
 ) -> list[ExportRow]:
     items: list[ExportRow] = []
     for _offer, sup, price, in_stock, lead, br, mpn, name, cat in rows:
@@ -199,7 +216,7 @@ def pn_alias_import(
     )
 
 
-def _build_norm_mpn_index(db: SessionLocal) -> dict[str, int]:
+def _build_norm_mpn_index(db: Session) -> dict[str, int]:
     from .pn import normalize_pn
 
     rows = db.query(Product.id, Product.mpn).filter(Product.mpn.isnot(None)).all()
@@ -215,8 +232,8 @@ def _build_norm_mpn_index(db: SessionLocal) -> dict[str, int]:
 
 
 def _apply_pn_alias_blocks(
-    db: SessionLocal,
-    data: list[dict[str, object]],
+    db: Session,
+    data: list[AliasBlock],
     norm_to_product: dict[str, int],
 ) -> tuple[int, int]:
     from .pn import normalize_pn
@@ -224,11 +241,12 @@ def _apply_pn_alias_blocks(
     inserted = 0
     updated = 0
     for block in data:
-        dealer = str(block.get("dealer") or "").strip() or None  # type: ignore[union-attr]
-        aliases = block.get("aliases", []) or []  # type: ignore[assignment]
-        for a in aliases:  # type: ignore[assignment]
-            maker = normalize_pn(str(a.get("maker_pn") or ""))  # type: ignore[call-arg]
-            dealer_pn = str(a.get("dealer_pn") or "").strip()  # type: ignore[call-arg]
+        dealer_raw = block.get("dealer")
+        dealer = str(dealer_raw or "").strip() or None
+        aliases = block.get("aliases") or []
+        for alias in aliases:
+            maker = normalize_pn(str(alias.get("maker_pn") or ""))
+            dealer_pn = str(alias.get("dealer_pn") or "").strip()
             dealer_norm = normalize_pn(dealer_pn) if dealer_pn else None
             if not maker:
                 continue
@@ -240,7 +258,8 @@ def _apply_pn_alias_blocks(
                 PNMapping.dealer_pn_norm == dealer_norm,
             )
             row = q.first()
-            conf = float(a.get("confidence") or 1.0)  # type: ignore[call-arg]
+            conf_raw = alias.get("confidence")
+            conf = float(conf_raw) if conf_raw is not None else 1.0
             if row:
                 row.product_id = int(target_id)
                 row.maker_pn_norm = maker
@@ -827,13 +846,19 @@ def _build_dealer_session(cfg: DealerConfig) -> DealerSession:
                 f"Configurazione login mancante per {cfg.name} (section login in providers/dealers.yaml)."
             )
         if not cfg.login.url:
-            raise typer.BadParameter(
-                f"login.url non impostato per {cfg.name}."
-            )
+            raise typer.BadParameter(f"login.url non impostato per {cfg.name}.")
         if not username or not password:
             raise typer.BadParameter(
                 f"Credenziali mancanti per {cfg.name}; definisci {cfg.auth.username_env} e {cfg.auth.password_env}."
             )
+        if cfg.login.preflight_url:
+            pre_resp = client.get(cfg.login.preflight_url)
+            if pre_resp.status_code >= 400:
+                raise typer.BadParameter(
+                    f"Prep-page fallita per {cfg.name}: HTTP {pre_resp.status_code}"
+                )
+            client.headers["Referer"] = cfg.login.preflight_url
+
         payload_items: list[tuple[str, str]] = list(cfg.login.extra_fields.items())
         if cfg.login.username_field:
             payload_items.append((cfg.login.username_field, username))
@@ -842,15 +867,21 @@ def _build_dealer_session(cfg: DealerConfig) -> DealerSession:
 
         method = (cfg.login.method or "POST").upper()
         if method == "POST":
-            # For POST requests, send as form-encoded data
-            form_data = dict(payload_items)
-            resp = client.post(cfg.login.url, data=form_data)
+            encoding = (cfg.login.encoding or "form").lower()
+            if encoding == "multipart":
+                files = [(k, (None, v)) for k, v in payload_items]
+                resp = client.post(cfg.login.url, files=files)
+            else:
+                form_data = dict(payload_items)
+                resp = client.post(cfg.login.url, data=form_data)
         elif method == "GET":
             # For GET requests, use query parameters instead of form data
             query_params = dict(payload_items)
             resp = client.get(cfg.login.url, params=query_params)
         else:
-            raise typer.BadParameter(f"Metodo login {method} non supportato per {cfg.name}.")
+            raise typer.BadParameter(
+                f"Metodo login {method} non supportato per {cfg.name}."
+            )
         if resp.status_code >= 400:
             raise typer.BadParameter(
                 f"Login fallito per {cfg.name}: HTTP {resp.status_code}"
@@ -865,7 +896,7 @@ def dealer_sync(
         "all", help="Modalità: policy, catalogo o all", case_sensitive=False
     ),
     max_pages: int = typer.Option(
-        3, min=1, help="Max pagine da seguire per seed (solo web)"
+        50, min=1, help="Max pagine da seguire per seed (solo web)"
     ),
     delay: float = typer.Option(
         0.5, min=0.0, help="Delay (secondi) tra richieste web (solo web)"
@@ -880,9 +911,13 @@ def dealer_sync(
     mode_l = mode.strip().lower()
     cfg = find_dealer(dealer)
     if cfg is None:
-        raise typer.BadParameter(f"Dealer '{dealer}' non trovato in providers/dealers.yaml")
+        raise typer.BadParameter(
+            f"Dealer '{dealer}' non trovato in providers/dealers.yaml"
+        )
 
-    rich.print(f"[bold]Dealer[/bold]: {cfg.name} (tipo={cfg.type}, platform={cfg.platform})")
+    rich.print(
+        f"[bold]Dealer[/bold]: {cfg.name} (tipo={cfg.type}, platform={cfg.platform})"
+    )
 
     session = _build_dealer_session(cfg)
     try:
@@ -938,7 +973,10 @@ def dealer_sync(
                     "[yellow]Nessun mapping configurato per questo dealer (campo 'mapping' mancante).[/yellow]"
                 )
             else:
-                from .adapters.web_adapter import fetch_and_parse_urls, parse_sitemap_urls
+                from .adapters.web_adapter import (
+                    fetch_and_parse_urls,
+                    parse_sitemap_urls,
+                )
                 from .dealers import _repo_root
 
                 # Resolve mapping path relative to repository root
@@ -949,7 +987,10 @@ def dealer_sync(
                 if cfg.seeds.sitemap:
                     rich.print(f"[cyan]Leggo sitemap[/cyan] {cfg.seeds.sitemap}")
                     more = parse_sitemap_urls(
-                        cfg.seeds.sitemap, headers=None, limit=None, session=session.client
+                        cfg.seeds.sitemap,
+                        headers=None,
+                        limit=None,
+                        session=session.client,
                     )
                     urls.extend(more)
 

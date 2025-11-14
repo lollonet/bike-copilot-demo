@@ -1,6 +1,7 @@
 REQ-001:
   commits: []
   files:
+  - README.md
   - docs/architecture/ARC-001-ci-cd.md
   - docs/requirements/REQ-001.standards-adoption.md
   - docs/requirements/REQ-INDEX.md
@@ -17,6 +18,7 @@ REQ-002:
 REQ-003:
   commits: []
   files:
+  - README.md
   - docs/requirements/REQ-003.provider-storeden.md
   - docs/requirements/REQ-INDEX.md
   prs: []
@@ -51,6 +53,7 @@ REQ-006:
 REQ-007:
   commits: []
   files:
+  - README.md
   - docs/requirements/REQ-007.dealer-management.md
   - docs/requirements/REQ-INDEX.md
   prs: []
@@ -58,6 +61,7 @@ REQ-007:
 REQ-008:
   commits: []
   files:
+  - README.md
   - docs/requirements/REQ-008.kpi-freshness.md
   - docs/requirements/REQ-INDEX.md
   prs: []

@@ -6,7 +6,9 @@ import pytest
 
 
 @pytest.mark.parametrize("with_api_auth", [False, True])
-def test_ui_builds_interface(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, with_api_auth: bool) -> None:
+def test_ui_builds_interface(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, with_api_auth: bool
+) -> None:
     """Smoke test: ui.build_interface() must construct Blocks without real HTTP or DB side effects."""
     import app.ui as ui_mod
 
@@ -29,7 +31,18 @@ def test_ui_builds_interface(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, wi
 
     def fake_post(url: str, *args, **kwargs):  # type: ignore[override]
         if url.endswith("/facets"):
-            return DummyResp(200, {"speed": {}, "freehub": {}, "brake": {}, "axle": {}, "rotor": {}, "category": {}, "totals": {"products": 0}})
+            return DummyResp(
+                200,
+                {
+                    "speed": {},
+                    "freehub": {},
+                    "brake": {},
+                    "axle": {},
+                    "rotor": {},
+                    "category": {},
+                    "totals": {"products": 0},
+                },
+            )
         if url.endswith("/quote"):
             # Force non-200 to trigger local fallback; we do not care about result.
             return DummyResp(500, {})
@@ -86,4 +99,3 @@ def test_ui_builds_interface(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, wi
     # Calling build_interface must not raise.
     demo = ui_mod.build_interface()
     assert demo is not None
-

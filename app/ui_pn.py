@@ -7,21 +7,25 @@ import gradio as gr
 import httpx
 
 API_BASE = os.environ.get("APP_API_BASE", "http://localhost:8000").rstrip("/")
-AUTH = None
-if os.environ.get("APP_BASIC_USER") and os.environ.get("APP_BASIC_PASS"):
-    AUTH = (os.environ.get("APP_BASIC_USER", ""), os.environ.get("APP_BASIC_PASS", ""))
+_auth_credentials: tuple[str, str] | None = None
+_basic_user = os.environ.get("APP_BASIC_USER")
+_basic_pass = os.environ.get("APP_BASIC_PASS")
+if _basic_user and _basic_pass:
+    _auth_credentials = (_basic_user, _basic_pass)
 
 
 def _api_get(path: str) -> Dict[str, Any]:
     with httpx.Client(timeout=15.0) as client:
-        r = client.get(f"{API_BASE}{path}", auth=AUTH)
+        auth = _auth_credentials if _auth_credentials else httpx.USE_CLIENT_DEFAULT
+        r = client.get(f"{API_BASE}{path}", auth=auth)
         r.raise_for_status()
         return r.json()
 
 
 def _api_post(path: str, payload: Dict[str, Any]) -> Dict[str, Any]:
     with httpx.Client(timeout=20.0) as client:
-        r = client.post(f"{API_BASE}{path}", json=payload, auth=AUTH)
+        auth = _auth_credentials if _auth_credentials else httpx.USE_CLIENT_DEFAULT
+        r = client.post(f"{API_BASE}{path}", json=payload, auth=auth)
         r.raise_for_status()
         return r.json()
 
@@ -97,12 +101,19 @@ def add_best_to_cart(
 def to_quote_items(cart: List[Dict[str, Any]]) -> List[Dict[str, int]]:
     items: List[Dict[str, int]] = []
     for r in cart:
-        try:
-            items.append(
-                {"offer_id": int(r.get("OfferID")), "qty": int(r.get("Qty", 1))}
-            )
-        except Exception:
+        offer_raw = r.get("OfferID")
+        if offer_raw is None:
             continue
+        try:
+            offer_id = int(offer_raw)
+        except (TypeError, ValueError):
+            continue
+        qty_raw = r.get("Qty", 1)
+        try:
+            qty = int(qty_raw if qty_raw is not None else 1)
+        except (TypeError, ValueError):
+            qty = 1
+        items.append({"offer_id": offer_id, "qty": qty})
     return items
 
 
@@ -112,7 +123,7 @@ def ui() -> None:
         gr.Markdown("## Preventivo PN‑first")
         with gr.Row():
             pn_text = gr.Textbox(lines=6, label="PN (uno per riga)")
-            with gr.Column(scale=0.6):
+            with gr.Column(scale=1):
                 dealer_ms = gr.CheckboxGroup(choices=dealers, label="Dealer")
                 in_stock = gr.Checkbox(label="Solo in stock", value=True)
                 search_btn = gr.Button("Cerca", variant="primary")

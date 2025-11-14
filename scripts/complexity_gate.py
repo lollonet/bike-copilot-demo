@@ -76,9 +76,7 @@ def run(cmd: list[str]) -> subprocess.CompletedProcess[str]:
     env.setdefault("UV_TOOL_DIR", str(root / ".uv-tools"))
     env.setdefault("UV_PYTHON_INSTALL_DIR", str(root / ".uv-cache" / "python"))
     env.setdefault("XDG_CACHE_HOME", str(root / ".uv-cache"))
-    return subprocess.run(
-        cmd, text=True, capture_output=True, check=False, env=env
-    )
+    return subprocess.run(cmd, text=True, capture_output=True, check=False, env=env)
 
 
 def radon_cc(paths: list[str]) -> dict[str, list[dict[str, Any]]]:
@@ -123,27 +121,29 @@ def _flake8_cmd(paths: list[str], warn_cog: int) -> list[str]:
         *paths,
     ]
 
+
 def _only_cog_lines(text: str) -> list[str]:
     """Extract only plugin violation lines containing the CCR code."""
-    return [l for l in text.splitlines() if "CCR" in l]
+    return [line for line in text.splitlines() if "CCR" in line]
 
 
 def _split_warn_fail(lines: list[str], fail_cog: int) -> tuple[list[str], list[str]]:
     """Split lines into (warn, fail) by parsing "(X > Y)" numbers."""
     import re
+
     warn_lines: list[str] = []
     fail_lines: list[str] = []
     pat = re.compile(r"\((\d+)\s*>\s*(\d+)\)")
-    for l in lines:
-        m = pat.search(l)
+    for line in lines:
+        m = pat.search(line)
         if not m:
-            warn_lines.append(l)
+            warn_lines.append(line)
             continue
         lvl = int(m.group(1))
         if lvl > fail_cog:
-            fail_lines.append(l)
+            fail_lines.append(line)
         else:
-            warn_lines.append(l)
+            warn_lines.append(line)
     return warn_lines, fail_lines
 
 
@@ -162,8 +162,14 @@ def flake8_cognitive_both(
 
 
 def _add_mccabe_loc(
-    ident: str, complexity: int, loc: int, th: Thresholds,
-    m_warn: list[str], m_fail: list[str], l_warn: list[str], l_fail: list[str]
+    ident: str,
+    complexity: int,
+    loc: int,
+    th: Thresholds,
+    m_warn: list[str],
+    m_fail: list[str],
+    l_warn: list[str],
+    l_fail: list[str],
 ) -> None:
     if complexity > th.mccabe_fail:
         m_fail.append(f"{ident} McCabe={complexity} > {th.mccabe_fail}")

@@ -27,8 +27,17 @@ dealers:
       username_env: "DEALER_CICLODIFFUSIONE_USERNAME"
       password_env: "DEALER_CICLODIFFUSIONE_PASSWORD"
       cookie_env: "DEALER_CICLODIFFUSIONE_COOKIE"
+    login:
+      mode: "form"
+      preflight_url: "https://www.ciclodiffusione.com/login"
+      url: "https://www.ciclodiffusione.com/restserver/login"
+      method: "POST"
+      username_field: "credential_id"
+      password_field: "credential_password"
+      extra_fields: {}
     seeds:
-      urls: []             # da popolare con URL B2B dopo login
+      urls:
+        - "https://www.ciclodiffusione.com/shop/complex/category/-/brand/-/?&sort-order-field=title&sort-order-type=1&product-page=90&page=1"
       sitemap: null
 
   - key: ciclopromo
@@ -43,13 +52,19 @@ dealers:
       username_env: "DEALER_CICLOPROMO_USERNAME"
       password_env: "DEALER_CICLOPROMO_PASSWORD"
       cookie_env: "DEALER_CICLOPROMO_COOKIE"
+    login:
+      mode: "form"
+      preflight_url: "https://shop.ciclopromo.com/it/home"
+      url: "https://shop.ciclopromo.com/it/accesso/invia"
+      method: "POST"
+      username_field: "email"
+      password_field: "password"
+      extra_fields:
+        remember: "true"
+      encoding: "multipart"
     seeds:
       urls:
-        - "https://shop.ciclopromo.com/it/shop?text=topeak&publicPrices=true"
-        - "https://shop.ciclopromo.com/it/shop?brands=SHIMANO%7C&publicPrices=true"
-        - "https://shop.ciclopromo.com/it/shop?brands=LIMAR%7C&publicPrices=true"
-        - "https://shop.ciclopromo.com/it/shop/abbigliamento/abbigliamento-occhiali?brands=LIMAR%7C&colors=Nero+opaco%7C&publicPrices=true"
-        - "https://shop.ciclopromo.com/it/shop/accessori/accessori-luci?brands=TOPEAK%7C&publicPrices=true"
+        - "https://shop.ciclopromo.com/it/shop?publicPrices=true"
       sitemap: null
 
   - key: bikeparts

@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 """Order optimizer (v1 heuristic).
 
 Scenarios:
@@ -14,6 +12,8 @@ Penalties:
 
 Note: Simple heuristics suitable for demo; can be upgraded to ILP later.
 """
+
+from __future__ import annotations
 
 from typing import Dict, List, Tuple
 
@@ -42,9 +42,9 @@ def _shipping_costs(lines: List[OptimizeLine]) -> float:
         return 0.0
     # Subtotal per dealer
     per_dealer: Dict[str, float] = {}
-    for l in lines:
-        per_dealer[l.dealer] = per_dealer.get(l.dealer, 0.0) + float(
-            l.line_total or 0.0
+    for line in lines:
+        per_dealer[line.dealer] = per_dealer.get(line.dealer, 0.0) + float(
+            line.line_total or 0.0
         )
     dealers = list(per_dealer.keys())
     with SessionLocal() as db:
@@ -187,7 +187,9 @@ def _scenario_un_solo_dealer(
     params: OptimizeParams,
 ) -> Tuple[List[OptimizeLine], List[str]]:
     notes: List[str] = []
-    per_pn_dealers: List[set[str]] = [set(o.dealer for o in offers) for offers in per_pn]
+    per_pn_dealers: List[set[str]] = [
+        set(o.dealer for o in offers) for offers in per_pn
+    ]
     common = set.intersection(*per_pn_dealers) if per_pn_dealers else set()
     if not common:
         notes.append("Nessun dealer singolo copre tutti i PN; fallback miglior-prezzo")
@@ -216,7 +218,7 @@ def _scenario_un_solo_dealer(
             )
         if not ok:
             continue
-        subtotal = sum(l.line_total for l in cand_lines)
+        subtotal = sum(line.line_total for line in cand_lines)
         ship = _shipping_costs(cand_lines)
         lead_avg = _avg_lead(cand_lines)
         penalties = params.penale_lead * lead_avg
@@ -267,8 +269,8 @@ def _scenario_max_n_dealer(
 def _compute_costs(
     lines: List[OptimizeLine], params: OptimizeParams
 ) -> Tuple[List[str], OptimizeCost]:
-    dealers = sorted(list({l.dealer for l in lines}))
-    subtotal = sum(l.line_total for l in lines)
+    dealers = sorted(list({line.dealer for line in lines}))
+    subtotal = sum(line.line_total for line in lines)
     ship = _shipping_costs(lines)
     lead_avg = _avg_lead(lines)
     penalties = (
@@ -281,7 +283,9 @@ def _compute_costs(
 
 
 def _avg_lead(lines: List[OptimizeLine]) -> float:
-    vals = [int(l.lead_time_days) for l in lines if l.lead_time_days is not None]
+    vals = [
+        int(line.lead_time_days) for line in lines if line.lead_time_days is not None
+    ]
     return (sum(vals) / len(vals)) if vals else 0.0
 
 
@@ -298,12 +302,12 @@ def _reduce_dealers_greedy(
     curr_idx = list(line_idx)
 
     def dealers_of(ls: List[OptimizeLine]) -> List[str]:
-        return sorted(list({l.dealer for l in ls}))
+        return sorted(list({line.dealer for line in ls}))
 
     while len(dealers_of(curr)) > max(1, N):
         dealers = dealers_of(curr)
         # Compute current total including shipping and penalties
-        curr_sub = sum(l.line_total for l in curr)
+        curr_sub = sum(line.line_total for line in curr)
         curr_ship = _shipping_costs(curr)
         curr_lead = _avg_lead(curr)
         curr_pen = (
@@ -317,9 +321,9 @@ def _reduce_dealers_greedy(
             # Reassign lines currently served by d to next best offers from other dealers
             cand: List[OptimizeLine] = []
             cand_idx: List[int] = []
-            for pos, l in enumerate(curr):
-                if l.dealer != d:
-                    cand.append(l)
+            for pos, line in enumerate(curr):
+                if line.dealer != d:
+                    cand.append(line)
                     cand_idx.append(curr_idx[pos])
                     continue
                 # choose next best from other dealers for PN idx
@@ -332,11 +336,11 @@ def _reduce_dealers_greedy(
                     break
                 unit = float(nb.price or 0.0)
                 new_line = OptimizeLine(
-                    maker_pn=l.maker_pn,
+                    maker_pn=line.maker_pn,
                     dealer=nb.dealer,
                     unit_price=nb.price,
-                    qty=l.qty,
-                    line_total=unit * l.qty,
+                    qty=line.qty,
+                    line_total=unit * line.qty,
                     lead_time_days=nb.lead_time_days,
                 )
                 cand.append(new_line)
@@ -345,7 +349,7 @@ def _reduce_dealers_greedy(
                 continue
             # Compute full candidate total including shipping and penalties
             cand_dealers = dealers_of(cand)
-            cand_sub = sum(l.line_total for l in cand)
+            cand_sub = sum(line.line_total for line in cand)
             cand_ship = _shipping_costs(cand)
             cand_lead = _avg_lead(cand)
             cand_pen = (

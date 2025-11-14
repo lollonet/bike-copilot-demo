@@ -1,14 +1,14 @@
-from __future__ import annotations
-
 """PN-first search utilities.
 
 All comments are in English as per repo policy; UI strings remain Italian.
 """
 
-from typing import Iterable
+from __future__ import annotations
+
+from typing import Iterable, Sequence
 
 from sqlalchemy import select
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import Session, selectinload
 
 from .models import Product, SessionLocal, PNMapping
 from .types import (
@@ -87,7 +87,7 @@ def search_pn(req: SearchPNRequest) -> SearchPNResponse:
 
 
 def _match_products_single(
-    target_norm: str, products: list[Product], db
+    target_norm: str, products: Sequence[Product], db: Session
 ) -> list[Product]:
     """Locate products for a single normalized PN.
 
@@ -144,7 +144,7 @@ def search_pn_batch(req: SearchPNBatchRequest) -> SearchPNBatchResponse:
 
 
 def _build_pn_indexes(
-    products: list[Product], target_set: set[str], db
+    products: Sequence[Product], target_set: set[str], db: Session
 ) -> tuple[dict[str, list[Product]], dict[int, Product], dict[str, set[int]]]:
     """Build helper indexes for batch PN search.
 
