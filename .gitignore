@@ -7,6 +7,7 @@ __pycache__/
 
 # local state
 app.db*
+test_*.db
 out/
 .api_pid
 .api_pid*

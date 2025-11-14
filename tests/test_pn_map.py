@@ -1,10 +1,21 @@
 from __future__ import annotations
 
 import os
+from pathlib import Path
 
 
 def _setup_db(tmp_name: str):
+    """Prepare an isolated SQLite DB for this test run.
+
+    Removes any existing file to avoid UNIQUE constraint issues across repeated runs.
+    """
     os.environ["APP_DB_URL"] = f"sqlite:///./{tmp_name}"
+    db_file = Path(tmp_name)
+    for suffix in ("", "-shm", "-wal"):
+        p = db_file.with_name(db_file.name + suffix)
+        if p.exists():
+            p.unlink()
+
     import importlib
     import app.config as app_config
     import app.models as app_models

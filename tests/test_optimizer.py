@@ -141,3 +141,45 @@ def test_optimize_un_solo_dealer(client: TestClient) -> None:
     data = r.json()
     # Should have 1 dealer or fallback notes
     assert len(data["dealers"]) in (1, 2)
+
+
+def test_optimize_max_n_dealer_reduces_dealers(client: TestClient) -> None:
+    """Ensure max-n-dealer scenario reduces to at most N dealers."""
+    r = client.post(
+        "/optimize",
+        json={
+            "items": [
+                {"maker_pn": "CN-HG601", "qty": 1},
+                {"maker_pn": "PG-1230", "qty": 1},
+            ],
+            "params": {"scenario": "max-n-dealer", "max_dealer": 1},
+        },
+    )
+    assert r.status_code == 200
+    data = r.json()
+    # In this dataset both dealers can technically serve both PNs,
+    # so the greedy reduction should be able to collapse to a single dealer.
+    assert len(data["dealers"]) == 1
+    # All requested PNs should still be present in the plan.
+    pns = {line["maker_pn"] for line in data["lines"]}
+    assert {"CN-HG601", "PG-1230"}.issubset(pns)
+
+
+def test_optimize_piu_veloce_prefers_lower_lead_time(client: TestClient) -> None:
+    """Ensure piu-veloce scenario prefers offers with lower lead time."""
+    r = client.post(
+        "/optimize",
+        json={
+            "items": [
+                {"maker_pn": "CN-HG601", "qty": 1},
+                {"maker_pn": "PG-1230", "qty": 1},
+            ],
+            "params": {"scenario": "piu-veloce"},
+        },
+    )
+    assert r.status_code == 200
+    data = r.json()
+    assert data["lines"], "Expected at least one optimized line"
+    by_pn = {line["maker_pn"]: line for line in data["lines"]}
+    # For CN-HG601 DealerA has better lead time than DealerB (1 vs 3 days).
+    assert by_pn["CN-HG601"]["dealer"] == "DealerA"

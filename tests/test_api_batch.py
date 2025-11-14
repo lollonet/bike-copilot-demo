@@ -98,3 +98,53 @@ def test_dealers(client: TestClient) -> None:
     data = r.json()
     names = {d["name"] for d in data["dealers"]}
     assert {"DealerA", "DealerB"}.issubset(names)
+
+
+def test_facets_endpoint_basic(client: TestClient) -> None:
+    """Exercise /facets endpoint for a simple query; shape only."""
+    r = client.post(
+        "/facets",
+        json={
+            "query_text": "Catena",
+            "speed": None,
+            "freehub": None,
+            "brake": None,
+            "axle": None,
+            "rotor": None,
+            "budget_max": None,
+            "category": None,
+            "suppliers": [],
+            "in_stock_only": False,
+        },
+    )
+    assert r.status_code == 200
+    data = r.json()
+    assert "totals" in data
+    assert "products" in data["totals"]
+
+
+def test_kpi_summary_endpoint_requires_auth(client: TestClient) -> None:
+    """kpi/summary must enforce auth when basic credentials are configured."""
+    r = client.get("/kpi/summary")
+    assert r.status_code in (401, 403)
+
+
+def test_kpi_summary_endpoint_shape_with_auth(client: TestClient) -> None:
+    """Exercise /kpi/summary with auth for response shape."""
+    auth = ("demo", "demo123")
+    r = client.get("/kpi/summary", auth=auth)
+    assert r.status_code == 200
+    data = r.json()
+    # Required top-level fields
+    for key in [
+        "products_total",
+        "products_with_offers",
+        "coverage_pn_pct",
+        "offers_total",
+        "offers_updated_24h",
+        "updated_24h_pct",
+        "pn_unmapped",
+        "per_dealer",
+    ]:
+        assert key in data
+    assert isinstance(data["per_dealer"], list)
