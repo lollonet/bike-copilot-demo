@@ -325,10 +325,3 @@ def _compute_facets_for_products(
             counts["supplier"][sname] = counts["supplier"].get(sname, 0) + 1
 
     return counts, prices, offer_total
-
-
-def dry_run() -> None:
-    req = SearchRequest(query_text=None, speed=None)
-    res = search(req)
-    for it in res.items:
-        print(it.model_dump())

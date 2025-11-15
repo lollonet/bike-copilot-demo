@@ -22,10 +22,6 @@ from .adapters.csv_adapter import parse_offers_csv, parse_products_csv
 from .staging import stage_file
 
 
-def normalize_text(s: str) -> str:
-    return "".join(ch for ch in s.strip().lower() if ch.isalnum())
-
-
 @dataclass(frozen=True)
 class IngestStats:
     products_new: int = 0
@@ -117,7 +113,9 @@ def _upsert_offers_and_mappings(
         product_id = int(product.id)
         cache_key = (product_id, o.supplier)
         offer_existing = existing_offers.get(cache_key)
-        is_from_current_batch = offer_existing is not None  # If found in cache, it's from current batch
+        is_from_current_batch = (
+            offer_existing is not None
+        )  # If found in cache, it's from current batch
         if offer_existing is None:
             offer_existing = db.scalar(
                 select(SupplierOffer).where(

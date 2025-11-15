@@ -34,7 +34,9 @@ class DealerLoginConfig:
     method: str = "POST"
     username_field: str | None = None
     password_field: str | None = None
-    extra_fields: dict[str, Any] = field(default_factory=dict)  # Preserve YAML types (bool, int, str, etc.)
+    extra_fields: dict[str, Any] = field(
+        default_factory=dict
+    )  # Preserve YAML types (bool, int, str, etc.)
     preflight_url: str | None = None
     encoding: str = "form"  # form | multipart
 
