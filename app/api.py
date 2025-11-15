@@ -3,17 +3,20 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from shutil import which
 
+import os
 import secrets
+from typing import Mapping
 
 from fastapi import Depends, FastAPI, HTTPException, Request
-from typing import Mapping
-from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from fastapi.responses import FileResponse, Response
+from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from sqlalchemy import select
 
 from .config import settings
 from .models import EventLog, SessionLocal, SupplierOffer, create_all
-from .search import search, facets as compute_facets
+from .optimizer import optimize
+from .search import facets as compute_facets
+from .search import search
 from .types import (
     Problem,
     QuoteRequest,
@@ -34,7 +37,6 @@ from .types import (
 )
 from .logging_utils import log_event
 from .pn import search_pn, search_pn_batch
-from .optimizer import optimize
 
 
 app = FastAPI(title="Bike Copilot Demo")
@@ -44,15 +46,14 @@ _basic = HTTPBasic(auto_error=False)
 
 def require_auth(creds: HTTPBasicCredentials | None = Depends(_basic)) -> None:
     # If creds configured, enforce; otherwise allow (demo default)
-    if settings.basic_user and settings.basic_pass:
+    basic_user = os.environ.get("APP_BASIC_USER", settings.basic_user)
+    basic_pass = os.environ.get("APP_BASIC_PASS", settings.basic_pass)
+    if basic_user and basic_pass:
         if not creds or not (
-            secrets.compare_digest(creds.username, settings.basic_user)
-            and secrets.compare_digest(creds.password, settings.basic_pass)
+            secrets.compare_digest(creds.username, basic_user)
+            and secrets.compare_digest(creds.password, basic_pass)
         ):
             raise HTTPException(status_code=401, detail="Unauthorized")
-    else:
-        # Auth disabled; do nothing
-        return
 
 
 @app.middleware("http")

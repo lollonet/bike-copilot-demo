@@ -2,13 +2,14 @@ from __future__ import annotations
 
 
 import yaml
+import os
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
 from .config import settings
-import os
+from .logging_utils import log_event
 from .models import EventLog, Product, SessionLocal, SupplierOffer
-from .types import OfferItem, SearchRequest, SearchResponse, FacetsResponse
+from .types import FacetsResponse, OfferItem, SearchRequest, SearchResponse
 
 
 _category_synonyms_cache: dict[str, str] = {}
@@ -19,16 +20,35 @@ def _load_category_synonyms() -> dict[str, str]:
     if _category_synonyms_cache:
         return _category_synonyms_cache
     mapping: dict[str, str] = {}
+    raw: object = {}
     try:
         if os.path.exists(settings.category_synonyms_path):
             with open(settings.category_synonyms_path, "r", encoding="utf-8") as cf:
-                data = yaml.safe_load(cf) or {}
-                for canon, aliases in data.items():
-                    mapping[str(canon).lower().strip()] = str(canon)
-                    for a in aliases or []:
-                        mapping[str(a).lower().strip()] = str(canon)
-    except Exception:
-        mapping = {}
+                raw = yaml.safe_load(cf) or {}
+    except (OSError, yaml.YAMLError) as exc:
+        log_event(
+            "WARN",
+            op="category_synonyms",
+            kind="search",
+            message="failed to load category synonyms; using empty map",
+            trace_id=None,
+            extra={"error": str(exc)},
+        )
+        raw = {}
+    if isinstance(raw, dict):
+        for canon, aliases in raw.items():
+            mapping[str(canon).lower().strip()] = str(canon)
+            for a in aliases or []:
+                mapping[str(a).lower().strip()] = str(canon)
+    elif raw not in ({}, None):
+        log_event(
+            "WARN",
+            op="category_synonyms",
+            kind="search",
+            message="category synonyms file has unexpected structure; using empty map",
+            trace_id=None,
+            extra={"type": type(raw).__name__},
+        )
     _category_synonyms_cache = mapping
     return _category_synonyms_cache
 

@@ -18,6 +18,7 @@ from __future__ import annotations
 from typing import Dict, List, Tuple
 
 
+from .logging_utils import log_event
 from .models import DealerPolicy, SessionLocal
 from .pn import search_pn_batch
 from .types import (
@@ -112,6 +113,18 @@ def optimize(req: OptimizeRequest) -> OptimizeResponse:
     lines, scenario_notes = _lines_for_scenario(items, locked_offers, qty_list, params)
     dealers, costs = _compute_costs(lines, params)
     notes = lock_notes + scenario_notes
+    log_event(
+        "INFO",
+        op="optimize",
+        kind="service",
+        message="order optimization completed",
+        trace_id=None,
+        extra={
+            "scenario": params.scenario or "miglior-prezzo",
+            "items": len(items),
+            "dealers": len(dealers),
+        },
+    )
     return OptimizeResponse(lines=lines, dealers=dealers, costs=costs, notes=notes)
 
 
