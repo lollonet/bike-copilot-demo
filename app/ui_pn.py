@@ -44,6 +44,66 @@ def load_dealers() -> List[str]:
         return []
 
 
+def _cart_to_rows(cart: List[Dict[str, Any]] | None) -> List[List[Any]]:
+    rows: List[List[Any]] = []
+    for row in cart or []:
+        rows.append(
+            [
+                row.get("PN") or "",
+                row.get("Descrizione") or "",
+                row.get("Dealer") or "",
+                row.get("Prezzo") or 0.0,
+                row.get("Qty") or 1,
+                row.get("Lead"),
+                row.get("OfferID"),
+                bool(row.get("LockedDealer", False)),
+            ]
+        )
+    return rows
+
+
+def _rows_to_cart(rows: List[List[Any]] | None) -> List[Dict[str, Any]]:
+    cart: List[Dict[str, Any]] = []
+    if not rows:
+        return cart
+    for row in rows:
+        if not isinstance(row, list) or not row:
+            continue
+        pn = str(row[0] or "").strip()
+        if not pn:
+            continue
+        descr = str(row[1] or "").strip()
+        dealer = str(row[2] or "").strip()
+        try:
+            price = float(row[3]) if row[3] not in ("", None) else 0.0
+        except (TypeError, ValueError):
+            price = 0.0
+        try:
+            qty_val = int(row[4]) if row[4] not in ("", None) else 1
+        except (TypeError, ValueError):
+            qty_val = 1
+        lead = row[5]
+        offer_raw = row[6]
+        try:
+            offer_id = int(offer_raw) if offer_raw not in ("", None) else None
+        except (TypeError, ValueError):
+            offer_id = None
+        lock_val = bool(row[7]) if len(row) > 7 else False
+        cart.append(
+            {
+                "PN": pn,
+                "Descrizione": descr or pn,
+                "Dealer": dealer,
+                "Prezzo": price,
+                "Qty": qty_val,
+                "Lead": lead,
+                "OfferID": offer_id,
+                "LockedDealer": lock_val,
+            }
+        )
+    return cart
+
+
 def do_search(
     pn_text: str, dealers: List[str], in_stock_only: bool
 ) -> Tuple[List[List[Any]], Dict[str, Any]]:
@@ -95,6 +155,7 @@ def add_best_to_cart(
                 "Qty": 1,
                 "Lead": o.get("lead_time_days"),
                 "OfferID": o.get("offer_id"),
+                "LockedDealer": False,
             }
         )
     return cart
@@ -181,8 +242,31 @@ def ui() -> None:
         opt_state = gr.State({})
         gr.Markdown("### Carrello")
         cart_df = gr.Dataframe(
-            headers=["PN", "Descrizione", "Dealer", "Prezzo", "Qty", "Lead", "OfferID"],
+            headers=[
+                "PN",
+                "Descrizione",
+                "Dealer",
+                "Prezzo",
+                "Qty",
+                "Lead",
+                "OfferID",
+                "Blocca dealer",
+            ],
+            datatype=[
+                "str",
+                "str",
+                "str",
+                "number",
+                "number",
+                "str",
+                "number",
+                "bool",
+            ],
             interactive=True,
+            type="array",
+        )
+        gr.Markdown(
+            "_Imposta **Blocca dealer** a `True` per mantenere il fornitore corrente durante l'ottimizzazione._"
         )
         with gr.Row():
             quote_btn = gr.Button("Crea preventivo")
@@ -233,7 +317,6 @@ def ui() -> None:
             penale_dealer: float,
             penale_lead: float,
         ):
-            # Use PN+qty from cart; ignore locked dealers (v1)
             if not cart:
                 return {"error": "carrello vuoto"}
             items: List[Dict[str, Any]] = []
@@ -241,7 +324,12 @@ def ui() -> None:
                 pn = str(r.get("PN") or "").strip()
                 q = int(r.get("Qty", 1) or 1)
                 if pn and q > 0:
-                    items.append({"maker_pn": pn, "qty": q})
+                    locked = bool(r.get("LockedDealer"))
+                    dealer_lock = str(r.get("Dealer") or "").strip() if locked else ""
+                    payload_item: Dict[str, Any] = {"maker_pn": pn, "qty": q}
+                    if locked and dealer_lock:
+                        payload_item["locked_dealer"] = dealer_lock
+                    items.append(payload_item)
             try:
                 scenario_code = scenario_value_map.get(scenario_label, "miglior-prezzo")
                 data = _api_post(
@@ -267,22 +355,7 @@ def ui() -> None:
         )
         add_btn.click(
             _on_add, inputs=[batch_state, cart_state], outputs=[cart_state]
-        ).then(
-            lambda cart: [
-                [
-                    row.get("PN"),
-                    row.get("Descrizione"),
-                    row.get("Dealer"),
-                    row.get("Prezzo"),
-                    row.get("Qty"),
-                    row.get("Lead"),
-                    row.get("OfferID"),
-                ]
-                for row in (cart or [])
-            ],
-            cart_state,
-            cart_df,
-        )
+        ).then(_cart_to_rows, cart_state, cart_df)
 
         def _render_quote(cart: List[Dict[str, Any]], notes: str) -> str:
             payload = _on_quote(cart, notes)
@@ -375,6 +448,7 @@ def ui() -> None:
                         "Qty": int(line.get("qty") or 1),
                         "Lead": line.get("lead_time_days"),
                         "OfferID": offer_id,
+                        "LockedDealer": False,
                     }
                 )
             return new_cart
@@ -395,22 +469,15 @@ def ui() -> None:
         )
         apply_btn.click(
             _apply_plan, inputs=[opt_state, cart_state], outputs=[cart_state]
-        ).then(
-            lambda cart: [
-                [
-                    row.get("PN"),
-                    row.get("Descrizione"),
-                    row.get("Dealer"),
-                    row.get("Prezzo"),
-                    row.get("Qty"),
-                    row.get("Lead"),
-                    row.get("OfferID"),
-                ]
-                for row in (cart or [])
-            ],
-            cart_state,
-            cart_df,
-        )
+        ).then(_cart_to_rows, cart_state, cart_df)
+
+        def _sync_cart(
+            table: List[List[Any]],
+        ) -> Tuple[List[Dict[str, Any]], List[List[Any]]]:
+            new_cart = _rows_to_cart(table)
+            return new_cart, _cart_to_rows(new_cart)
+
+        cart_df.change(_sync_cart, inputs=[cart_df], outputs=[cart_state, cart_df])
 
     demo.launch(server_name="0.0.0.0", server_port=7861)
 

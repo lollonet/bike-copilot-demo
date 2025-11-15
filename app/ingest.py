@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from .models import (
@@ -126,15 +127,35 @@ def _upsert_offers_and_mappings(
             if offer_existing is not None:
                 existing_offers[cache_key] = offer_existing
         if offer_existing is None:
-            offer = SupplierOffer(
-                product_id=product_id,
-                supplier=o.supplier,
-                price=o.price,
-                in_stock=o.in_stock,
-                lead_time_days=o.lead_time_days,
-            )
-            db.add(offer)
-            existing_offers[cache_key] = offer
+            try:
+                with db.begin_nested():
+                    offer = SupplierOffer(
+                        product_id=product_id,
+                        supplier=o.supplier,
+                        price=o.price,
+                        in_stock=o.in_stock,
+                        lead_time_days=o.lead_time_days,
+                    )
+                    db.add(offer)
+                    db.flush()
+                    existing_offers[cache_key] = offer
+                    offer_existing = offer
+            except IntegrityError:
+                offer_existing = db.scalar(
+                    select(SupplierOffer).where(
+                        SupplierOffer.product_id == product_id,
+                        SupplierOffer.supplier == o.supplier,
+                    )
+                )
+                if offer_existing is None:
+                    stats = IngestStats(
+                        products_new=stats.products_new,
+                        products_updated=stats.products_updated,
+                        offers_upserted=stats.offers_upserted,
+                        offers_skipped=stats.offers_skipped + 1,
+                    )
+                    continue
+                existing_offers[cache_key] = offer_existing
         else:
             if offer_existing.price != o.price:
                 if offer_existing.id is not None:
@@ -181,15 +202,30 @@ def _upsert_pn_mapping(db: Session, product: Product, offer: OfferInput) -> None
         row.product_id = int(product.id)
         row.maker_pn_norm = maker_norm
     else:
-        db.add(
-            PNMapping(
-                product_id=int(product.id),
-                dealer=offer.supplier,
-                maker_pn_norm=maker_norm,
-                dealer_pn_norm=dealer_norm,
-                confidence=1.0,
+        try:
+            with db.begin_nested():
+                db.add(
+                    PNMapping(
+                        product_id=int(product.id),
+                        dealer=offer.supplier,
+                        maker_pn_norm=maker_norm,
+                        dealer_pn_norm=dealer_norm,
+                        confidence=1.0,
+                    )
+                )
+                db.flush()
+        except IntegrityError:
+            existing = (
+                db.query(PNMapping)
+                .filter(
+                    PNMapping.dealer == offer.supplier,
+                    PNMapping.dealer_pn_norm == dealer_norm,
+                )
+                .first()
             )
-        )
+            if existing:
+                existing.product_id = int(product.id)
+                existing.maker_pn_norm = maker_norm
 
 
 def main() -> None:

@@ -183,3 +183,27 @@ def test_optimize_piu_veloce_prefers_lower_lead_time(client: TestClient) -> None
     by_pn = {line["maker_pn"]: line for line in data["lines"]}
     # For CN-HG601 DealerA has better lead time than DealerB (1 vs 3 days).
     assert by_pn["CN-HG601"]["dealer"] == "DealerA"
+
+
+def test_optimize_respects_locked_dealer(client: TestClient) -> None:
+    """When a dealer è bloccato su una riga, l'optimizer deve mantenerlo."""
+    r = client.post(
+        "/optimize",
+        json={
+            "items": [
+                {
+                    "maker_pn": "CN-HG601",
+                    "qty": 1,
+                    "locked_dealer": "DealerB",
+                },
+                {"maker_pn": "PG-1230", "qty": 1},
+            ],
+            "params": {"scenario": "miglior-prezzo"},
+        },
+    )
+    assert r.status_code == 200
+    data = r.json()
+    assert any(
+        line["maker_pn"] == "CN-HG601" and line["dealer"] == "DealerB"
+        for line in data["lines"]
+    )

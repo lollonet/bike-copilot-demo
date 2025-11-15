@@ -15,3 +15,9 @@ out/
 
 # OS
 .DS_Store
+
+# sensitive data
+.env
+db-*.md
+providers/html/
+*.har

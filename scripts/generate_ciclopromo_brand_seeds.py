@@ -47,7 +47,9 @@ def build_url(href: str, base_url: str, add_public_prices: bool) -> str:
     if add_public_prices and "publicPrices" not in keys:
         pairs.append(("publicPrices", "true"))
     new_query = urlencode(pairs, doseq=True)
-    return urlunsplit((parsed.scheme, parsed.netloc, parsed.path, new_query, parsed.fragment))
+    return urlunsplit(
+        (parsed.scheme, parsed.netloc, parsed.path, new_query, parsed.fragment)
+    )
 
 
 def sanitize_brand(raw: str) -> str:
@@ -55,7 +57,9 @@ def sanitize_brand(raw: str) -> str:
     return cleaned or "unknown"
 
 
-def extract_entries(html: str, base_url: str, add_public_prices: bool) -> list[tuple[str, str]]:
+def extract_entries(
+    html: str, base_url: str, add_public_prices: bool
+) -> list[tuple[str, str]]:
     soup = BeautifulSoup(html, "html.parser")
     results: list[tuple[str, str]] = []
     seen: set[str] = set()
