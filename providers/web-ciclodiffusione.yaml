@@ -16,7 +16,7 @@ detail:
   root: "html"
   name: "meta[property='og:title']"
   price: "meta[property='og:price:amount']"
-  brand: "meta[property='og:title']"
+  brand: "a[itemprop='brand']"
   mpn: "[itemprop='sku']"
   in_stock: "meta[property='og:availability']"
   category: "#breadcrumb .breadcrumb li a:last-child"

@@ -4,15 +4,47 @@ dealers:
     type: "web"
     base_url_env: "DEALER_RMS_BASE_URL"
     platform: "custom-spa"
-    mapping: null          # TODO: aggiungere providers/web-rms-b2b.yaml quando disponibile
-    policy_url: null       # es. https://rms.it/it/spedizioni (da confermare)
+    mapping: "providers/web-rms.yaml"
+    policy_url: "https://b2bnew.rms.it/ciclo/it/termini-e-condizioni"
     auth:
       mode_env: "DEALER_RMS_AUTH_MODE"
       username_env: "DEALER_RMS_USERNAME"
       password_env: "DEALER_RMS_PASSWORD"
       cookie_env: "DEALER_RMS_COOKIE"
+    login:
+      mode: "spa"
+      preflight_url: "https://b2bnew.rms.it/ciclo/it/login"
+      url: "https://b2bnew.rms.it/api/auth/login"
+      method: "POST"
+      username_field: "username"
+      password_field: "password"
+      extra_fields:
+        remember_me: true
     seeds:
-      urls: []             # URL seed verranno aggiunti dopo esplorazione B2B
+      urls:
+        # aggiornati con scripts/generate_rms_brand_seeds.py il 2025-11-15
+        - "https://b2bnew.rms.it/ciclo/it/category-list/B6/Alligator"
+        - "https://b2bnew.rms.it/ciclo/it/category-list/B30/Bosch"
+        - "https://b2bnew.rms.it/ciclo/it/category-list/B31/Braking"
+        - "https://b2bnew.rms.it/ciclo/it/category-list/B37/Campagnolo"
+        - "https://b2bnew.rms.it/ciclo/it/category-list/B38/Cane_Creek"
+        - "https://b2bnew.rms.it/ciclo/it/category-list/B56/Drc"
+        - "https://b2bnew.rms.it/ciclo/it/category-list/B85/Fsa"
+        - "https://b2bnew.rms.it/ciclo/it/category-list/B96/Icetoolz"
+        - "https://b2bnew.rms.it/ciclo/it/category-list/B98/Infini"
+        - "https://b2bnew.rms.it/ciclo/it/category-list/B104/Kenda"
+        - "https://b2bnew.rms.it/ciclo/it/category-list/B110/Kmc"
+        - "https://b2bnew.rms.it/ciclo/it/category-list/B123/Magura"
+        - "https://b2bnew.rms.it/ciclo/it/category-list/B136/Myland"
+        - "https://b2bnew.rms.it/ciclo/it/category-list/B156/Prologo"
+        - "https://b2bnew.rms.it/ciclo/it/category-list/B177/Sapim"
+        - "https://b2bnew.rms.it/ciclo/it/category-list/B182/Shanren"
+        - "https://b2bnew.rms.it/ciclo/it/category-list/B200/Sr_Suntour"
+        - "https://b2bnew.rms.it/ciclo/it/category-list/B211/Tranz_X"
+        - "https://b2bnew.rms.it/ciclo/it/category-list/B219/Unior"
+        - "https://b2bnew.rms.it/ciclo/it/category-list/B225/Vision"
+        - "https://b2bnew.rms.it/ciclo/it/category-list/B231/Wag"
+        - "https://b2bnew.rms.it/ciclo/it/category-list/B236/Wtb"
       sitemap: null
 
   - key: ciclodiffusione

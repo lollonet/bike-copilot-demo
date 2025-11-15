@@ -1,0 +1,61 @@
+# RMS B2B Web Scraping Configuration
+# Platform: custom-spa (Angular-based SPA)
+# Base URL: configured via DEALER_RMS_BASE_URL environment variable
+
+# Required fields for web adapter
+supplier: RMS
+root: "app-search-products-list .product-card"
+name: ".product-title"
+price: "app-price .price-value"
+brand: ".product-brand"
+mpn: ".product-code"
+
+# Optional fields
+category: ".product-category"
+stock: ".availability-status"
+lead_time: ".lead-time"
+image: ".product-image img"
+description: ".product-description"
+
+# Pagination configuration
+pagination:
+  mode: click
+  selector: ".pagination .page-link.next"
+  max_pages: 100
+
+# Additional selectors for navigation (optional, not used by web adapter)
+search:
+  input_selector: "app-search-bar input"
+  button_selector: "app-search-bar button"
+
+categories:
+  container: "app-search-categories"
+  links: "a.category-link"
+
+brands:
+  container: "app-menu-brand"
+  links: "a.brand-link"
+
+# Cart interaction (optional, not used by web adapter)
+cart:
+  button: "app-cart-popup button"
+  quantity_input: ".quantity-input"
+  add_to_cart: ".add-to-cart-btn"
+
+# Language selector (optional)
+language:
+  selector: "app-language select"
+  default: "it"
+
+# Price display format (optional)
+price_format:
+  currency: "EUR"
+  decimal_separator: ","
+  thousands_separator: "."
+
+# Notes
+notes: |
+  RMS uses an Angular SPA which requires JavaScript execution.
+  Authentication is required to access product data.
+  The actual selectors may need adjustment after inspecting logged-in pages.
+  Consider using Playwright or Selenium for proper SPA interaction.

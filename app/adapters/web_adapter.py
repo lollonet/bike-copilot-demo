@@ -147,6 +147,9 @@ def parse_html(
         if not any(ch.isdigit() for ch in price_s):
             # Listing senza prezzo: saltiamo per evitare ValueError
             continue
+        category = None
+        if "category" in mapping:
+            category = _text(r.select_one(mapping["category"])) or None
         in_stock = True
         if "in_stock" in mapping:
             in_stock = _to_bool(_text(r.select_one(mapping["in_stock"])) or "")
@@ -161,6 +164,7 @@ def parse_html(
                 mpn=mpn,
                 ean=None,
                 name=name or f"{brand} {mpn}",
+                category=category or None,
                 speed=None,
                 brake=None,
                 axle=None,

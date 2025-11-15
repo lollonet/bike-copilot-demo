@@ -29,6 +29,7 @@ REQ-004:
   - MOCKUP-README.md
   - docs/architecture/ARC-020-ux-wireframes.md
   - docs/requirements/REQ-004.ui-pn-first.md
+  - docs/requirements/REQ-005.order-optimizer.md
   - docs/requirements/REQ-INDEX.md
   prs: []
   tests: []

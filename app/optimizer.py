@@ -108,8 +108,10 @@ def optimize(req: OptimizeRequest) -> OptimizeResponse:
     per_pn: List[List[PNOfferItem]] = [res.offers for res in batch.results]
     qty_list: List[int] = [max(1, int(it.qty)) for it in items]
 
-    lines, notes = _lines_for_scenario(items, per_pn, qty_list, params)
+    locked_offers, lock_notes = _apply_locked_dealers(per_pn, items)
+    lines, scenario_notes = _lines_for_scenario(items, locked_offers, qty_list, params)
     dealers, costs = _compute_costs(lines, params)
+    notes = lock_notes + scenario_notes
     return OptimizeResponse(lines=lines, dealers=dealers, costs=costs, notes=notes)
 
 
@@ -398,3 +400,30 @@ def _reduce_dealers_greedy(
         # Apply the PN index list selected for the chosen candidate
         curr_idx = best_choice[3]
     return curr
+
+
+def _apply_locked_dealers(
+    per_pn: List[List[PNOfferItem]], items: List[OptimizeItem]
+) -> Tuple[List[List[PNOfferItem]], List[str]]:
+    """Filter offers per PN according to locked dealer settings."""
+    filtered: List[List[PNOfferItem]] = []
+    notes: List[str] = []
+    for offers, item in zip(per_pn, items):
+        dealer = (item.locked_dealer or "").strip()
+        if not dealer:
+            filtered.append(offers)
+            continue
+        locked = [o for o in offers if o.dealer == dealer]
+        if not locked:
+            filtered.append([])
+            notes.append(
+                f"PN {item.maker_pn}: dealer '{dealer}' non disponibile, riga esclusa."
+            )
+            continue
+        filtered.append(locked)
+        notes.append(f"PN {item.maker_pn} bloccato su {dealer}.")
+
+    # Preserve per_pn length if batch returned more entries than items
+    if len(per_pn) > len(items):
+        filtered.extend(per_pn[len(items) :])
+    return filtered, notes

@@ -138,14 +138,47 @@ POST /search_pn_batch
 }
 ```
 
-#### Multi-Objective Order Optimizer
+#### Multi-Scenario Order Optimizer
 ```python
 POST /optimize
 {
-  "items": [{"offer_id": 123, "qty": 2}],
-  "mode": "min_suppliers",  # or "best_price", "fastest"
-  "max_suppliers": 2,
-  "shipping_policies": {...}
+  "items": [
+    {"maker_pn": "EB400441", "qty": 1, "locked_dealer": "Ciclodiffusione"},
+    {"maker_pn": "RM421691201", "qty": 2}
+  ],
+  "params": {
+    "scenario": "miglior-prezzo",   # oppure: un-solo-dealer | max-n-dealer | piu-veloce
+    "max_dealer": 2,
+    "penale_dealer": 3.5,
+    "penale_lead": 0.5
+  }
+}
+
+Response
+{
+  "lines": [
+    {
+      "offer_id": 12,
+      "maker_pn": "EB400441",
+      "dealer": "Ciclodiffusione",
+      "unit_price": 20.0,
+      "qty": 1,
+      "line_total": 20.0,
+      "lead_time_days": null
+    },
+    ...
+  ],
+  "dealers": ["Ciclodiffusione"],
+  "costs": {
+    "subtotal": 34.0,
+    "shipping": 6.9,
+    "penalties": 0.0,
+    "total": 40.9
+  },
+  "notes": [
+    "Scenario miglior-prezzo: selezionati i prezzi minimi per ciascun PN indipendentemente dal dealer."
+  ],
+  "ts": "2025-11-15T09:00:00Z"
 }
 ```
 

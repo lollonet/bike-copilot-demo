@@ -161,6 +161,7 @@ class KPISummaryResponse(BaseModel):
 class OptimizeItem(BaseModel):
     maker_pn: str
     qty: int = 1
+    locked_dealer: str | None = None
 
 
 class OptimizeParams(BaseModel):

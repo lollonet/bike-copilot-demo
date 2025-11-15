@@ -34,7 +34,7 @@ class DealerLoginConfig:
     method: str = "POST"
     username_field: str | None = None
     password_field: str | None = None
-    extra_fields: dict[str, str] = field(default_factory=dict)
+    extra_fields: dict[str, Any] = field(default_factory=dict)  # Preserve YAML types (bool, int, str, etc.)
     preflight_url: str | None = None
     encoding: str = "form"  # form | multipart
 
@@ -127,7 +127,7 @@ def load_dealers() -> list[DealerConfig]:
                 password_field=str(login_raw.get("password_field") or "").strip()
                 or None,
                 extra_fields={
-                    str(k): str(v)
+                    str(k): v  # Preserve original types from YAML (bool, int, str)
                     for k, v in ((login_raw.get("extra_fields") or {}).items())  # type: ignore[union-attr]
                 },
                 preflight_url=str(login_raw.get("preflight_url") or "").strip() or None,

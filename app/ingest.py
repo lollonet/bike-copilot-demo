@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from .models import (
@@ -116,6 +117,7 @@ def _upsert_offers_and_mappings(
         product_id = int(product.id)
         cache_key = (product_id, o.supplier)
         offer_existing = existing_offers.get(cache_key)
+        is_from_current_batch = offer_existing is not None  # If found in cache, it's from current batch
         if offer_existing is None:
             offer_existing = db.scalar(
                 select(SupplierOffer).where(
@@ -125,18 +127,43 @@ def _upsert_offers_and_mappings(
             )
             if offer_existing is not None:
                 existing_offers[cache_key] = offer_existing
+        is_new_offer = False
         if offer_existing is None:
-            offer = SupplierOffer(
-                product_id=product_id,
-                supplier=o.supplier,
-                price=o.price,
-                in_stock=o.in_stock,
-                lead_time_days=o.lead_time_days,
-            )
-            db.add(offer)
-            existing_offers[cache_key] = offer
-        else:
-            if offer_existing.price != o.price:
+            try:
+                with db.begin_nested():
+                    offer = SupplierOffer(
+                        product_id=product_id,
+                        supplier=o.supplier,
+                        price=o.price,
+                        in_stock=o.in_stock,
+                        lead_time_days=o.lead_time_days,
+                    )
+                    db.add(offer)
+                    db.flush()
+                    existing_offers[cache_key] = offer
+                    offer_existing = offer
+                    is_new_offer = True
+            except IntegrityError:
+                offer_existing = db.scalar(
+                    select(SupplierOffer).where(
+                        SupplierOffer.product_id == product_id,
+                        SupplierOffer.supplier == o.supplier,
+                    )
+                )
+                if offer_existing is None:
+                    stats = IngestStats(
+                        products_new=stats.products_new,
+                        products_updated=stats.products_updated,
+                        offers_upserted=stats.offers_upserted,
+                        offers_skipped=stats.offers_skipped + 1,
+                    )
+                    continue
+                existing_offers[cache_key] = offer_existing
+
+        # Update price/stock for existing offers (found in cache, DB, or after IntegrityError)
+        if not is_new_offer:
+            # Only create price history for existing offers from DB, not duplicates in same batch
+            if offer_existing.price != o.price and not is_from_current_batch:
                 if offer_existing.id is not None:
                     db.add(
                         PriceHistory(
@@ -181,15 +208,30 @@ def _upsert_pn_mapping(db: Session, product: Product, offer: OfferInput) -> None
         row.product_id = int(product.id)
         row.maker_pn_norm = maker_norm
     else:
-        db.add(
-            PNMapping(
-                product_id=int(product.id),
-                dealer=offer.supplier,
-                maker_pn_norm=maker_norm,
-                dealer_pn_norm=dealer_norm,
-                confidence=1.0,
+        try:
+            with db.begin_nested():
+                db.add(
+                    PNMapping(
+                        product_id=int(product.id),
+                        dealer=offer.supplier,
+                        maker_pn_norm=maker_norm,
+                        dealer_pn_norm=dealer_norm,
+                        confidence=1.0,
+                    )
+                )
+                db.flush()
+        except IntegrityError:
+            existing = (
+                db.query(PNMapping)
+                .filter(
+                    PNMapping.dealer == offer.supplier,
+                    PNMapping.dealer_pn_norm == dealer_norm,
+                )
+                .first()
             )
-        )
+            if existing:
+                existing.product_id = int(product.id)
+                existing.maker_pn_norm = maker_norm
 
 
 def main() -> None:
