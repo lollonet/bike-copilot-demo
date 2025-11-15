@@ -53,21 +53,23 @@ def is_test_path(p: Path) -> bool:
 
 
 def index_req_ids(paths: list[Path]) -> dict[str, dict[str, list[str]]]:
-    idx: dict[str, dict[str, set[str] | list]] = {}
+    raw_idx: dict[str, dict[str, set[str]]] = {}
     for p in paths:
         try:
             txt = p.read_text(encoding="utf-8", errors="ignore")
-        except Exception:
+        except (OSError, UnicodeDecodeError):
             continue
         for m in set(REQ_RE.findall(txt)):
-            d = idx.setdefault(
-                m, {"files": set(), "tests": set(), "prs": [], "commits": []}
-            )
-            (d["tests"] if is_test_path(p) else d["files"]).add(str(p))
-    for k, v in idx.items():
-        v["files"] = sorted(v["files"])  # type: ignore[assignment]
-        v["tests"] = sorted(v["tests"])  # type: ignore[assignment]
-    return idx  # type: ignore[return-value]
+            d = raw_idx.setdefault(m, {"files": set(), "tests": set()})
+            target = "tests" if is_test_path(p) else "files"
+            d[target].add(str(p))
+    idx: dict[str, dict[str, list[str]]] = {}
+    for req_id, data in raw_idx.items():
+        idx[req_id] = {
+            "files": sorted(data["files"]),
+            "tests": sorted(data["tests"]),
+        }
+    return idx
 
 
 def main() -> None:

@@ -5,7 +5,7 @@ import glob
 import io
 import yaml
 
-ERR = 0
+err = 0
 REQ_STATUS = {"draft", "approved", "deprecated"}
 IDX = yaml.safe_load(open("docs/index.yaml"))
 
@@ -20,10 +20,10 @@ def fm(path):
 
 
 def require(cond, msg):
-    global ERR
+    global err
     if not cond:
         print(f"[spec-lint] ERROR: {msg}")
-        ERR = 1
+        err = 1
 
 
 ids = set()
@@ -69,4 +69,4 @@ for path in glob.glob("docs/**/*.md", recursive=True):
         )
     if d == "adr":
         require(i.startswith("ADR-"), f"ID {i} must start with ADR-")
-sys.exit(ERR)
+sys.exit(err)

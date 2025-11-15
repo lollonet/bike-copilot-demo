@@ -37,11 +37,17 @@ def extract_brands(html: str, base_url: str) -> list[tuple[str, str]]:
     entries: list[tuple[str, str]] = []
     seen: set[str] = set()
     for link in soup.select("a.menu__link"):
-        href = link.get("href") or ""
+        raw_href = link.get("href")
+        if not isinstance(raw_href, str):
+            continue
+        href = raw_href.strip()
         if "/category-list/" not in href:
             continue
         img = link.find("img")
-        name = (img.get("alt") if img and img.get("alt") else link.get_text()).strip()
+        alt_raw = img.get("alt") if img else None
+        alt_text = alt_raw if isinstance(alt_raw, str) else None
+        label = alt_text or link.get_text()
+        name = label.strip()
         if not name:
             continue
         url = urljoin(base_url, href)
