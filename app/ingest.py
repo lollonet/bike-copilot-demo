@@ -117,6 +117,7 @@ def _upsert_offers_and_mappings(
         product_id = int(product.id)
         cache_key = (product_id, o.supplier)
         offer_existing = existing_offers.get(cache_key)
+        is_from_current_batch = offer_existing is not None  # If found in cache, it's from current batch
         if offer_existing is None:
             offer_existing = db.scalar(
                 select(SupplierOffer).where(
@@ -126,6 +127,7 @@ def _upsert_offers_and_mappings(
             )
             if offer_existing is not None:
                 existing_offers[cache_key] = offer_existing
+        is_new_offer = False
         if offer_existing is None:
             try:
                 with db.begin_nested():
@@ -140,6 +142,7 @@ def _upsert_offers_and_mappings(
                     db.flush()
                     existing_offers[cache_key] = offer
                     offer_existing = offer
+                    is_new_offer = True
             except IntegrityError:
                 offer_existing = db.scalar(
                     select(SupplierOffer).where(
@@ -156,8 +159,11 @@ def _upsert_offers_and_mappings(
                     )
                     continue
                 existing_offers[cache_key] = offer_existing
-        else:
-            if offer_existing.price != o.price:
+
+        # Update price/stock for existing offers (found in cache, DB, or after IntegrityError)
+        if not is_new_offer:
+            # Only create price history for existing offers from DB, not duplicates in same batch
+            if offer_existing.price != o.price and not is_from_current_batch:
                 if offer_existing.id is not None:
                     db.add(
                         PriceHistory(
