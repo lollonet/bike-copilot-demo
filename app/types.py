@@ -178,7 +178,9 @@ class OptimizeRequest(BaseModel):
 
 
 class OptimizeLine(BaseModel):
+    offer_id: int | None = None
     maker_pn: str
+    name: str | None = None
     dealer: str
     unit_price: float | None
     qty: int

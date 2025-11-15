@@ -121,15 +121,32 @@ def _lines_for_scenario(
 ) -> Tuple[List[OptimizeLine], List[str]]:
     scenario = (params.scenario or "miglior-prezzo").lower()
     if scenario == "miglior-prezzo":
-        return _scenario_miglior_prezzo(items, per_pn, qty_list)
+        lines, extra = _scenario_miglior_prezzo(items, per_pn, qty_list)
+        notes = [
+            "Scenario miglior-prezzo: selezionati i prezzi minimi per ciascun PN indipendentemente dal dealer."
+        ]
+        notes.extend(extra)
+        return lines, notes
     if scenario == "piu-veloce":
-        return _scenario_piu_veloce(items, per_pn, qty_list)
+        lines, extra = _scenario_piu_veloce(items, per_pn, qty_list)
+        notes = [
+            "Scenario più veloce: priorità ai lead time minori (il prezzo interviene solo a parità)."
+        ]
+        notes.extend(extra)
+        return lines, notes
     if scenario == "un-solo-dealer":
-        return _scenario_un_solo_dealer(items, per_pn, qty_list, params)
+        lines, extra = _scenario_un_solo_dealer(items, per_pn, qty_list, params)
+        return lines, extra
     if scenario == "max-n-dealer":
-        return _scenario_max_n_dealer(items, per_pn, qty_list, params)
+        lines, extra = _scenario_max_n_dealer(items, per_pn, qty_list, params)
+        notes = [f"Scenario max-n-dealer (limite={int(params.max_dealer or 1)})."]
+        notes.extend(extra)
+        return lines, notes
     # Fallback: behave like 'miglior-prezzo'
-    return _scenario_miglior_prezzo(items, per_pn, qty_list)
+    lines, extra = _scenario_miglior_prezzo(items, per_pn, qty_list)
+    notes = [f"Scenario '{scenario}' non supportato: fallback su miglior-prezzo."]
+    notes.extend(extra)
+    return lines, notes
 
 
 def _scenario_miglior_prezzo(
@@ -145,7 +162,9 @@ def _scenario_miglior_prezzo(
         unit = float(o.price or 0.0)
         lines.append(
             OptimizeLine(
+                offer_id=o.offer_id,
                 maker_pn=pn,
+                name=o.name,
                 dealer=o.dealer,
                 unit_price=o.price,
                 qty=q,
@@ -169,7 +188,9 @@ def _scenario_piu_veloce(
         unit = float(o.price or 0.0)
         lines.append(
             OptimizeLine(
+                offer_id=o.offer_id,
                 maker_pn=pn,
+                name=o.name,
                 dealer=o.dealer,
                 unit_price=o.price,
                 qty=q,
@@ -208,7 +229,9 @@ def _scenario_un_solo_dealer(
             unit = float(sel.price or 0.0)
             cand_lines.append(
                 OptimizeLine(
+                    offer_id=sel.offer_id,
                     maker_pn=pn,
+                    name=sel.name,
                     dealer=sel.dealer,
                     unit_price=sel.price,
                     qty=q,
@@ -226,7 +249,8 @@ def _scenario_un_solo_dealer(
         if best is None or tot < best[0]:
             best = (tot, d, cand_lines)
     if best:
-        _, _, lines = best
+        _, best_dealer, lines = best
+        notes.append(f"Scenario un-solo-dealer: {best_dealer} copre tutte le righe.")
         return lines, notes
     # If no consistent candidate, fall back to miglior-prezzo
     lines, _ = _scenario_miglior_prezzo(items, per_pn, qty_list)
@@ -251,7 +275,9 @@ def _scenario_max_n_dealer(
         unit = float(o.price or 0.0)
         base_lines.append(
             OptimizeLine(
+                offer_id=o.offer_id,
                 maker_pn=pn,
+                name=o.name,
                 dealer=o.dealer,
                 unit_price=o.price,
                 qty=q,
@@ -261,9 +287,13 @@ def _scenario_max_n_dealer(
         )
         base_idx.append(idx)
     if not base_lines:
-        return [], []
+        return [], ["Nessuna riga ottimizzabile per questo scenario."]
     lines = _reduce_dealers_greedy(base_lines, base_idx, per_pn, qty_list, N, params)
-    return lines, []
+    used = sorted({line.dealer for line in lines})
+    note = f"Scenario max-n-dealer: ridotto a {len(used)} dealer" + (
+        f" ({', '.join(used)})" if used else ""
+    )
+    return lines, [note]
 
 
 def _compute_costs(
@@ -336,7 +366,9 @@ def _reduce_dealers_greedy(
                     break
                 unit = float(nb.price or 0.0)
                 new_line = OptimizeLine(
+                    offer_id=nb.offer_id,
                     maker_pn=line.maker_pn,
+                    name=nb.name or line.name,
                     dealer=nb.dealer,
                     unit_price=nb.price,
                     qty=line.qty,

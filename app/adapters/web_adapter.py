@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import NotRequired, TypedDict, TYPE_CHECKING
+from typing import Callable, NotRequired, TypedDict, TYPE_CHECKING
 from urllib.parse import parse_qsl, urlencode, urlparse
 
 from bs4 import BeautifulSoup
@@ -11,6 +11,8 @@ from ..types import OfferInput, ProductInput
 
 if TYPE_CHECKING:
     import httpx
+
+ProgressCallback = Callable[[str, int, int, int], None]
 
 
 class PaginationMapping(TypedDict, total=False):
@@ -315,6 +317,7 @@ def fetch_and_parse_urls(
     delay_sec: float = 0.0,
     headers: dict[str, str] | None = None,
     session: "httpx.Client | None" = None,
+    progress_cb: ProgressCallback | None = None,
 ) -> tuple[list[ProductInput], list[OfferInput]]:
     """Fetch one or more URLs and parse them using the provided mapping.
 
@@ -476,6 +479,10 @@ def fetch_and_parse_urls(
             return []
         return _pagination_chain_link(next_sel)
 
+    def _record_progress(page_url: str, page_idx: int) -> None:
+        if progress_cb:
+            progress_cb(page_url, page_idx, len(all_products), len(all_offers))
+
     for seed in urls:
         if seed in seen_pages:
             continue
@@ -485,8 +492,12 @@ def fetch_and_parse_urls(
         except Exception:
             continue
         _parse_listing_or_detail(seed, html)
-        for href, html2 in _pagination_chain(html, seed):
+        _record_progress(seed, 1)
+        for page_idx, (href, html2) in enumerate(
+            _pagination_chain(html, seed), start=2
+        ):
             _parse_listing_or_detail(href, html2)
+            _record_progress(href, page_idx)
 
     return all_products, all_offers
 
