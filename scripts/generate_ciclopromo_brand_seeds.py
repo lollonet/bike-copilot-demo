@@ -64,7 +64,10 @@ def extract_entries(
     results: list[tuple[str, str]] = []
     seen: set[str] = set()
     for anchor in soup.find_all("a"):
-        href = anchor.get("href")
+        raw_href = anchor.get("href")
+        if not isinstance(raw_href, str):
+            continue
+        href = raw_href.strip()
         if not href or "brands=" not in href:
             continue
         url = build_url(href, base_url, add_public_prices)
