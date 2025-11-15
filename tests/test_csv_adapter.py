@@ -3,8 +3,9 @@ from __future__ import annotations
 from pathlib import Path
 
 import pandas as pd
+import pytest
 
-from app.adapters.csv_adapter import parse_products_csv, parse_offers_csv
+from app.adapters.csv_adapter import parse_offers_csv, parse_products_csv
 
 
 def test_parse_products_csv_basic(tmp_path: Path) -> None:
@@ -75,13 +76,11 @@ def test_parse_products_csv_missing_columns(tmp_path: Path) -> None:
     )
     df.to_csv(csv_path, index=False)
 
-    try:
+    with pytest.raises(ValueError) as exc_info:
         parse_products_csv(csv_path)
-        assert False, "Expected ValueError for missing columns"
-    except ValueError as exc:
-        msg = str(exc)
-        assert "missing columns" in msg
-        assert "mpn" in msg
+    msg = str(exc_info.value)
+    assert "missing columns" in msg
+    assert "mpn" in msg
 
 
 def test_parse_offers_csv_basic(tmp_path: Path) -> None:
@@ -147,10 +146,8 @@ def test_parse_offers_csv_missing_columns(tmp_path: Path) -> None:
     )
     df.to_csv(csv_path, index=False)
 
-    try:
+    with pytest.raises(ValueError) as exc_info:
         parse_offers_csv(csv_path)
-        assert False, "Expected ValueError for missing columns"
-    except ValueError as exc:
-        msg = str(exc)
-        assert "missing columns" in msg
-        assert "in_stock" in msg or "supplier" in msg
+    msg = str(exc_info.value)
+    assert "missing columns" in msg
+    assert "in_stock" in msg or "supplier" in msg
