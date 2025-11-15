@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import TypedDict
+from typing import Any, TypedDict
 from urllib.parse import parse_qs, urlparse
 
 import rich
@@ -887,6 +887,55 @@ def _build_dealer_session(cfg: DealerConfig) -> DealerSession:
             raise typer.BadParameter(
                 f"Login fallito per {cfg.name}: HTTP {resp.status_code}"
             )
+    elif mode == "spa":
+        # Handle SPA authentication (typically JSON API)
+        if not cfg.login:
+            raise typer.BadParameter(
+                f"Configurazione login mancante per {cfg.name} (section login in providers/dealers.yaml)."
+            )
+        if not cfg.login.url:
+            raise typer.BadParameter(f"login.url non impostato per {cfg.name}.")
+        if not username or not password:
+            raise typer.BadParameter(
+                f"Credenziali mancanti per {cfg.name}; definisci {cfg.auth.username_env} e {cfg.auth.password_env}."
+            )
+
+        # Optional preflight request for CSRF tokens or session cookies
+        if cfg.login.preflight_url:
+            pre_resp = client.get(cfg.login.preflight_url)
+            if pre_resp.status_code >= 400:
+                raise typer.BadParameter(
+                    f"Preflight fallito per {cfg.name}: HTTP {pre_resp.status_code}"
+                )
+            client.headers["Referer"] = cfg.login.preflight_url
+
+        # Build JSON payload
+        payload: dict[str, Any] = dict(cfg.login.extra_fields)
+        if cfg.login.username_field:
+            payload[cfg.login.username_field] = username
+        if cfg.login.password_field:
+            payload[cfg.login.password_field] = password
+
+        # Send JSON request
+        client.headers["Content-Type"] = "application/json"
+        resp = client.post(cfg.login.url, json=payload)
+
+        if resp.status_code >= 400:
+            raise typer.BadParameter(
+                f"Login SPA fallito per {cfg.name}: HTTP {resp.status_code}"
+            )
+
+        # Extract auth token from response if present
+        try:
+            auth_data = resp.json()
+            if "token" in auth_data:
+                client.headers["Authorization"] = f"Bearer {auth_data['token']}"
+            elif "access_token" in auth_data:
+                client.headers["Authorization"] = f"Bearer {auth_data['access_token']}"
+        except Exception:
+            # Response might not be JSON or might not contain a token
+            # Session cookies will be used instead
+            pass
     return DealerSession(client, cfg.login)
 
 

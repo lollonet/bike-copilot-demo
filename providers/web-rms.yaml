@@ -2,72 +2,56 @@
 # Platform: custom-spa (Angular-based SPA)
 # Base URL: configured via DEALER_RMS_BASE_URL environment variable
 
-selectors:
-  # Product listing selectors (to be determined after login)
-  listing:
-    container: "app-search-products-list"
-    items: ".product-card"
-    next_page: ".pagination .page-link.next"
+# Required fields for web adapter
+supplier: RMS
+root: "app-search-products-list .product-card"
+name: ".product-title"
+price: "app-price .price-value"
+brand: ".product-brand"
+mpn: ".product-code"
 
-  # Product card selectors
-  product:
-    name: ".product-title"
-    maker_pn: ".product-code"
-    price: "app-price .price-value"
-    stock: ".availability-status"
-    lead_time: ".lead-time"
-    image: ".product-image img"
-    description: ".product-description"
-    brand: ".product-brand"
+# Optional fields
+category: ".product-category"
+stock: ".availability-status"
+lead_time: ".lead-time"
+image: ".product-image img"
+description: ".product-description"
 
 # Pagination configuration
 pagination:
-  type: "click"
+  mode: click
   selector: ".pagination .page-link.next"
   max_pages: 100
 
-# Search configuration
+# Additional selectors for navigation (optional, not used by web adapter)
 search:
   input_selector: "app-search-bar input"
   button_selector: "app-search-bar button"
 
-# Category navigation
 categories:
   container: "app-search-categories"
   links: "a.category-link"
 
-# Brand navigation
 brands:
   container: "app-menu-brand"
   links: "a.brand-link"
 
-# Cart interaction
+# Cart interaction (optional, not used by web adapter)
 cart:
   button: "app-cart-popup button"
   quantity_input: ".quantity-input"
   add_to_cart: ".add-to-cart-btn"
 
-# Language selector
+# Language selector (optional)
 language:
   selector: "app-language select"
   default: "it"
 
-# Price display
-price:
-  container: "app-price"
-  format: "EUR"
+# Price display format (optional)
+price_format:
+  currency: "EUR"
   decimal_separator: ","
   thousands_separator: "."
-
-# Additional features
-features:
-  - "app-listino-cliente"  # Customer price list
-  - "app-listino-codici-ean"  # EAN code list
-  - "app-menu-configuratori-ciclo"  # Bike configurators
-  - "app-menu-promo"  # Promotions menu
-  - "app-download-riferimenti-brand"  # Brand reference downloads
-  - "app-latest-products"  # Latest products section
-  - "app-customer-request"  # Customer request forms
 
 # Notes
 notes: |
