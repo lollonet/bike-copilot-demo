@@ -956,11 +956,14 @@ def _perform_spa_login(
     try:
         auth_data = resp.json()
     except ValueError:
+        # Non-JSON response: fall back to cookies/session state.
         return
-    if "token" in auth_data:
-        client.headers["Authorization"] = f"Bearer {auth_data['token']}"
-    elif "access_token" in auth_data:
-        client.headers["Authorization"] = f"Bearer {auth_data['access_token']}"
+    if not isinstance(auth_data, dict):
+        # Unexpected JSON shape: do not fail dealer sync; just skip token extraction.
+        return
+    token = auth_data.get("token") or auth_data.get("access_token")
+    if isinstance(token, str) and token:
+        client.headers["Authorization"] = f"Bearer {token}"
 
 
 @app.command("dealer-sync")
