@@ -8,13 +8,14 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from .logging_utils import log_event
 from .models import (
+    PNMapping,
     PriceHistory,
     Product,
-    SupplierOffer,
     SessionLocal,
+    SupplierOffer,
     create_all,
-    PNMapping,
 )
 from .pn import normalize_pn
 from .types import OfferInput, ProductInput
@@ -33,9 +34,30 @@ class IngestStats:
 def upsert(core: list[ProductInput], offers: list[OfferInput]) -> IngestStats:
     create_all()
     stats = IngestStats()
+    log_event(
+        "INFO",
+        op="ingest",
+        kind="ingest",
+        message="ingest started",
+        trace_id=None,
+        extra={"products": len(core), "offers": len(offers)},
+    )
     with SessionLocal() as db:
         stats = _upsert_products(db, core, stats)
         stats = _upsert_offers_and_mappings(db, offers, stats)
+    log_event(
+        "INFO",
+        op="ingest",
+        kind="ingest",
+        message="ingest completed",
+        trace_id=None,
+        extra={
+            "products_new": stats.products_new,
+            "products_updated": stats.products_updated,
+            "offers_upserted": stats.offers_upserted,
+            "offers_skipped": stats.offers_skipped,
+        },
+    )
     return stats
 
 

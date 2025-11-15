@@ -10,6 +10,7 @@ import pdfkit
 from shutil import which
 
 from .config import settings
+from .logging_utils import log_event
 
 
 def _ensure_out_dir() -> Path:
@@ -48,8 +49,15 @@ def render_quote(context: dict[str, Any]) -> tuple[str, str | None]:
             cfg = pdfkit.configuration(wkhtmltopdf=wkhtml)
             pdfkit.from_file(str(html_path), str(pdf_path), configuration=cfg)
             return str(html_path), str(pdf_path)
-        except Exception:
-            # Fallback to HTML only
+        except Exception as exc:
+            log_event(
+                "ERROR",
+                op="quote",
+                kind="pdf",
+                message="wkhtmltopdf failed; falling back to HTML only",
+                trace_id=None,
+                extra={"error": str(exc)},
+            )
             return str(html_path), None
     else:
         return str(html_path), None

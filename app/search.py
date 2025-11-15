@@ -2,13 +2,14 @@ from __future__ import annotations
 
 
 import yaml
+import os
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
 from .config import settings
-import os
+from .logging_utils import log_event
 from .models import EventLog, Product, SessionLocal, SupplierOffer
-from .types import OfferItem, SearchRequest, SearchResponse, FacetsResponse
+from .types import FacetsResponse, OfferItem, SearchRequest, SearchResponse
 
 
 _category_synonyms_cache: dict[str, str] = {}
@@ -27,7 +28,15 @@ def _load_category_synonyms() -> dict[str, str]:
                     mapping[str(canon).lower().strip()] = str(canon)
                     for a in aliases or []:
                         mapping[str(a).lower().strip()] = str(canon)
-    except Exception:
+    except (OSError, yaml.YAMLError) as exc:
+        log_event(
+            "WARN",
+            op="category_synonyms",
+            kind="search",
+            message="failed to load category synonyms; using empty map",
+            trace_id=None,
+            extra={"error": str(exc)},
+        )
         mapping = {}
     _category_synonyms_cache = mapping
     return _category_synonyms_cache

@@ -817,126 +817,150 @@ class DealerSession:
 
 
 def _build_dealer_session(cfg: DealerConfig) -> DealerSession:
-    headers = {"User-Agent": "BikeCopilotBot/0.1"}
+    client = _build_http_client()
     mode = _login_mode(cfg)
     username = _env_value(cfg.auth.username_env)
     password = _env_value(cfg.auth.password_env)
     cookie = _env_value(cfg.auth.cookie_env)
 
-    client = httpx.Client(
-        timeout=15.0,
-        headers=headers,
-        follow_redirects=True,
-    )
-
     if mode == "cookie":
-        if not cookie:
-            raise typer.BadParameter(
-                f"Nessun cookie impostato per {cfg.name}; definisci {cfg.auth.cookie_env}."
-            )
-        client.headers["Cookie"] = cookie
+        _apply_cookie_auth(client, cfg, cookie)
     elif mode == "basic":
-        if not username or not password:
-            raise typer.BadParameter(
-                f"Credenziali mancanti per {cfg.name}; definisci {cfg.auth.username_env} e {cfg.auth.password_env}."
-            )
-        client.auth = (username, password)  # type: ignore[assignment]
+        _apply_basic_auth(client, cfg, username, password)
     elif mode == "form":
-        if not cfg.login:
-            raise typer.BadParameter(
-                f"Configurazione login mancante per {cfg.name} (section login in providers/dealers.yaml)."
-            )
-        if not cfg.login.url:
-            raise typer.BadParameter(f"login.url non impostato per {cfg.name}.")
-        if not username or not password:
-            raise typer.BadParameter(
-                f"Credenziali mancanti per {cfg.name}; definisci {cfg.auth.username_env} e {cfg.auth.password_env}."
-            )
-        if cfg.login.preflight_url:
-            pre_resp = client.get(cfg.login.preflight_url)
-            if pre_resp.status_code >= 400:
-                raise typer.BadParameter(
-                    f"Prep-page fallita per {cfg.name}: HTTP {pre_resp.status_code}"
-                )
-            client.headers["Referer"] = cfg.login.preflight_url
-
-        payload_items: list[tuple[str, str]] = list(cfg.login.extra_fields.items())
-        if cfg.login.username_field:
-            payload_items.append((cfg.login.username_field, username))
-        if cfg.login.password_field:
-            payload_items.append((cfg.login.password_field, password))
-
-        method = (cfg.login.method or "POST").upper()
-        if method == "POST":
-            encoding = (cfg.login.encoding or "form").lower()
-            if encoding == "multipart":
-                files = [(k, (None, v)) for k, v in payload_items]
-                resp = client.post(cfg.login.url, files=files)
-            else:
-                form_data = dict(payload_items)
-                resp = client.post(cfg.login.url, data=form_data)
-        elif method == "GET":
-            # For GET requests, use query parameters instead of form data
-            query_params = dict(payload_items)
-            resp = client.get(cfg.login.url, params=query_params)
-        else:
-            raise typer.BadParameter(
-                f"Metodo login {method} non supportato per {cfg.name}."
-            )
-        if resp.status_code >= 400:
-            raise typer.BadParameter(
-                f"Login fallito per {cfg.name}: HTTP {resp.status_code}"
-            )
+        _perform_form_login(client, cfg, username, password)
     elif mode == "spa":
-        # Handle SPA authentication (typically JSON API)
-        if not cfg.login:
-            raise typer.BadParameter(
-                f"Configurazione login mancante per {cfg.name} (section login in providers/dealers.yaml)."
-            )
-        if not cfg.login.url:
-            raise typer.BadParameter(f"login.url non impostato per {cfg.name}.")
-        if not username or not password:
-            raise typer.BadParameter(
-                f"Credenziali mancanti per {cfg.name}; definisci {cfg.auth.username_env} e {cfg.auth.password_env}."
-            )
-
-        # Optional preflight request for CSRF tokens or session cookies
-        if cfg.login.preflight_url:
-            pre_resp = client.get(cfg.login.preflight_url)
-            if pre_resp.status_code >= 400:
-                raise typer.BadParameter(
-                    f"Preflight fallito per {cfg.name}: HTTP {pre_resp.status_code}"
-                )
-            client.headers["Referer"] = cfg.login.preflight_url
-
-        # Build JSON payload
-        payload: dict[str, Any] = dict(cfg.login.extra_fields)
-        if cfg.login.username_field:
-            payload[cfg.login.username_field] = username
-        if cfg.login.password_field:
-            payload[cfg.login.password_field] = password
-
-        # Send JSON request
-        client.headers["Content-Type"] = "application/json"
-        resp = client.post(cfg.login.url, json=payload)
-
-        if resp.status_code >= 400:
-            raise typer.BadParameter(
-                f"Login SPA fallito per {cfg.name}: HTTP {resp.status_code}"
-            )
-
-        # Extract auth token from response if present
-        try:
-            auth_data = resp.json()
-            if "token" in auth_data:
-                client.headers["Authorization"] = f"Bearer {auth_data['token']}"
-            elif "access_token" in auth_data:
-                client.headers["Authorization"] = f"Bearer {auth_data['access_token']}"
-        except Exception:
-            # Response might not be JSON or might not contain a token
-            # Session cookies will be used instead
-            pass
+        _perform_spa_login(client, cfg, username, password)
     return DealerSession(client, cfg.login)
+
+
+def _build_http_client() -> httpx.Client:
+    headers = {"User-Agent": "BikeCopilotBot/0.1"}
+    return httpx.Client(timeout=15.0, headers=headers, follow_redirects=True)
+
+
+def _apply_cookie_auth(
+    client: httpx.Client, cfg: DealerConfig, cookie: str | None
+) -> None:
+    if not cookie:
+        raise typer.BadParameter(
+            f"Nessun cookie impostato per {cfg.name}; definisci {cfg.auth.cookie_env}."
+        )
+    client.headers["Cookie"] = cookie
+
+
+def _apply_basic_auth(
+    client: httpx.Client,
+    cfg: DealerConfig,
+    username: str | None,
+    password: str | None,
+) -> None:
+    if not username or not password:
+        raise typer.BadParameter(
+            f"Credenziali mancanti per {cfg.name}; definisci {cfg.auth.username_env} e {cfg.auth.password_env}."
+        )
+    client.auth = (username, password)  # type: ignore[assignment]
+
+
+def _require_login_cfg(cfg: DealerConfig) -> DealerLoginConfig:
+    if not cfg.login:
+        raise typer.BadParameter(
+            f"Configurazione login mancante per {cfg.name} (section login in providers/dealers.yaml)."
+        )
+    if not cfg.login.url:
+        raise typer.BadParameter(f"login.url non impostato per {cfg.name}.")
+    return cfg.login
+
+
+def _perform_preflight(
+    client: httpx.Client, cfg: DealerConfig, login_cfg: DealerLoginConfig
+) -> None:
+    if not login_cfg.preflight_url:
+        return
+    pre_resp = client.get(login_cfg.preflight_url)
+    if pre_resp.status_code >= 400:
+        raise typer.BadParameter(
+            f"Preflight fallito per {cfg.name}: HTTP {pre_resp.status_code}"
+        )
+    client.headers["Referer"] = login_cfg.preflight_url
+
+
+def _perform_form_login(
+    client: httpx.Client,
+    cfg: DealerConfig,
+    username: str | None,
+    password: str | None,
+) -> None:
+    login_cfg = _require_login_cfg(cfg)
+    if not username or not password:
+        raise typer.BadParameter(
+            f"Credenziali mancanti per {cfg.name}; definisci {cfg.auth.username_env} e {cfg.auth.password_env}."
+        )
+    _perform_preflight(client, cfg, login_cfg)
+
+    payload_items: list[tuple[str, str]] = list(login_cfg.extra_fields.items())
+    if login_cfg.username_field:
+        payload_items.append((login_cfg.username_field, username))
+    if login_cfg.password_field:
+        payload_items.append((login_cfg.password_field, password))
+
+    method = (login_cfg.method or "POST").upper()
+    url = login_cfg.url
+    if method == "POST":
+        encoding = (login_cfg.encoding or "form").lower()
+        if encoding == "multipart":
+            files = [(k, (None, v)) for k, v in payload_items]
+            resp = client.post(url, files=files)
+        else:
+            form_data = dict(payload_items)
+            resp = client.post(url, data=form_data)
+    elif method == "GET":
+        query_params = dict(payload_items)
+        resp = client.get(url, params=query_params)
+    else:
+        raise typer.BadParameter(
+            f"Metodo login {method} non supportato per {cfg.name}."
+        )
+    if resp.status_code >= 400:
+        raise typer.BadParameter(
+            f"Login fallito per {cfg.name}: HTTP {resp.status_code}"
+        )
+
+
+def _perform_spa_login(
+    client: httpx.Client,
+    cfg: DealerConfig,
+    username: str | None,
+    password: str | None,
+) -> None:
+    login_cfg = _require_login_cfg(cfg)
+    if not username or not password:
+        raise typer.BadParameter(
+            f"Credenziali mancanti per {cfg.name}; definisci {cfg.auth.username_env} e {cfg.auth.password_env}."
+        )
+    _perform_preflight(client, cfg, login_cfg)
+
+    payload: dict[str, Any] = dict(login_cfg.extra_fields)
+    if login_cfg.username_field:
+        payload[login_cfg.username_field] = username
+    if login_cfg.password_field:
+        payload[login_cfg.password_field] = password
+
+    client.headers["Content-Type"] = "application/json"
+    resp = client.post(login_cfg.url, json=payload)
+    if resp.status_code >= 400:
+        raise typer.BadParameter(
+            f"Login SPA fallito per {cfg.name}: HTTP {resp.status_code}"
+        )
+
+    try:
+        auth_data = resp.json()
+    except ValueError:
+        return
+    if "token" in auth_data:
+        client.headers["Authorization"] = f"Bearer {auth_data['token']}"
+    elif "access_token" in auth_data:
+        client.headers["Authorization"] = f"Bearer {auth_data['access_token']}"
 
 
 @app.command("dealer-sync")
