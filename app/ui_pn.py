@@ -253,7 +253,9 @@ def _pn_on_search(
     return rows, data
 
 
-def _pn_on_add(batch: Dict[str, Any], cart: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+def _pn_on_add(
+    batch: Dict[str, Any], cart: List[Dict[str, Any]]
+) -> List[Dict[str, Any]]:
     return add_best_to_cart(batch, cart or [])
 
 
@@ -545,7 +547,9 @@ def _wire_pn_callbacks(
             )
         return new_cart
 
-    quote_btn.click(_pn_render_quote, inputs=[cart_state, notes_box], outputs=[quote_out])
+    quote_btn.click(
+        _pn_render_quote, inputs=[cart_state, notes_box], outputs=[quote_out]
+    )
     opt_btn.click(
         _format_optimize,
         inputs=[

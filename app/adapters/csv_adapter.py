@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from pathlib import Path
 import math
+from pathlib import Path
 
 import pandas as pd
 
@@ -18,12 +18,24 @@ def _is_missing(v: object) -> bool:
     return False
 
 
+def _ensure_required_columns(
+    df: pd.DataFrame,
+    required: set[str],
+    label: str,
+) -> None:
+    if not required.issubset(df.columns):
+        missing = required - set(df.columns)
+        raise ValueError(f"{label} missing columns: {sorted(missing)}")
+
+
+def _normalized_str_field(row: dict[str, object], key: str) -> str:
+    return str(row.get(key, "")).strip()
+
+
 def parse_products_csv(path: Path) -> list[ProductInput]:
     df = pd.read_csv(path)
     required = {"brand", "mpn", "name"}
-    if not required.issubset(df.columns):
-        missing = required - set(df.columns)
-        raise ValueError(f"products.csv missing columns: {sorted(missing)}")
+    _ensure_required_columns(df, required, "products.csv")
     rows: list[ProductInput] = []
     for r in df.to_dict(orient="records"):
         ean_val = r.get("ean")
@@ -53,32 +65,43 @@ def parse_products_csv(path: Path) -> list[ProductInput]:
 def parse_offers_csv(path: Path) -> list[OfferInput]:
     df = pd.read_csv(path)
     required = {"brand", "mpn", "supplier", "price", "in_stock"}
-    if not required.issubset(df.columns):
-        missing = required - set(df.columns)
-        raise ValueError(f"offers.csv missing columns: {sorted(missing)}")
     rows: list[OfferInput] = []
-    for r in df.to_dict(orient="records"):
-        in_stock_raw = r.get("in_stock")
-        if isinstance(in_stock_raw, str):
-            in_stock_val = in_stock_raw.strip().lower() in {"1", "true", "yes", "y"}
-        else:
-            in_stock_val = (
-                bool(int(in_stock_raw)) if in_stock_raw is not None else False
-            )
-        price_val = r.get("price")
-        if _is_missing(price_val):
-            continue
-        lead_val = r.get("lead_time_days")
-        lead_str = str(lead_val) if not _is_missing(lead_val) else ""
-        lead = int(lead_str) if lead_str.isdigit() else None
-        rows.append(
-            OfferInput(
-                brand=str(r.get("brand", "")).strip(),
-                mpn=str(r.get("mpn", "")).strip(),
-                supplier=str(r.get("supplier", "")).strip(),
-                price=float(str(price_val)),
-                in_stock=in_stock_val,
-                lead_time_days=lead,
-            )
-        )
+    _ensure_required_columns(df, required, "offers.csv")
+    for record in df.to_dict(orient="records"):
+        offer = _offer_from_record(record)
+        if offer is not None:
+            rows.append(offer)
     return rows
+
+
+def _offer_from_record(record: dict[str, object]) -> OfferInput | None:
+    price_val = record.get("price")
+    if _is_missing(price_val):
+        return None
+    in_stock_val = _parse_in_stock(record.get("in_stock"))
+    lead = _parse_lead_time_days(record.get("lead_time_days"))
+    return OfferInput(
+        brand=_normalized_str_field(record, "brand"),
+        mpn=_normalized_str_field(record, "mpn"),
+        supplier=_normalized_str_field(record, "supplier"),
+        price=float(str(price_val)),
+        in_stock=in_stock_val,
+        lead_time_days=lead,
+    )
+
+
+def _parse_in_stock(raw: object) -> bool:
+    if isinstance(raw, str):
+        return raw.strip().lower() in {"1", "true", "yes", "y"}
+    if raw is None:
+        return False
+    return bool(int(raw))
+
+
+def _parse_lead_time_days(raw: object) -> int | None:
+    if _is_missing(raw):
+        return None
+    lead_str = str(raw)
+    if lead_str.isdigit():
+        return int(lead_str)
+    return None

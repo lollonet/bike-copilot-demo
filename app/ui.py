@@ -74,43 +74,72 @@ def _search_request_from_inputs(
 def _search_rows_from_response(
     res,
 ) -> tuple[list[list[object]], list[tuple[str, int]], dict[int, dict[str, Any]], str]:
+    rows, table_rows, options, mapping = _build_search_collections(res)
+    msg = f"Trovate {len(rows)} offerte"
+    return table_rows, options, mapping, msg
+
+
+def _build_search_collections(
+    res,
+) -> tuple[
+    list[dict[str, object]],
+    list[list[object]],
+    list[tuple[str, int]],
+    dict[int, dict[str, Any]],
+]:
     rows: list[dict[str, object]] = []
     table_rows: list[list[object]] = []
     options: list[tuple[str, int]] = []
     mapping: dict[int, dict[str, Any]] = {}
     for it in res.items:
-        row = {
-            "ID": it.id,
-            "Brand": it.brand,
-            "MPN": it.mpn,
-            "Fornitore": it.supplier,
-            "Prezzo": round(it.price, 2),
-            "Stock": "Sì" if it.in_stock else "No",
-            "Lead (gg)": it.lead_time_days or "-",
-            "Score": round(it.score, 3),
-        }
+        row, table_row, option, mapping_entry = _search_row_parts(it)
         rows.append(row)
-        table_rows.append(
-            [
-                it.id,
-                it.brand,
-                it.mpn,
-                it.supplier,
-                round(it.price, 2),
-                "Sì" if it.in_stock else "No",
-                it.lead_time_days or "-",
-                round(it.score, 3),
-            ]
-        )
-        label = f"{it.id} · {it.brand} {it.mpn} · {it.supplier} · €{it.price:.2f}"
-        options.append((label, it.id))
-        mapping[it.id] = {
+        table_rows.append(table_row)
+        options.append(option)
+        mapping[mapping_entry[0]] = mapping_entry[1]
+    return rows, table_rows, options, mapping
+
+
+def _search_row_parts(
+    it,
+) -> tuple[
+    dict[str, object],
+    list[object],
+    tuple[str, int],
+    tuple[int, dict[str, Any]],
+]:
+    row: dict[str, object] = {
+        "ID": it.id,
+        "Brand": it.brand,
+        "MPN": it.mpn,
+        "Fornitore": it.supplier,
+        "Prezzo": round(it.price, 2),
+        "Stock": "Sì" if it.in_stock else "No",
+        "Lead (gg)": it.lead_time_days or "-",
+        "Score": round(it.score, 3),
+    }
+    table_row: list[object] = [
+        it.id,
+        it.brand,
+        it.mpn,
+        it.supplier,
+        round(it.price, 2),
+        "Sì" if it.in_stock else "No",
+        it.lead_time_days or "-",
+        round(it.score, 3),
+    ]
+    label = f"{it.id} · {it.brand} {it.mpn} · {it.supplier} · €{it.price:.2f}"
+    option = (label, it.id)
+    mapping_entry = (
+        it.id,
+        {
             "brand": it.brand,
             "mpn": it.mpn,
             "supplier": it.supplier,
             "price": it.price,
-        }
-    return table_rows, options, mapping, f"Trovate {len(rows)} offerte"
+        },
+    )
+    return row, table_row, option, mapping_entry
 
 
 def _create_quote(
@@ -160,34 +189,54 @@ def _create_local_quote(
         offer = db.get(SupplierOffer, int(offer_id))
         if offer is None:
             return "OFFERTA NON TROVATA", "", ""
-        product = offer.product
-        context = {
-            "customer_name": customer,
-            "customer_contact": contact,
-            "validity_days": validity,
-            "notes": notes,
-            "items": [
-                {
-                    "brand": product.brand,
-                    "mpn": product.mpn,
-                    "name": product.name,
-                    "supplier": offer.supplier,
-                    "price": offer.price,
-                    "qty": 1,
-                    "in_stock": offer.in_stock,
-                    "lead_time_days": offer.lead_time_days,
-                }
-            ],
-        }
-        html_path, pdf_path = render_quote(context)
-        db.add(
-            EventLog(
-                type="quote_created",
-                payload={"offer_id": offer.id, "ui": True, "pdf": bool(pdf_path)},
-            )
+        context = _single_line_quote_context(
+            offer, customer, contact, validity, notes
         )
-        db.commit()
+        html_path, pdf_path = render_quote(context)
+        _log_ui_quote_created(db, offer.id, pdf_path)
         return html_path, (pdf_path or ""), ""
+
+
+def _single_line_quote_context(
+    offer: SupplierOffer,
+    customer: str,
+    contact: str,
+    validity: int,
+    notes: str,
+) -> dict[str, object]:
+    product = offer.product
+    return {
+        "customer_name": customer,
+        "customer_contact": contact,
+        "validity_days": validity,
+        "notes": notes,
+        "items": [
+            {
+                "brand": product.brand,
+                "mpn": product.mpn,
+                "name": product.name,
+                "supplier": offer.supplier,
+                "price": offer.price,
+                "qty": 1,
+                "in_stock": offer.in_stock,
+                "lead_time_days": offer.lead_time_days,
+            }
+        ],
+    }
+
+
+def _log_ui_quote_created(
+    db: SessionLocal,
+    offer_id: int,
+    pdf_path: str | None,
+) -> None:
+    db.add(
+        EventLog(
+            type="quote_created",
+            payload={"offer_id": offer_id, "ui": True, "pdf": bool(pdf_path)},
+        )
+    )
+    db.commit()
 
 
 def build_interface() -> gr.Blocks:
