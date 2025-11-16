@@ -29,7 +29,35 @@ def _do_search(
     suppliers_sel: list[str] | None,
     in_stock_only: bool | None,
 ):
-    req = SearchRequest(
+    req = _search_request_from_inputs(
+        query,
+        speed,
+        freehub,
+        brake,
+        axle,
+        rotor,
+        budget,
+        category,
+        suppliers_sel,
+        in_stock_only,
+    )
+    res = search(req)
+    return _search_rows_from_response(res)
+
+
+def _search_request_from_inputs(
+    query: str,
+    speed: str,
+    freehub: str,
+    brake: str,
+    axle: str,
+    rotor: str,
+    budget: float | None,
+    category: str | None,
+    suppliers_sel: list[str] | None,
+    in_stock_only: bool | None,
+) -> SearchRequest:
+    return SearchRequest(
         query_text=(query or None),
         speed=(speed or None),
         freehub=(Freehub(freehub) if freehub else None),
@@ -41,8 +69,12 @@ def _do_search(
         suppliers=(suppliers_sel or []),
         in_stock_only=bool(in_stock_only),
     )
-    res = search(req)
-    rows = []
+
+
+def _search_rows_from_response(
+    res,
+) -> tuple[list[list[object]], list[tuple[str, int]], dict[int, dict[str, Any]], str]:
+    rows: list[dict[str, object]] = []
     table_rows: list[list[object]] = []
     options: list[tuple[str, int]] = []
     mapping: dict[int, dict[str, Any]] = {}
@@ -84,26 +116,46 @@ def _do_search(
 def _create_quote(
     offer_id: int, customer: str, contact: str, validity: int, notes: str
 ):
-    payload = {
+    payload = _quote_payload(offer_id, customer, contact, validity, notes)
+    via_api = _try_create_quote_via_api(payload)
+    if via_api is not None:
+        return via_api
+    return _create_local_quote(offer_id, customer, contact, validity, notes)
+
+
+def _quote_payload(
+    offer_id: int, customer: str, contact: str, validity: int, notes: str
+) -> dict[str, object]:
+    return {
         "offer_id": int(offer_id),
         "customer_name": customer,
         "customer_contact": contact,
         "validity_days": int(validity),
         "notes": notes or None,
     }
+
+
+def _try_create_quote_via_api(
+    payload: dict[str, object],
+) -> tuple[str, str, str] | None:
     try:
         auth = (API_USER, API_PASS) if API_USER and API_PASS else None
         r = httpx.post(f"{API_BASE}/quote", json=payload, auth=auth, timeout=10)
-        if r.status_code == 200:
-            data = r.json()
-            return (
-                data.get("html_path", ""),
-                data.get("pdf_path") or "",
-                data.get("file_url") or "",
-            )
+        if r.status_code != 200:
+            return None
+        data = r.json()
+        return (
+            data.get("html_path", ""),
+            data.get("pdf_path") or "",
+            data.get("file_url") or "",
+        )
     except Exception:
-        pass
+        return None
 
+
+def _create_local_quote(
+    offer_id: int, customer: str, contact: str, validity: int, notes: str
+) -> tuple[str, str, str]:
     with SessionLocal() as db:
         offer = db.get(SupplierOffer, int(offer_id))
         if offer is None:

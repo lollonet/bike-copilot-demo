@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from shutil import which
 
 import os
@@ -10,10 +10,18 @@ from typing import Mapping
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, Response
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
-from sqlalchemy import select
+from sqlalchemy import select, func
+from sqlalchemy.orm import Session
 
 from .config import settings
-from .models import EventLog, SessionLocal, SupplierOffer, create_all
+from .models import (
+    EventLog,
+    SessionLocal,
+    SupplierOffer,
+    Product,
+    PNMapping,
+    create_all,
+)
 from .optimizer import optimize
 from .search import facets as compute_facets
 from .search import search
@@ -36,7 +44,7 @@ from .types import (
     KPIDealerEntry,
 )
 from .logging_utils import log_event
-from .pn import search_pn, search_pn_batch
+from .pn import search_pn, search_pn_batch, normalize_pn
 
 
 app = FastAPI(title="Bike Copilot Demo")
@@ -223,77 +231,126 @@ def api_quote(
 ) -> QuoteResponse:
     create_all()
     with SessionLocal() as db:
-        # Build items list from request
-        if not req.items:
-            raise HTTPException(
-                status_code=400,
-                detail=Problem(
-                    kind="invalid_request", message="items required"
-                ).model_dump(),
-            )
-        items: list[dict[str, object]] = []
-        for cart in req.items:
-            offer = db.scalar(
-                select(SupplierOffer).where(SupplierOffer.id == cart.offer_id)
-            )
-            if not offer:
-                raise HTTPException(
-                    status_code=400,
-                    detail=Problem(
-                        kind="not_found", message=f"offer_id {cart.offer_id} not found"
-                    ).model_dump(),
-                )
-            product = offer.product
-            qty = max(1, int(cart.qty))
-            items.append(
-                {
-                    "brand": product.brand,
-                    "mpn": product.mpn,
-                    "name": product.name,
-                    "supplier": offer.supplier,
-                    "price": offer.price,
-                    "qty": qty,
-                    "in_stock": offer.in_stock,
-                    "lead_time_days": offer.lead_time_days,
-                }
-            )
-        context = {
-            "customer_name": req.customer_name,
-            "customer_contact": req.customer_contact,
-            "validity_days": req.validity_days,
-            "notes": req.notes,
-            "items": items,
-        }
-        from .quote import render_quote
+        items = _quote_items_from_request(db, req)
+        response = _render_and_log_quote(db, request, req, items)
+        return response
 
-        html_path, pdf_path = render_quote(context)
 
-        # Log event
-        db.add(
-            EventLog(
-                type="quote_created",
-                payload={"count": len(items), "pdf": bool(pdf_path)},
-            )
-        )
-        db.commit()
-        log_event(
-            "INFO",
-            op="quote",
-            kind="api",
-            message="quote created",
-            trace_id=getattr(request.state, "trace_id", None),
-            extra={"count": len(items), "pdf": bool(pdf_path)},
-        )
-        from urllib.parse import urljoin
-        from pathlib import Path
+def _quote_items_from_request(
+    db: Session, req: QuoteRequest
+) -> list[dict[str, object]]:
+    carts = _validated_cart_items(req)
+    items: list[dict[str, object]] = []
+    for cart in carts:
+        items.append(_quote_item_from_cart(db, cart))
+    return items
 
-        file_url = urljoin(str(request.base_url), f"files/{Path(html_path).name}")
-        return QuoteResponse(
-            content_type="application/pdf" if pdf_path else "text/html",
-            html_path=html_path,
-            pdf_path=pdf_path,
-            file_url=file_url,
+
+def _validated_cart_items(req: QuoteRequest) -> list[QuoteRequest.CartItem]:
+    if not req.items:
+        raise HTTPException(
+            status_code=400,
+            detail=Problem(
+                kind="invalid_request", message="items required"
+            ).model_dump(),
         )
+    return req.items
+
+
+def _quote_item_from_cart(
+    db: Session, cart: QuoteRequest.CartItem
+) -> dict[str, object]:
+    offer = db.scalar(select(SupplierOffer).where(SupplierOffer.id == cart.offer_id))
+    if not offer:
+        raise HTTPException(
+            status_code=400,
+            detail=Problem(
+                kind="not_found", message=f"offer_id {cart.offer_id} not found"
+            ).model_dump(),
+        )
+    product = offer.product
+    qty = max(1, int(cart.qty))
+    return {
+        "brand": product.brand,
+        "mpn": product.mpn,
+        "name": product.name,
+        "supplier": offer.supplier,
+        "price": offer.price,
+        "qty": qty,
+        "in_stock": offer.in_stock,
+        "lead_time_days": offer.lead_time_days,
+    }
+
+
+def _render_and_log_quote(
+    db: Session,
+    request: Request,
+    req: QuoteRequest,
+    items: list[dict[str, object]],
+) -> QuoteResponse:
+    context = _quote_context(req, items)
+    html_path, pdf_path = _render_quote_with_context(context)
+    _persist_quote_event(db, items, pdf_path)
+    _log_quote_created(request, items, pdf_path)
+    return _build_quote_response(request, html_path, pdf_path)
+
+
+def _quote_context(
+    req: QuoteRequest, items: list[dict[str, object]]
+) -> dict[str, object]:
+    return {
+        "customer_name": req.customer_name,
+        "customer_contact": req.customer_contact,
+        "validity_days": req.validity_days,
+        "notes": req.notes,
+        "items": items,
+    }
+
+
+def _render_quote_with_context(context: dict[str, object]) -> tuple[str, str | None]:
+    from .quote import render_quote
+
+    return render_quote(context)
+
+
+def _persist_quote_event(
+    db: Session, items: list[dict[str, object]], pdf_path: str | None
+) -> None:
+    db.add(
+        EventLog(
+            type="quote_created",
+            payload={"count": len(items), "pdf": bool(pdf_path)},
+        )
+    )
+    db.commit()
+
+
+def _log_quote_created(
+    request: Request, items: list[dict[str, object]], pdf_path: str | None
+) -> None:
+    log_event(
+        "INFO",
+        op="quote",
+        kind="api",
+        message="quote created",
+        trace_id=getattr(request.state, "trace_id", None),
+        extra={"count": len(items), "pdf": bool(pdf_path)},
+    )
+
+
+def _build_quote_response(
+    request: Request, html_path: str, pdf_path: str | None
+) -> QuoteResponse:
+    from urllib.parse import urljoin
+    from pathlib import Path
+
+    file_url = urljoin(str(request.base_url), f"files/{Path(html_path).name}")
+    return QuoteResponse(
+        content_type="application/pdf" if pdf_path else "text/html",
+        html_path=html_path,
+        pdf_path=pdf_path,
+        file_url=file_url,
+    )
 
 
 @app.get("/kpi/today")
@@ -319,103 +376,22 @@ def kpi_today(request: Request, _: None = Depends(require_auth)) -> dict[str, in
 
 @app.get("/kpi/summary", response_model=KPISummaryResponse)
 def kpi_summary(_: Request, __: None = Depends(require_auth)) -> KPISummaryResponse:
-    from datetime import datetime, timedelta
-    from sqlalchemy import func
-
     create_all()
     # Use naive UTC consistently to match SQLite naive timestamps
     now = datetime.utcnow()
     cutoff = now - timedelta(hours=24)
     with SessionLocal() as db:
-        # Totali prodotti (via tabella Product)
-        from .models import Product
+        (
+            products_total,
+            prod_with_offers,
+            offers_total,
+            offers_24h,
+        ) = _compute_kpi_totals(db, cutoff)
+        per_dealer = _compute_kpi_per_dealer(db, now, cutoff)
+        unmapped = _count_unmapped_pn(db)
 
-        products_total = int(db.query(func.count(Product.id)).scalar() or 0)
-        # prodotti con almeno un'offerta
-        prod_with_offers = db.query(SupplierOffer.product_id).distinct().count()
-        # Offerte totale e aggiornate nelle 24h
-        offers_total = int(db.query(func.count(SupplierOffer.id)).scalar() or 0)
-        offers_24h = int(
-            db.query(func.count(SupplierOffer.id))
-            .filter(SupplierOffer.updated_at >= cutoff)
-            .scalar()
-            or 0
-        )
-
-        # Per-dealer: numero offerte, % aggiornate 24h, lag dal max(updated_at)
-        per_dealer: list[KPIDealerEntry] = []
-        rows = (
-            db.query(
-                SupplierOffer.supplier,
-                func.count(SupplierOffer.id),
-                func.max(SupplierOffer.updated_at),
-            )
-            .group_by(SupplierOffer.supplier)
-            .all()
-        )
-        for dealer, cnt, last_upd in rows:
-            cnt = int(cnt or 0)
-            upd_24h = int(
-                db.query(func.count(SupplierOffer.id))
-                .filter(
-                    SupplierOffer.supplier == dealer,
-                    SupplierOffer.updated_at >= cutoff,
-                )
-                .scalar()
-                or 0
-            )
-            pct_24 = (upd_24h / cnt * 100.0) if cnt > 0 else 0.0
-            lag_days = None
-            if last_upd is not None:
-                lu = (
-                    last_upd.replace(tzinfo=None)
-                    if getattr(last_upd, "tzinfo", None)
-                    else last_upd
-                )
-                lag_days = max(0.0, (now - lu).total_seconds() / 86400.0)
-            per_dealer.append(
-                KPIDealerEntry(
-                    dealer=str(dealer),
-                    offers=cnt,
-                    updated_24h_pct=round(pct_24, 2),
-                    lag_days=round(lag_days, 2) if lag_days is not None else None,
-                )
-            )
-
-        # PN non mappati: offerte con extra.dealer_pn senza riga PNMapping corrispondente
-        # Carichiamo le offerte con dealer_pn e verifichiamo mapping in Python
-        from .pn import normalize_pn
-        from .models import PNMapping, Product
-
-        cand_offers = (
-            db.query(SupplierOffer).filter(SupplierOffer.extra.isnot(None)).all()
-        )
-        unmapped = 0
-        for off in cand_offers:
-            try:
-                dealer_code = None
-                if isinstance(off.extra, dict):
-                    dealer_code = off.extra.get("dealer_pn")  # type: ignore[assignment]
-                if not dealer_code:
-                    continue
-                dealer_norm = normalize_pn(str(dealer_code))
-                exists = (
-                    db.query(PNMapping.id)
-                    .filter(
-                        PNMapping.dealer == off.supplier,
-                        PNMapping.dealer_pn_norm == dealer_norm,
-                    )
-                    .first()
-                )
-                if not exists:
-                    unmapped += 1
-            except Exception:
-                continue
-
-    coverage = (
-        (prod_with_offers / products_total * 100.0) if products_total > 0 else 0.0
-    )
-    upd_pct = (offers_24h / offers_total * 100.0) if offers_total > 0 else 0.0
+    coverage = _kpi_coverage_pct(products_total, prod_with_offers)
+    upd_pct = _kpi_update_pct(offers_total, offers_24h)
     return KPISummaryResponse(
         products_total=int(products_total),
         products_with_offers=int(prod_with_offers),
@@ -426,3 +402,137 @@ def kpi_summary(_: Request, __: None = Depends(require_auth)) -> KPISummaryRespo
         pn_unmapped=int(unmapped),
         per_dealer=per_dealer,
     )
+
+
+def _compute_kpi_totals(db: Session, cutoff: datetime) -> tuple[int, int, int, int]:
+    products_total = int(db.query(func.count(Product.id)).scalar() or 0)
+    products_with_offers = int(
+        db.query(SupplierOffer.product_id).distinct().count() or 0
+    )
+    offers_total = int(db.query(func.count(SupplierOffer.id)).scalar() or 0)
+    offers_24h = int(
+        db.query(func.count(SupplierOffer.id))
+        .filter(SupplierOffer.updated_at >= cutoff)
+        .scalar()
+        or 0
+    )
+    return products_total, products_with_offers, offers_total, offers_24h
+
+
+def _compute_kpi_per_dealer(
+    db: Session, now: datetime, cutoff: datetime
+) -> list[KPIDealerEntry]:
+    per_dealer: list[KPIDealerEntry] = []
+    rows = _dealer_aggregation_rows(db)
+    for dealer, offers_count, last_updated in rows:
+        per_dealer.append(
+            _kpi_dealer_entry(db, now, cutoff, dealer, offers_count, last_updated)
+        )
+    return per_dealer
+
+
+def _dealer_aggregation_rows(
+    db: Session,
+) -> list[tuple[str, int, datetime | None]]:
+    rows = (
+        db.query(
+            SupplierOffer.supplier,
+            func.count(SupplierOffer.id),
+            func.max(SupplierOffer.updated_at),
+        )
+        .group_by(SupplierOffer.supplier)
+        .all()
+    )
+    result: list[tuple[str, int, datetime | None]] = []
+    for dealer, cnt, last_upd in rows:
+        result.append((str(dealer), int(cnt or 0), last_upd))
+    return result
+
+
+def _kpi_dealer_entry(
+    db: Session,
+    now: datetime,
+    cutoff: datetime,
+    dealer: str,
+    offers_count: int,
+    last_updated: datetime | None,
+) -> KPIDealerEntry:
+    updated_24h = _offers_updated_24h_for_dealer(db, dealer, cutoff)
+    pct_24 = (updated_24h / offers_count * 100.0) if offers_count > 0 else 0.0
+    lag_days = _dealer_lag_days(now, last_updated)
+    return KPIDealerEntry(
+        dealer=dealer,
+        offers=offers_count,
+        updated_24h_pct=round(pct_24, 2),
+        lag_days=round(lag_days, 2) if lag_days is not None else None,
+    )
+
+
+def _offers_updated_24h_for_dealer(db: Session, dealer: str, cutoff: datetime) -> int:
+    return int(
+        db.query(func.count(SupplierOffer.id))
+        .filter(
+            SupplierOffer.supplier == dealer,
+            SupplierOffer.updated_at >= cutoff,
+        )
+        .scalar()
+        or 0
+    )
+
+
+def _dealer_lag_days(now: datetime, last_updated: datetime | None) -> float | None:
+    if last_updated is None:
+        return None
+    last_update = (
+        last_updated.replace(tzinfo=None)
+        if getattr(last_updated, "tzinfo", None)
+        else last_updated
+    )
+    return max(0.0, (now - last_update).total_seconds() / 86400.0)
+
+
+def _count_unmapped_pn(db: Session) -> int:
+    # PN non mappati: offerte con extra.dealer_pn senza riga PNMapping corrispondente
+    candidates = db.query(SupplierOffer).filter(SupplierOffer.extra.isnot(None)).all()
+    unmapped = 0
+    for offer in candidates:
+        try:
+            dealer_code = _dealer_pn_from_offer(offer)
+            if not dealer_code:
+                continue
+            dealer_norm = normalize_pn(dealer_code)
+            exists = (
+                db.query(PNMapping.id)
+                .filter(
+                    PNMapping.dealer == offer.supplier,
+                    PNMapping.dealer_pn_norm == dealer_norm,
+                )
+                .first()
+            )
+            if not exists:
+                unmapped += 1
+        except Exception:
+            continue
+    return unmapped
+
+
+def _dealer_pn_from_offer(offer: SupplierOffer) -> str | None:
+    extra = offer.extra
+    if not isinstance(extra, dict):
+        return None
+    value = extra.get("dealer_pn")
+    if value is None:
+        return None
+    return str(value)
+
+
+def _kpi_coverage_pct(products_total: int, products_with_offers: int) -> float:
+    if products_total <= 0:
+        return 0.0
+    return products_with_offers / products_total * 100.0
+
+
+def _kpi_update_pct(offers_total: int, offers_24h: int) -> float:
+    if offers_total <= 0:
+        return 0.0
+    return offers_24h / offers_total * 100.0
