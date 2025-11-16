@@ -41,13 +41,26 @@ def _shipping_costs(lines: List[OptimizeLine]) -> float:
     """
     if not lines:
         return 0.0
-    # Subtotal per dealer
+    per_dealer = _dealer_subtotals(lines)
+    policy = _load_shipping_policy(list(per_dealer.keys()))
+    total = 0.0
+    for dealer, dealer_subtotal in per_dealer.items():
+        total += _shipping_for_dealer(dealer, dealer_subtotal, policy)
+    return total
+
+
+def _dealer_subtotals(lines: List[OptimizeLine]) -> Dict[str, float]:
     per_dealer: Dict[str, float] = {}
     for line in lines:
         per_dealer[line.dealer] = per_dealer.get(line.dealer, 0.0) + float(
             line.line_total or 0.0
         )
-    dealers = list(per_dealer.keys())
+    return per_dealer
+
+
+def _load_shipping_policy(
+    dealers: List[str],
+) -> Dict[str, Tuple[float | None, float | None]]:
     with SessionLocal() as db:
         rows = (
             db.query(
@@ -56,20 +69,24 @@ def _shipping_costs(lines: List[OptimizeLine]) -> float:
             .filter(DealerPolicy.dealer.in_(dealers))
             .all()
         )
-    policy: Dict[str, Tuple[float | None, float | None]] = {
-        str(name): (
+    policy: Dict[str, Tuple[float | None, float | None]] = {}
+    for name, cost, thr in rows:
+        policy[str(name)] = (
             float(cost) if cost is not None else None,
             float(thr) if thr is not None else None,
         )
-        for (name, cost, thr) in rows
-    }
-    total = 0.0
-    for d, dealer_subtotal in per_dealer.items():
-        base, thr = policy.get(d, (6.9, 49.0))  # fallback defaults when policy missing
-        if thr is not None and dealer_subtotal >= thr:
-            continue
-        total += float(base or 0.0)
-    return total
+    return policy
+
+
+def _shipping_for_dealer(
+    dealer: str,
+    dealer_subtotal: float,
+    policy: Dict[str, Tuple[float | None, float | None]],
+) -> float:
+    base, thr = policy.get(dealer, (6.9, 49.0))
+    if thr is not None and dealer_subtotal >= thr:
+        return 0.0
+    return float(base or 0.0)
 
 
 def _pick_cheapest(offers: List[PNOfferItem]) -> PNOfferItem | None:
@@ -136,30 +153,53 @@ def _lines_for_scenario(
 ) -> Tuple[List[OptimizeLine], List[str]]:
     scenario = (params.scenario or "miglior-prezzo").lower()
     if scenario == "miglior-prezzo":
-        lines, extra = _scenario_miglior_prezzo(items, per_pn, qty_list)
-        notes = [
-            "Scenario miglior-prezzo: selezionati i prezzi minimi per ciascun PN indipendentemente dal dealer."
-        ]
-        notes.extend(extra)
-        return lines, notes
+        return _lines_scenario_miglior_prezzo(items, per_pn, qty_list)
     if scenario == "piu-veloce":
-        lines, extra = _scenario_piu_veloce(items, per_pn, qty_list)
-        notes = [
-            "Scenario più veloce: priorità ai lead time minori (il prezzo interviene solo a parità)."
-        ]
-        notes.extend(extra)
-        return lines, notes
+        return _lines_scenario_piu_veloce(items, per_pn, qty_list)
     if scenario == "un-solo-dealer":
-        lines, extra = _scenario_un_solo_dealer(items, per_pn, qty_list, params)
-        return lines, extra
+        return _scenario_un_solo_dealer(items, per_pn, qty_list, params)
     if scenario == "max-n-dealer":
-        lines, extra = _scenario_max_n_dealer(items, per_pn, qty_list, params)
-        notes = [f"Scenario max-n-dealer (limite={int(params.max_dealer or 1)})."]
-        notes.extend(extra)
-        return lines, notes
-    # Fallback: behave like 'miglior-prezzo'
+        return _lines_scenario_max_n(items, per_pn, qty_list, params)
     lines, extra = _scenario_miglior_prezzo(items, per_pn, qty_list)
     notes = [f"Scenario '{scenario}' non supportato: fallback su miglior-prezzo."]
+    notes.extend(extra)
+    return lines, notes
+
+
+def _lines_scenario_miglior_prezzo(
+    items: List[OptimizeItem],
+    per_pn: List[List[PNOfferItem]],
+    qty_list: List[int],
+) -> Tuple[List[OptimizeLine], List[str]]:
+    lines, extra = _scenario_miglior_prezzo(items, per_pn, qty_list)
+    notes = [
+        "Scenario miglior-prezzo: selezionati i prezzi minimi per ciascun PN indipendentemente dal dealer."
+    ]
+    notes.extend(extra)
+    return lines, notes
+
+
+def _lines_scenario_piu_veloce(
+    items: List[OptimizeItem],
+    per_pn: List[List[PNOfferItem]],
+    qty_list: List[int],
+) -> Tuple[List[OptimizeLine], List[str]]:
+    lines, extra = _scenario_piu_veloce(items, per_pn, qty_list)
+    notes = [
+        "Scenario più veloce: priorità ai lead time minori (il prezzo interviene solo a parità)."
+    ]
+    notes.extend(extra)
+    return lines, notes
+
+
+def _lines_scenario_max_n(
+    items: List[OptimizeItem],
+    per_pn: List[List[PNOfferItem]],
+    qty_list: List[int],
+    params: OptimizeParams,
+) -> Tuple[List[OptimizeLine], List[str]]:
+    lines, extra = _scenario_max_n_dealer(items, per_pn, qty_list, params)
+    notes = [f"Scenario max-n-dealer (limite={int(params.max_dealer or 1)})."]
     notes.extend(extra)
     return lines, notes
 
@@ -223,46 +263,18 @@ def _scenario_un_solo_dealer(
     params: OptimizeParams,
 ) -> Tuple[List[OptimizeLine], List[str]]:
     notes: List[str] = []
-    per_pn_dealers: List[set[str]] = [
-        set(o.dealer for o in offers) for offers in per_pn
-    ]
-    common = set.intersection(*per_pn_dealers) if per_pn_dealers else set()
+    common = _common_dealers(per_pn)
     if not common:
         notes.append("Nessun dealer singolo copre tutti i PN; fallback miglior-prezzo")
         lines, _ = _scenario_miglior_prezzo(items, per_pn, qty_list)
         return lines, notes
     best: Tuple[float, str, List[OptimizeLine]] | None = None
-    for d in common:
-        cand_lines: List[OptimizeLine] = []
-        ok = True
-        for offers, q, pn in zip(per_pn, qty_list, [it.maker_pn for it in items]):
-            cand = [o for o in offers if o.dealer == d]
-            sel = _pick_cheapest(cand)
-            if not sel:
-                ok = False
-                break
-            unit = float(sel.price or 0.0)
-            cand_lines.append(
-                OptimizeLine(
-                    offer_id=sel.offer_id,
-                    maker_pn=pn,
-                    name=sel.name,
-                    dealer=sel.dealer,
-                    unit_price=sel.price,
-                    qty=q,
-                    line_total=unit * q,
-                    lead_time_days=sel.lead_time_days,
-                )
-            )
-        if not ok:
+    for dealer in common:
+        candidate = _single_dealer_candidate(dealer, items, per_pn, qty_list, params)
+        if candidate is None:
             continue
-        subtotal = sum(line.line_total for line in cand_lines)
-        ship = _shipping_costs(cand_lines)
-        lead_avg = _avg_lead(cand_lines)
-        penalties = params.penale_lead * lead_avg
-        tot = subtotal + ship + penalties
-        if best is None or tot < best[0]:
-            best = (tot, d, cand_lines)
+        if best is None or candidate[0] < best[0]:
+            best = candidate
     if best:
         _, best_dealer, lines = best
         notes.append(f"Scenario un-solo-dealer: {best_dealer} copre tutte le righe.")
@@ -272,6 +284,54 @@ def _scenario_un_solo_dealer(
     return lines, notes
 
 
+def _common_dealers(per_pn: List[List[PNOfferItem]]) -> set[str]:
+    per_pn_dealers: List[set[str]] = [
+        set(o.dealer for o in offers) for offers in per_pn
+    ]
+    return set.intersection(*per_pn_dealers) if per_pn_dealers else set()
+
+
+def _single_dealer_candidate(
+    dealer: str,
+    items: List[OptimizeItem],
+    per_pn: List[List[PNOfferItem]],
+    qty_list: List[int],
+    params: OptimizeParams,
+) -> Tuple[float, str, List[OptimizeLine]] | None:
+    cand_lines: List[OptimizeLine] = []
+    for offers, q, pn in zip(per_pn, qty_list, [it.maker_pn for it in items]):
+        cand = [o for o in offers if o.dealer == dealer]
+        sel = _pick_cheapest(cand)
+        if not sel:
+            return None
+        unit = float(sel.price or 0.0)
+        cand_lines.append(
+            OptimizeLine(
+                offer_id=sel.offer_id,
+                maker_pn=pn,
+                name=sel.name,
+                dealer=sel.dealer,
+                unit_price=sel.price,
+                qty=q,
+                line_total=unit * q,
+                lead_time_days=sel.lead_time_days,
+            )
+        )
+    total = _single_dealer_total(cand_lines, params)
+    return total, dealer, cand_lines
+
+
+def _single_dealer_total(
+    lines: List[OptimizeLine],
+    params: OptimizeParams,
+) -> float:
+    subtotal = sum(line.line_total for line in lines)
+    ship = _shipping_costs(lines)
+    lead_avg = _avg_lead(lines)
+    penalties = params.penale_lead * lead_avg
+    return subtotal + ship + penalties
+
+
 def _scenario_max_n_dealer(
     items: List[OptimizeItem],
     per_pn: List[List[PNOfferItem]],
@@ -279,28 +339,7 @@ def _scenario_max_n_dealer(
     params: OptimizeParams,
 ) -> Tuple[List[OptimizeLine], List[str]]:
     N = int(params.max_dealer or 1)
-    base_lines: List[OptimizeLine] = []
-    base_idx: List[int] = []
-    for idx, (offers, q, pn) in enumerate(
-        zip(per_pn, qty_list, [it.maker_pn for it in items])
-    ):
-        o = _pick_cheapest(offers)
-        if not o:
-            continue
-        unit = float(o.price or 0.0)
-        base_lines.append(
-            OptimizeLine(
-                offer_id=o.offer_id,
-                maker_pn=pn,
-                name=o.name,
-                dealer=o.dealer,
-                unit_price=o.price,
-                qty=q,
-                line_total=unit * q,
-                lead_time_days=o.lead_time_days,
-            )
-        )
-        base_idx.append(idx)
+    base_lines, base_idx = _initial_max_n_lines(items, per_pn, qty_list)
     if not base_lines:
         return [], ["Nessuna riga ottimizzabile per questo scenario."]
     lines = _reduce_dealers_greedy(base_lines, base_idx, per_pn, qty_list, N, params)
@@ -309,6 +348,36 @@ def _scenario_max_n_dealer(
         f" ({', '.join(used)})" if used else ""
     )
     return lines, [note]
+
+
+def _initial_max_n_lines(
+    items: List[OptimizeItem],
+    per_pn: List[List[PNOfferItem]],
+    qty_list: List[int],
+) -> Tuple[List[OptimizeLine], List[int]]:
+    base_lines: List[OptimizeLine] = []
+    base_idx: List[int] = []
+    for idx, (offers, q, pn) in enumerate(
+        zip(per_pn, qty_list, [it.maker_pn for it in items])
+    ):
+        chosen = _pick_cheapest(offers)
+        if not chosen:
+            continue
+        unit = float(chosen.price or 0.0)
+        base_lines.append(
+            OptimizeLine(
+                offer_id=chosen.offer_id,
+                maker_pn=pn,
+                name=chosen.name,
+                dealer=chosen.dealer,
+                unit_price=chosen.price,
+                qty=q,
+                line_total=unit * q,
+                lead_time_days=chosen.lead_time_days,
+            )
+        )
+        base_idx.append(idx)
+    return base_lines, base_idx
 
 
 def _compute_costs(
@@ -346,73 +415,120 @@ def _reduce_dealers_greedy(
     curr = list(lines)
     curr_idx = list(line_idx)
 
-    def dealers_of(ls: List[OptimizeLine]) -> List[str]:
-        return sorted(list({line.dealer for line in ls}))
-
-    while len(dealers_of(curr)) > max(1, N):
-        dealers = dealers_of(curr)
-        # Compute current total including shipping and penalties
-        curr_sub = sum(line.line_total for line in curr)
-        curr_ship = _shipping_costs(curr)
-        curr_lead = _avg_lead(curr)
-        curr_pen = (
-            params.penale_dealer * max(0, len(dealers) - 1)
-            + params.penale_lead * curr_lead
+    while len(_dealers_of(curr)) > max(1, N):
+        curr_total = _total_with_penalties(curr, params)
+        best = _best_dealer_reassignment(
+            curr,
+            curr_idx,
+            per_pn,
+            qty_list,
+            params,
+            curr_total,
         )
-        curr_total = curr_sub + curr_ship + curr_pen
-
-        best_choice: Tuple[float, str, List[OptimizeLine], List[int]] | None = None
-        for d in dealers:
-            # Reassign lines currently served by d to next best offers from other dealers
-            cand: List[OptimizeLine] = []
-            cand_idx: List[int] = []
-            for pos, line in enumerate(curr):
-                if line.dealer != d:
-                    cand.append(line)
-                    cand_idx.append(curr_idx[pos])
-                    continue
-                # choose next best from other dealers for PN idx
-                idx = curr_idx[pos]
-                offers = per_pn[idx]
-                alt = [o for o in offers if o.dealer != d]
-                nb = _pick_cheapest(alt)
-                if not nb:
-                    cand = []
-                    break
-                unit = float(nb.price or 0.0)
-                new_line = OptimizeLine(
-                    offer_id=nb.offer_id,
-                    maker_pn=line.maker_pn,
-                    name=nb.name or line.name,
-                    dealer=nb.dealer,
-                    unit_price=nb.price,
-                    qty=line.qty,
-                    line_total=unit * line.qty,
-                    lead_time_days=nb.lead_time_days,
-                )
-                cand.append(new_line)
-                cand_idx.append(idx)
-            if not cand:
-                continue
-            # Compute full candidate total including shipping and penalties
-            cand_dealers = dealers_of(cand)
-            cand_sub = sum(line.line_total for line in cand)
-            cand_ship = _shipping_costs(cand)
-            cand_lead = _avg_lead(cand)
-            cand_pen = (
-                params.penale_dealer * max(0, len(cand_dealers) - 1)
-                + params.penale_lead * cand_lead
-            )
-            cand_total = cand_sub + cand_ship + cand_pen
-            delta = cand_total - curr_total
-            if best_choice is None or delta < best_choice[0]:
-                best_choice = (delta, d, cand, cand_idx)
-        if best_choice is None:
+        if best is None:
             break
-        curr = best_choice[2]
-        # Apply the PN index list selected for the chosen candidate
-        curr_idx = best_choice[3]
+        curr, curr_idx = best
     return curr
+
+
+def _dealers_of(lines: List[OptimizeLine]) -> List[str]:
+    return sorted(list({line.dealer for line in lines}))
+
+
+def _total_with_penalties(
+    lines: List[OptimizeLine],
+    params: OptimizeParams,
+) -> float:
+    dealers = _dealers_of(lines)
+    subtotal = sum(line.line_total for line in lines)
+    ship = _shipping_costs(lines)
+    lead_avg = _avg_lead(lines)
+    penalties = (
+        params.penale_dealer * max(0, len(dealers) - 1) + params.penale_lead * lead_avg
+    )
+    return subtotal + ship + penalties
+
+
+def _best_dealer_reassignment(
+    curr: List[OptimizeLine],
+    curr_idx: List[int],
+    per_pn: List[List[PNOfferItem]],
+    qty_list: List[int],
+    params: OptimizeParams,
+    curr_total: float,
+) -> Tuple[List[OptimizeLine], List[int]] | None:
+    dealers = _dealers_of(curr)
+    best_choice: Tuple[float, List[OptimizeLine], List[int]] | None = None
+    for dealer in dealers:
+        candidate = _candidate_after_removing_dealer(
+            dealer, curr, curr_idx, per_pn, qty_list
+        )
+        if candidate is None:
+            continue
+        cand_lines, cand_idx = candidate
+        cand_total = _total_with_penalties(cand_lines, params)
+        delta = cand_total - curr_total
+        if best_choice is None or delta < best_choice[0]:
+            best_choice = (delta, cand_lines, cand_idx)
+    if best_choice is None:
+        return None
+    return best_choice[1], best_choice[2]
+
+
+def _candidate_after_removing_dealer(
+    dealer: str,
+    curr: List[OptimizeLine],
+    curr_idx: List[int],
+    per_pn: List[List[PNOfferItem]],
+    qty_list: List[int],
+) -> Tuple[List[OptimizeLine], List[int]] | None:
+    cand: List[OptimizeLine] = []
+    cand_idx: List[int] = []
+    for pos, line in enumerate(curr):
+        if line.dealer != dealer:
+            cand.append(line)
+            cand_idx.append(curr_idx[pos])
+            continue
+        replacement = _replacement_line_for_dealer(
+            dealer=dealer,
+            line=line,
+            line_pos=pos,
+            curr_idx=curr_idx,
+            per_pn=per_pn,
+        )
+        if replacement is None:
+            return None
+        new_line, idx = replacement
+        cand.append(new_line)
+        cand_idx.append(idx)
+    return cand, cand_idx
+
+
+def _replacement_line_for_dealer(
+    dealer: str,
+    line: OptimizeLine,
+    line_pos: int,
+    curr_idx: List[int],
+    per_pn: List[List[PNOfferItem]],
+) -> Tuple[OptimizeLine, int] | None:
+    idx = curr_idx[line_pos]
+    offers = per_pn[idx]
+    alt = [o for o in offers if o.dealer != dealer]
+    nb = _pick_cheapest(alt)
+    if not nb:
+        return None
+    unit = float(nb.price or 0.0)
+    new_line = OptimizeLine(
+        offer_id=nb.offer_id,
+        maker_pn=line.maker_pn,
+        name=nb.name or line.name,
+        dealer=nb.dealer,
+        unit_price=nb.price,
+        qty=line.qty,
+        line_total=unit * line.qty,
+        lead_time_days=nb.lead_time_days,
+    )
+    return new_line, idx
 
 
 def _apply_locked_dealers(

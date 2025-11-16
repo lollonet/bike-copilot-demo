@@ -33,7 +33,7 @@ from .models import (
 )
 from .quote import render_quote
 from .search import search
-from .types import Brake, Freehub, QuoteResponse, Rotor, SearchRequest
+from .types import Brake, Freehub, OfferInput, QuoteResponse, Rotor, SearchRequest
 from .policy import parse_policy_html
 from .models import DealerPolicy
 from .dealers import DealerConfig, DealerLoginConfig, find_dealer
@@ -91,6 +91,15 @@ class AliasBlock(TypedDict, total=False):
     aliases: list[AliasEntry]
 
 
+def _build_headers_from_cli(header: list[str] | None) -> dict[str, str]:
+    hdrs: dict[str, str] = {}
+    for h in header or []:
+        if ":" in h:
+            k, v = h.split(":", 1)
+            hdrs[k.strip()] = v.strip()
+    return hdrs
+
+
 @app.command("dump-md")
 def dump_md(
     limit: int | None = typer.Option(None, help="Max rows; omit for all"),
@@ -116,23 +125,8 @@ def _query_export_rows(
     from sqlalchemy import asc
 
     with SessionLocal() as db:
-        q = db.query(
-            SupplierOffer,
-            SupplierOffer.supplier,
-            SupplierOffer.price,
-            SupplierOffer.in_stock,
-            SupplierOffer.lead_time_days,
-            Product.brand,
-            Product.mpn,
-            Product.name,
-            Product.category,
-        ).join(Product, SupplierOffer.product_id == Product.id)
-        if supplier:
-            q = q.filter(SupplierOffer.supplier == supplier)
-        if brand:
-            q = q.filter(Product.brand == brand)
-        if category:
-            q = q.filter(Product.category == category)
+        q = _base_export_query(db)
+        q = _apply_export_filters(q, supplier, brand, category)
         q = q.order_by(
             asc(Product.brand), asc(Product.mpn), asc(SupplierOffer.supplier)
         )
@@ -140,6 +134,35 @@ def _query_export_rows(
             q = q.limit(limit)
         rows = q.all()
     return rows
+
+
+def _base_export_query(db: Session):
+    return db.query(
+        SupplierOffer,
+        SupplierOffer.supplier,
+        SupplierOffer.price,
+        SupplierOffer.in_stock,
+        SupplierOffer.lead_time_days,
+        Product.brand,
+        Product.mpn,
+        Product.name,
+        Product.category,
+    ).join(Product, SupplierOffer.product_id == Product.id)
+
+
+def _apply_export_filters(
+    q,
+    supplier: str | None,
+    brand: str | None,
+    category: str | None,
+):
+    if supplier:
+        q = q.filter(SupplierOffer.supplier == supplier)
+    if brand:
+        q = q.filter(Product.brand == brand)
+    if category:
+        q = q.filter(Product.category == category)
+    return q
 
 
 def _build_export_rows(
@@ -242,43 +265,99 @@ def _apply_pn_alias_blocks(
     inserted = 0
     updated = 0
     for block in data:
-        dealer_raw = block.get("dealer")
-        dealer = str(dealer_raw or "").strip() or None
-        aliases = block.get("aliases") or []
-        for alias in aliases:
-            maker = normalize_pn(str(alias.get("maker_pn") or ""))
-            dealer_pn = str(alias.get("dealer_pn") or "").strip()
-            dealer_norm = normalize_pn(dealer_pn) if dealer_pn else None
-            if not maker:
-                continue
-            target_id = norm_to_product.get(maker)
-            if not target_id:
-                continue
-            q = db.query(PNMapping).filter(
-                PNMapping.dealer == dealer,
-                PNMapping.dealer_pn_norm == dealer_norm,
-            )
-            row = q.first()
-            conf_raw = alias.get("confidence")
-            conf = float(conf_raw) if conf_raw is not None else 1.0
-            if row:
-                row.product_id = int(target_id)
-                row.maker_pn_norm = maker
-                row.confidence = conf
-                updated += 1
-            else:
-                db.add(
-                    PNMapping(
-                        product_id=int(target_id),
-                        dealer=dealer,
-                        maker_pn_norm=maker,
-                        dealer_pn_norm=dealer_norm,
-                        confidence=conf,
-                    )
-                )
-                inserted += 1
+        dealer = _dealer_from_block(block)
+        block_inserted, block_updated = _apply_aliases_for_block(
+            db, dealer, block.get("aliases") or [], norm_to_product, normalize_pn
+        )
+        inserted += block_inserted
+        updated += block_updated
     db.commit()
     return inserted, updated
+
+
+def _dealer_from_block(block: AliasBlock) -> str | None:
+    dealer_raw = block.get("dealer")
+    dealer = str(dealer_raw or "").strip()
+    return dealer or None
+
+
+def _apply_aliases_for_block(
+    db: Session,
+    dealer: str | None,
+    aliases: list[AliasEntry],
+    norm_to_product: dict[str, int],
+    normalize_pn,
+) -> tuple[int, int]:
+    inserted = 0
+    updated = 0
+    for alias in aliases:
+        maker_norm, dealer_norm = _normalized_alias_codes(alias, normalize_pn)
+        if not maker_norm:
+            continue
+        target_id = norm_to_product.get(maker_norm)
+        if not target_id:
+            continue
+        row = _find_existing_alias_row(db, dealer, dealer_norm)
+        confidence = _alias_confidence(alias)
+        if row:
+            _update_alias_row(row, target_id, maker_norm, confidence)
+            updated += 1
+        else:
+            _insert_alias_row(
+                db, dealer, target_id, maker_norm, dealer_norm, confidence
+            )
+            inserted += 1
+    return inserted, updated
+
+
+def _normalized_alias_codes(alias: AliasEntry, normalize_pn) -> tuple[str, str | None]:
+    maker = normalize_pn(str(alias.get("maker_pn") or ""))
+    dealer_pn = str(alias.get("dealer_pn") or "").strip()
+    dealer_norm = normalize_pn(dealer_pn) if dealer_pn else None
+    return maker, dealer_norm
+
+
+def _find_existing_alias_row(db: Session, dealer: str | None, dealer_norm: str | None):
+    return (
+        db.query(PNMapping)
+        .filter(
+            PNMapping.dealer == dealer,
+            PNMapping.dealer_pn_norm == dealer_norm,
+        )
+        .first()
+    )
+
+
+def _alias_confidence(alias: AliasEntry) -> float:
+    conf_raw = alias.get("confidence")
+    return float(conf_raw) if conf_raw is not None else 1.0
+
+
+def _update_alias_row(
+    row: PNMapping, target_id: int, maker_norm: str, confidence: float
+) -> None:
+    row.product_id = int(target_id)
+    row.maker_pn_norm = maker_norm
+    row.confidence = confidence
+
+
+def _insert_alias_row(
+    db: Session,
+    dealer: str | None,
+    target_id: int,
+    maker_norm: str,
+    dealer_norm: str | None,
+    confidence: float,
+) -> None:
+    db.add(
+        PNMapping(
+            product_id=int(target_id),
+            dealer=dealer,
+            maker_pn_norm=maker_norm,
+            dealer_pn_norm=dealer_norm,
+            confidence=confidence,
+        )
+    )
 
 
 @app.command("fetch-policy")
@@ -290,11 +369,7 @@ def fetch_policy(
     """Fetch a shipping policy page and upsert DealerPolicy using deterministic rules."""
     import httpx
 
-    hdrs: dict[str, str] = {}
-    for h in header or []:
-        if ":" in h:
-            k, v = h.split(":", 1)
-            hdrs[k.strip()] = v.strip()
+    hdrs = _build_headers_from_cli(header)
     create_all()
     with httpx.Client(
         timeout=15.0,
@@ -305,25 +380,7 @@ def fetch_policy(
         r.raise_for_status()
         ext = parse_policy_html(r.text)
     with SessionLocal() as db:
-        row = db.query(DealerPolicy).filter(DealerPolicy.dealer == dealer).first()
-        if row is None:
-            db.add(
-                DealerPolicy(
-                    dealer=dealer,
-                    base_cost=ext.base_cost,
-                    free_threshold=ext.free_threshold,
-                    lead_days_std=ext.lead_days_std,
-                    source="rules",
-                    confidence=ext.confidence,
-                )
-            )
-        else:
-            row.base_cost = ext.base_cost
-            row.free_threshold = ext.free_threshold
-            row.lead_days_std = ext.lead_days_std
-            row.source = "rules"
-            row.confidence = ext.confidence
-        db.commit()
+        _upsert_dealer_policy(db, dealer, ext)
     rich.print(
         {
             "dealer": dealer,
@@ -333,6 +390,32 @@ def fetch_policy(
             "confidence": ext.confidence,
         }
     )
+
+
+def _upsert_dealer_policy(
+    db: Session,
+    dealer: str,
+    ext,
+) -> None:
+    row = db.query(DealerPolicy).filter(DealerPolicy.dealer == dealer).first()
+    if row is None:
+        db.add(
+            DealerPolicy(
+                dealer=dealer,
+                base_cost=ext.base_cost,
+                free_threshold=ext.free_threshold,
+                lead_days_std=ext.lead_days_std,
+                source="rules",
+                confidence=ext.confidence,
+            )
+        )
+    else:
+        row.base_cost = ext.base_cost
+        row.free_threshold = ext.free_threshold
+        row.lead_days_std = ext.lead_days_std
+        row.source = "rules"
+        row.confidence = ext.confidence
+    db.commit()
 
 
 @app.command("ingest-csv")
@@ -410,26 +493,29 @@ def fetch_web_url(
         help='extra HTTP headers (key:value), e.g. "Cookie: a=b"',
     ),
 ) -> None:
-    """Fetch remote pages and upsert parsed products/offers using mapping YAML.
+    """Fetch remote pages and upsert parsed products/offers using mapping YAML."""
+    hdrs = _build_headers_from_cli(header)
+    stats = _fetch_and_ingest_web(url, mapping, follow_next, max_pages, delay, hdrs)
+    rich.print(stats)
 
-    For dynamic JS sites, consider saving HTML and using fetch-web instead, or add a headless step later.
-    """
-    hdrs: dict[str, str] = {}
-    if header:
-        for h in header:
-            if ":" in h:
-                k, v = h.split(":", 1)
-                hdrs[k.strip()] = v.strip()
+
+def _fetch_and_ingest_web(
+    urls: list[str],
+    mapping: Path,
+    follow_next: bool,
+    max_pages: int,
+    delay: float,
+    headers: dict[str, str],
+) -> IngestStats:
     products, offers = fetch_and_parse_urls(
-        urls=url,
+        urls=urls,
         mapping_yaml=mapping,
         follow_next=follow_next,
         max_pages=max_pages,
         delay_sec=delay,
-        headers=hdrs,
+        headers=headers,
     )
-    stats: IngestStats = upsert(products, offers)
-    rich.print(stats)
+    return upsert(products, offers)
 
 
 @app.command("search-web")
@@ -475,25 +561,33 @@ def fetch_sitemap(
         help='extra HTTP headers (key:value), e.g. "Cookie: a=b"',
     ),
 ) -> None:
-    """Fetch all product detail pages listed in a sitemap and ingest offers.
+    """Fetch all product detail pages listed in a sitemap and ingest offers."""
+    hdrs = _build_headers_from_cli(header)
+    urls = _sitemap_target_urls(sitemap, hdrs, contains, limit)
+    products, offers = _fetch_sitemap_details(urls, mapping, hdrs, delay)
+    stats: IngestStats = upsert(products, offers)
+    rich.print({"visited": len(urls), **stats.__dict__})
 
-    Designed for WooCommerce sites that expose product URLs in sitemaps.
-    """
-    hdrs: dict[str, str] = {}
-    if header:
-        for h in header:
-            if ":" in h:
-                k, v = h.split(":", 1)
-                hdrs[k.strip()] = v.strip()
-    urls = [
-        u
-        for u in parse_sitemap_urls(sitemap, headers=hdrs, limit=(limit or None))
-        if contains in u
-    ]
-    # Fetch sequentially with delay using detail parsing path
+
+def _sitemap_target_urls(
+    sitemap: str,
+    headers: dict[str, str],
+    contains: str,
+    limit: int,
+) -> list[str]:
+    urls = parse_sitemap_urls(sitemap, headers=headers, limit=(limit or None))
+    return [u for u in urls if contains in u]
+
+
+def _fetch_sitemap_details(
+    urls: list[str],
+    mapping: Path,
+    headers: dict[str, str],
+    delay: float,
+):
     from time import sleep
-    from .adapters.web_adapter import parse_detail_html, _load_mapping  # type: ignore
-    from .types import ProductInput, OfferInput
+    from .adapters.web_adapter import _load_mapping  # type: ignore
+    from .types import ProductInput
     import httpx
 
     mapping_obj = _load_mapping(mapping)
@@ -502,27 +596,43 @@ def fetch_sitemap(
     seen: set[tuple[str, str, str]] = set()
     with httpx.Client(
         timeout=10.0,
-        headers=hdrs or {"User-Agent": "BikeCopilotBot/0.1"},
+        headers=headers or {"User-Agent": "BikeCopilotBot/0.1"},
         follow_redirects=True,
     ) as client:
         for u in urls:
-            try:
-                r = client.get(u)
-                r.raise_for_status()
-                p, o = parse_detail_html(r.text, mapping_obj)
-                if p and o:
-                    key = (p.brand, p.mpn, o.supplier)
-                    if key in seen:
-                        continue
-                    seen.add(key)
-                    products.append(p)
-                    offers.append(o)
-            except Exception:
-                continue
-            finally:
-                sleep(max(0.0, delay))
-    stats: IngestStats = upsert(products, offers)
-    rich.print({"visited": len(urls), **stats.__dict__})
+            _fetch_single_sitemap_url(
+                client, u, mapping_obj, seen, products, offers, delay, sleep
+            )
+    return products, offers
+
+
+def _fetch_single_sitemap_url(
+    client,
+    url: str,
+    mapping_obj,
+    seen: set[tuple[str, str, str]],
+    products,
+    offers,
+    delay: float,
+    sleep,
+) -> None:
+    try:
+        r = client.get(url)
+        r.raise_for_status()
+        from .adapters.web_adapter import parse_detail_html  # type: ignore
+
+        p, o = parse_detail_html(r.text, mapping_obj)
+        if p and o:
+            key = (p.brand, p.mpn, o.supplier)
+            if key in seen:
+                return
+            seen.add(key)
+            products.append(p)
+            offers.append(o)
+    except Exception:
+        return
+    finally:
+        sleep(max(0.0, delay))
 
 
 @app.command("ingest-csv-mapped")
@@ -578,15 +688,56 @@ def ingest_csv_synth(
     ),
 ) -> None:
     """Ingest CSV and synthesize duplicate offers across multiple suppliers."""
-    from .types import OfferInput
-
     base_products, base_offers = parse_unified_csv(csv, mapping)
 
-    # Upsert base rows first
     stats = upsert(base_products, base_offers)
+    rng = random.Random(42)
+    grouped = _group_offers_by_product(base_offers)
+    extra_offers = _generate_synthetic_offers(grouped, suppliers, coverage, jitter, rng)
+    stats = _upsert_synthetic_offers(extra_offers, stats)
+    summary = _compute_synth_summary()
+    rich.print({**summary, "ingest": stats.__dict__})
 
-    # Generate synthetic suppliers
-    supplier_names = [
+
+def _group_offers_by_product(
+    base_offers: list["OfferInput"],
+) -> dict[tuple[str, str], dict[str, float]]:
+    grouped: dict[tuple[str, str], dict[str, float]] = {}
+    for offer in base_offers:
+        key = (offer.brand, offer.mpn)
+        grouped[key] = {"price": offer.price}
+    return grouped
+
+
+def _generate_synthetic_offers(
+    grouped: dict[tuple[str, str], dict[str, float]],
+    suppliers: int,
+    coverage: float,
+    jitter: float,
+    rng: random.Random,
+) -> list[OfferInput]:
+    supplier_names = _synthetic_supplier_names()
+    extra_offers: list[OfferInput] = []
+    for (brand, mpn), info in grouped.items():
+        base_price = float(info.get("price", 0.0)) or 0.0
+        if not _should_synthesize_group(base_price, coverage, rng):
+            continue
+        extra_offers.extend(
+            _offers_for_group(
+                brand,
+                mpn,
+                base_price,
+                suppliers,
+                jitter,
+                rng,
+                supplier_names,
+            )
+        )
+    return extra_offers
+
+
+def _synthetic_supplier_names() -> list[str]:
+    return [
         "BiciPro",
         "RideLabs",
         "PedalX",
@@ -596,74 +747,89 @@ def ingest_csv_synth(
         "WheelHouse",
         "ChainLine",
     ]
-    rng = random.Random(42)
 
-    # Build grouped products by (brand, mpn)
-    grouped: dict[tuple[str, str], dict[str, str | float]] = {}
-    for o in base_offers:
-        key = (o.brand, o.mpn)
-        grouped[key] = {"price": o.price}
 
-    extra_offers: list[OfferInput] = []
-    for (brand, mpn), info in grouped.items():
-        if rng.random() > coverage:
-            continue
-        base_price = float(info.get("price", 0.0)) or 0.0
-        if base_price <= 0:
-            continue
-        k = max(0, suppliers - 1)  # extra suppliers beyond the base
-        chosen = rng.sample(supplier_names, k=min(k, len(supplier_names)))
-        for sup in chosen:
-            delta = rng.uniform(-jitter, jitter)
-            price = round(base_price * (1.0 + delta), 2)
-            in_stock = rng.random() < 0.7
-            lead = rng.randint(0, 5)
-            extra_offers.append(
-                OfferInput(
-                    brand=brand,
-                    mpn=mpn,
-                    supplier=sup,
-                    price=price,
-                    in_stock=in_stock,
-                    lead_time_days=lead,
-                )
+def _should_synthesize_group(
+    base_price: float,
+    coverage: float,
+    rng: random.Random,
+) -> bool:
+    if rng.random() > coverage:
+        return False
+    if base_price <= 0:
+        return False
+    return True
+
+
+def _offers_for_group(
+    brand: str,
+    mpn: str,
+    base_price: float,
+    suppliers: int,
+    jitter: float,
+    rng: random.Random,
+    supplier_names: list[str],
+) -> list[OfferInput]:
+    extra_count = max(0, suppliers - 1)
+    chosen = rng.sample(supplier_names, k=min(extra_count, len(supplier_names)))
+    offers: list[OfferInput] = []
+    for sup in chosen:
+        price = _synthetic_price(base_price, jitter, rng)
+        in_stock = rng.random() < 0.7
+        lead = rng.randint(0, 5)
+        offers.append(
+            OfferInput(
+                brand=brand,
+                mpn=mpn,
+                supplier=sup,
+                price=price,
+                in_stock=in_stock,
+                lead_time_days=lead,
             )
-
-    if extra_offers:
-        stats2 = upsert([], extra_offers)
-        stats = IngestStats(
-            products_new=stats.products_new,
-            products_updated=stats.products_updated,
-            offers_upserted=stats.offers_upserted + stats2.offers_upserted,
-            offers_skipped=stats.offers_skipped + stats2.offers_skipped,
         )
+    return offers
 
-    # Summary
+
+def _synthetic_price(base_price: float, jitter: float, rng: random.Random) -> float:
+    delta = rng.uniform(-jitter, jitter)
+    return round(base_price * (1.0 + delta), 2)
+
+
+def _upsert_synthetic_offers(extra_offers, stats: IngestStats) -> IngestStats:
+    if not extra_offers:
+        return stats
+    stats2 = upsert([], extra_offers)
+    return IngestStats(
+        products_new=stats.products_new,
+        products_updated=stats.products_updated,
+        offers_upserted=stats.offers_upserted + stats2.offers_upserted,
+        offers_skipped=stats.offers_skipped + stats2.offers_skipped,
+    )
+
+
+def _compute_synth_summary() -> dict[str, int]:
     from sqlalchemy import func
 
     with SessionLocal() as db:
-        prod_count = (
+        prod_count = int(
             db.query(func.count(SupplierOffer.product_id.distinct())).scalar() or 0
         )
-        offer_count = db.query(func.count(SupplierOffer.id)).scalar() or 0
-        sup_count = (
+        offer_count = int(db.query(func.count(SupplierOffer.id)).scalar() or 0)
+        sup_count = int(
             db.query(func.count(SupplierOffer.supplier.distinct())).scalar() or 0
         )
-        in_stock = (
+        in_stock = int(
             db.query(func.count(SupplierOffer.id))
             .filter(SupplierOffer.in_stock)
             .scalar()
             or 0
         )
-    rich.print(
-        {
-            "products": prod_count,
-            "offers": offer_count,
-            "suppliers": sup_count,
-            "in_stock_offers": in_stock,
-            "ingest": stats.__dict__,
-        }
-    )
+    return {
+        "products": prod_count,
+        "offers": offer_count,
+        "suppliers": sup_count,
+        "in_stock_offers": in_stock,
+    }
 
 
 @app.command()
@@ -677,7 +843,22 @@ def search_cli(
     budget_max: float | None = typer.Option(None),
 ) -> None:
     """Search offers and render a table with top 3 results."""
-    req = SearchRequest(
+    req = _build_search_request(query, speed, freehub, brake, axle, rotor, budget_max)
+    res = search(req)
+    table = _build_search_table(res.items)
+    rich.print(table)
+
+
+def _build_search_request(
+    query: str | None,
+    speed: str | None,
+    freehub: Freehub | None,
+    brake: Brake | None,
+    axle: str | None,
+    rotor: Rotor | None,
+    budget_max: float | None,
+) -> SearchRequest:
+    return SearchRequest(
         query_text=query,
         speed=speed,
         freehub=freehub,
@@ -686,7 +867,9 @@ def search_cli(
         rotor=rotor,
         budget_max=budget_max,
     )
-    res = search(req)
+
+
+def _build_search_table(items) -> Table:
     table = Table(title="Top 3 Offers")
     for col in (
         "offer_id",
@@ -699,7 +882,7 @@ def search_cli(
         "score",
     ):
         table.add_column(col)
-    for it in res.items:
+    for it in items:
         table.add_row(
             str(it.id),
             it.brand,
@@ -710,7 +893,7 @@ def search_cli(
             str(it.lead_time_days or "-"),
             f"{it.score:.3f}",
         )
-    rich.print(table)
+    return table
 
 
 @app.command()
@@ -724,43 +907,74 @@ def quote_cli(
 ) -> None:
     """Render a quote for an existing offer (single-line) and print artifact paths."""
     with SessionLocal() as db:
-        offer = db.get(SupplierOffer, offer_id)
-        if offer is None:
-            typer.secho("offer_id not found", fg=typer.colors.RED)
-            raise typer.Exit(code=2)
-        product = offer.product
-        context = {
-            "customer_name": customer_name,
-            "customer_contact": customer_contact,
-            "validity_days": validity_days,
-            "notes": notes,
-            "items": [
-                {
-                    "brand": product.brand,
-                    "mpn": product.mpn,
-                    "name": product.name,
-                    "supplier": offer.supplier,
-                    "price": offer.price,
-                    "qty": int(qty),
-                    "in_stock": offer.in_stock,
-                    "lead_time_days": offer.lead_time_days,
-                }
-            ],
-        }
-        html_path, pdf_path = render_quote(context)
-        db.add(
-            EventLog(
-                type="quote_created",
-                payload={"offer_id": offer.id, "cli": True, "pdf": bool(pdf_path)},
-            )
+        offer = _require_offer(db, offer_id)
+        context = _build_single_line_quote_context(
+            offer,
+            qty,
+            customer_name,
+            customer_contact,
+            validity_days,
+            notes,
         )
-        db.commit()
+        html_path, pdf_path = render_quote(context)
+        _log_cli_quote(db, offer.id, pdf_path)
         out = QuoteResponse(
             content_type="application/pdf" if pdf_path else "text/html",
             html_path=html_path,
             pdf_path=pdf_path,
         )
         rich.print(out.model_dump())
+
+
+def _require_offer(db: SessionLocal, offer_id: int) -> SupplierOffer:
+    offer = db.get(SupplierOffer, offer_id)
+    if offer is None:
+        typer.secho("offer_id not found", fg=typer.colors.RED)
+        raise typer.Exit(code=2)
+    return offer
+
+
+def _build_single_line_quote_context(
+    offer: SupplierOffer,
+    qty: int,
+    customer_name: str,
+    customer_contact: str,
+    validity_days: int,
+    notes: str | None,
+) -> dict[str, object]:
+    product = offer.product
+    return {
+        "customer_name": customer_name,
+        "customer_contact": customer_contact,
+        "validity_days": validity_days,
+        "notes": notes,
+        "items": [
+            {
+                "brand": product.brand,
+                "mpn": product.mpn,
+                "name": product.name,
+                "supplier": offer.supplier,
+                "price": offer.price,
+                "qty": int(qty),
+                "in_stock": offer.in_stock,
+                "lead_time_days": offer.lead_time_days,
+            }
+        ],
+    }
+
+
+def _log_cli_quote(
+    db: SessionLocal,
+    offer_id: int,
+    pdf_path: str | None,
+) -> None:
+    db.add(
+        EventLog(
+            type="quote_created",
+            payload={"offer_id": offer_id, "cli": True, "pdf": bool(pdf_path)},
+        )
+    )
+    db.commit()
 
 
 @app.command()
@@ -892,39 +1106,56 @@ def _perform_form_login(
     password: str | None,
 ) -> None:
     login_cfg = _require_login_cfg(cfg)
+    _ensure_credentials(cfg, username, password)
+    _perform_preflight(client, cfg, login_cfg)
+
+    payload_items = _build_login_payload_items(login_cfg, username, password)
+    resp = _submit_form_login_request(client, cfg, login_cfg, payload_items)
+    if resp.status_code >= 400:
+        raise typer.BadParameter(
+            f"Login fallito per {cfg.name}: HTTP {resp.status_code}"
+        )
+
+
+def _ensure_credentials(
+    cfg: DealerConfig, username: str | None, password: str | None
+) -> None:
     if not username or not password:
         raise typer.BadParameter(
             f"Credenziali mancanti per {cfg.name}; definisci {cfg.auth.username_env} e {cfg.auth.password_env}."
         )
-    _perform_preflight(client, cfg, login_cfg)
 
-    payload_items: list[tuple[str, str]] = list(login_cfg.extra_fields.items())
+
+def _build_login_payload_items(
+    login_cfg: DealerLoginConfig, username: str, password: str
+) -> list[tuple[str, str]]:
+    items: list[tuple[str, str]] = list(login_cfg.extra_fields.items())
     if login_cfg.username_field:
-        payload_items.append((login_cfg.username_field, username))
+        items.append((login_cfg.username_field, username))
     if login_cfg.password_field:
-        payload_items.append((login_cfg.password_field, password))
+        items.append((login_cfg.password_field, password))
+    return items
 
+
+def _submit_form_login_request(
+    client: httpx.Client,
+    cfg: DealerConfig,
+    login_cfg: DealerLoginConfig,
+    payload_items: list[tuple[str, str]],
+):
     method = (login_cfg.method or "POST").upper()
     url = login_cfg.url
     if method == "POST":
         encoding = (login_cfg.encoding or "form").lower()
         if encoding == "multipart":
             files = [(k, (None, v)) for k, v in payload_items]
-            resp = client.post(url, files=files)
-        else:
-            form_data = dict(payload_items)
-            resp = client.post(url, data=form_data)
-    elif method == "GET":
+            return client.post(url, files=files)
+        form_data = dict(payload_items)
+        return client.post(url, data=form_data)
+    if method == "GET":
         query_params = dict(payload_items)
-        resp = client.get(url, params=query_params)
-    else:
-        raise typer.BadParameter(
-            f"Metodo login {method} non supportato per {cfg.name}."
-        )
-    if resp.status_code >= 400:
-        raise typer.BadParameter(
-            f"Login fallito per {cfg.name}: HTTP {resp.status_code}"
-        )
+        return client.get(url, params=query_params)
+    raise typer.BadParameter(f"Metodo login {method} non supportato per {cfg.name}.")
 
 
 def _perform_spa_login(
@@ -934,39 +1165,62 @@ def _perform_spa_login(
     password: str | None,
 ) -> None:
     login_cfg = _require_login_cfg(cfg)
-    if not username or not password:
-        raise typer.BadParameter(
-            f"Credenziali mancanti per {cfg.name}; definisci {cfg.auth.username_env} e {cfg.auth.password_env}."
-        )
+    _ensure_credentials(cfg, username, password)
     _perform_preflight(client, cfg, login_cfg)
 
-    payload: dict[str, Any] = dict(login_cfg.extra_fields)
-    if login_cfg.username_field:
-        payload[login_cfg.username_field] = username
-    if login_cfg.password_field:
-        payload[login_cfg.password_field] = password
-
-    client.headers["Content-Type"] = "application/json"
-    resp = client.post(login_cfg.url, json=payload)
+    payload = _build_spa_payload(login_cfg, username, password)
+    resp = _submit_spa_login_request(client, login_cfg, payload)
     if resp.status_code >= 400:
         raise typer.BadParameter(
             f"Login SPA fallito per {cfg.name}: HTTP {resp.status_code}"
         )
 
+    token = _extract_spa_token(resp)
+    if token:
+        client.headers["Authorization"] = f"Bearer {token}"
+
+
+def _build_spa_payload(
+    login_cfg: DealerLoginConfig,
+    username: str,
+    password: str,
+) -> dict[str, Any]:
+    payload: dict[str, Any] = dict(login_cfg.extra_fields)
+    if login_cfg.username_field:
+        payload[login_cfg.username_field] = username
+    if login_cfg.password_field:
+        payload[login_cfg.password_field] = password
+    return payload
+
+
+def _submit_spa_login_request(
+    client: httpx.Client,
+    login_cfg: DealerLoginConfig,
+    payload: dict[str, Any],
+):
+    client.headers["Content-Type"] = "application/json"
+    return client.post(login_cfg.url, json=payload)
+
+
+def _extract_spa_token(resp: httpx.Response) -> str | None:
     try:
         auth_data = resp.json()
     except ValueError:
         # Non-JSON response: fall back to cookies/session state.
-        return
+        return None
     if not isinstance(auth_data, dict):
         # Unexpected JSON shape: do not fail dealer sync; just skip token extraction.
-        return
+        return None
     token = auth_data.get("token") or auth_data.get("access_token")
     if isinstance(token, str) and token:
-        client.headers["Authorization"] = f"Bearer {token}"
+        return token
+    return None
 
 
-@app.command("dealer-sync")
+@app.command(
+    "dealer-sync",
+    help="Sincronizza un dealer usando providers/dealers.yaml (policy + catalogo).",
+)
 def dealer_sync(
     dealer: str = typer.Argument(..., help="Dealer key o nome (es. ciclodiffusione)"),
     mode: str = typer.Option(
@@ -979,145 +1233,175 @@ def dealer_sync(
         0.5, min=0.0, help="Delay (secondi) tra richieste web (solo web)"
     ),
 ) -> None:
-    """Sincronizza un dealer usando providers/dealers.yaml (policy + catalogo).
-
-    - Legge configurazione dealer (mapping, URL policy, seeds).
-    - Se mode include 'policy', estrae/aggiorna DealerPolicy.
-    - Se mode include 'catalogo', esegue ingest del catalogo (per ora solo web).
-    """
     mode_l = mode.strip().lower()
+    cfg = _require_dealer_cfg(dealer)
+    _print_dealer_intro(cfg)
+
+    from .dealers import _repo_root
+
+    mapping_path = _repo_root() / cfg.mapping if cfg.mapping else None
+
+    session = _build_dealer_session(cfg)
+    try:
+        _sync_dealer_policy_if_needed(cfg, mode_l, session)
+        _sync_dealer_catalog_if_needed(
+            cfg, mode_l, session, max_pages, delay, mapping_path
+        )
+    finally:
+        session.close()
+
+
+def _require_dealer_cfg(dealer: str) -> DealerConfig:
     cfg = find_dealer(dealer)
     if cfg is None:
         raise typer.BadParameter(
             f"Dealer '{dealer}' non trovato in providers/dealers.yaml"
         )
+    return cfg
 
+
+def _print_dealer_intro(cfg: DealerConfig) -> None:
     rich.print(
         f"[bold]Dealer[/bold]: {cfg.name} (tipo={cfg.type}, platform={cfg.platform})"
     )
 
-    session = _build_dealer_session(cfg)
-    try:
-        # Policy
-        if mode_l in ("all", "policy") and cfg.policy_url:
-            rich.print(f"[cyan]Scarico policy da[/cyan] {cfg.policy_url}")
-            r = session.client.get(cfg.policy_url)
-            r.raise_for_status()
-            ext = parse_policy_html(r.text)
-            create_all()
-            with SessionLocal() as db:
-                row = (
-                    db.query(DealerPolicy)
-                    .filter(DealerPolicy.dealer == cfg.name)
-                    .first()
-                )
-                if row is None:
-                    db.add(
-                        DealerPolicy(
-                            dealer=cfg.name,
-                            base_cost=ext.base_cost,
-                            free_threshold=ext.free_threshold,
-                            lead_days_std=ext.lead_days_std,
-                            source="rules",
-                            confidence=ext.confidence,
-                        )
-                    )
-                else:
-                    row.base_cost = ext.base_cost
-                    row.free_threshold = ext.free_threshold
-                    row.lead_days_std = ext.lead_days_std
-                    row.source = "rules"
-                    row.confidence = ext.confidence
-                db.commit()
-            rich.print(
-                {
-                    "dealer": cfg.name,
-                    "base_cost": ext.base_cost,
-                    "free_threshold": ext.free_threshold,
-                    "lead_days_std": ext.lead_days_std,
-                    "confidence": ext.confidence,
-                }
-            )
 
-        # Catalog ingest (solo web v1)
-        if mode_l in ("all", "catalogo"):
-            if cfg.type != "web":
-                rich.print(
-                    f"[yellow]Tipo '{cfg.type}' non ancora supportato per ingest automatico[/yellow]"
-                )
-            elif not cfg.mapping:
-                rich.print(
-                    "[yellow]Nessun mapping configurato per questo dealer (campo 'mapping' mancante).[/yellow]"
-                )
-            else:
-                from .adapters.web_adapter import (
-                    fetch_and_parse_urls,
-                    parse_sitemap_urls,
-                )
-                from .dealers import _repo_root
+def _sync_dealer_policy_if_needed(
+    cfg: DealerConfig, mode_l: str, session: DealerSession
+) -> None:
+    if mode_l not in ("all", "policy") or not cfg.policy_url:
+        return
+    rich.print(f"[cyan]Scarico policy da[/cyan] {cfg.policy_url}")
+    r = session.client.get(cfg.policy_url)
+    r.raise_for_status()
+    ext = parse_policy_html(r.text)
+    create_all()
+    with SessionLocal() as db:
+        _upsert_dealer_policy(db, cfg.name, ext)
+    rich.print(
+        {
+            "dealer": cfg.name,
+            "base_cost": ext.base_cost,
+            "free_threshold": ext.free_threshold,
+            "lead_days_std": ext.lead_days_std,
+            "confidence": ext.confidence,
+        }
+    )
 
-                # Resolve mapping path relative to repository root
-                mapping_path = _repo_root() / cfg.mapping
 
-                urls: list[str] = []
-                urls.extend(cfg.seeds.urls)
-                if cfg.seeds.sitemap:
-                    rich.print(f"[cyan]Leggo sitemap[/cyan] {cfg.seeds.sitemap}")
-                    more = parse_sitemap_urls(
-                        cfg.seeds.sitemap,
-                        headers=None,
-                        limit=None,
-                        session=session.client,
-                    )
-                    urls.extend(more)
+def _sync_dealer_catalog_if_needed(
+    cfg: DealerConfig,
+    mode_l: str,
+    session: DealerSession,
+    max_pages: int,
+    delay: float,
+    mapping_path: Path | None,
+) -> None:
+    if not _can_sync_catalog(cfg, mode_l, mapping_path):
+        return
+    from .adapters.web_adapter import (
+        fetch_and_parse_urls,
+        parse_sitemap_urls,
+    )
 
-                if not urls:
-                    rich.print(
-                        "[yellow]Nessun URL seed configurato per il dealer; salta ingest catalogo.[/yellow]"
-                    )
-                else:
-                    rich.print(f"[cyan]Ingest catalogo[/cyan] da {len(urls)} seed")
+    urls = _collect_dealer_urls(cfg, session, parse_sitemap_urls)
+    if not urls:
+        rich.print(
+            "[yellow]Nessun URL seed configurato per il dealer; salta ingest catalogo.[/yellow]"
+        )
+        return
+    _run_dealer_catalog_ingest(
+        cfg, urls, mapping_path, session, max_pages, delay, fetch_and_parse_urls
+    )
 
-                    def _progress_cb(
-                        page_url: str,
-                        page_idx: int,
-                        products_total: int,
-                        offers_total: int,
-                    ) -> None:
-                        parsed = urlparse(page_url)
-                        params = parse_qs(parsed.query or "")
-                        page_hint = (
-                            params.get("page", [""])[0] or params.get("skip", [""])[0]
-                        )
-                        label = page_hint or str(page_idx)
-                        location = parsed.path or page_url
-                        rich.print(
-                            f"[dim]  ↳ pagina {label} ({location}) "
-                            f"prodotti={products_total} offerte={offers_total}[/dim]"
-                        )
 
-                    products, offers = fetch_and_parse_urls(
-                        urls=urls,
-                        mapping_yaml=mapping_path,
-                        follow_next=True,
-                        max_pages=max_pages,
-                        delay_sec=delay,
-                        headers=None,
-                        session=session.client,
-                        progress_cb=_progress_cb,
-                    )
-                    stats: IngestStats = upsert(products, offers)
-                    rich.print(
-                        {
-                            "dealer": cfg.name,
-                            "products_new": stats.products_new,
-                            "products_updated": stats.products_updated,
-                            "offers_upserted": stats.offers_upserted,
-                            "offers_skipped": stats.offers_skipped,
-                        }
-                    )
-    finally:
-        session.close()
+def _can_sync_catalog(
+    cfg: DealerConfig,
+    mode_l: str,
+    mapping_path: Path | None,
+) -> bool:
+    if mode_l not in ("all", "catalogo"):
+        return False
+    if cfg.type != "web":
+        rich.print(
+            f"[yellow]Tipo '{cfg.type}' non ancora supportato per ingest automatico[/yellow]"
+        )
+        return False
+    if not cfg.mapping or mapping_path is None:
+        rich.print(
+            "[yellow]Nessun mapping configurato per questo dealer (campo 'mapping' mancante).[/yellow]"
+        )
+        return False
+    return True
+
+
+def _run_dealer_catalog_ingest(
+    cfg: DealerConfig,
+    urls: list[str],
+    mapping_path: Path,
+    session: DealerSession,
+    max_pages: int,
+    delay: float,
+    fetch_and_parse_urls,
+) -> None:
+    rich.print(f"[cyan]Ingest catalogo[/cyan] da {len(urls)} seed")
+
+    products, offers = fetch_and_parse_urls(
+        urls=urls,
+        mapping_yaml=mapping_path,
+        follow_next=True,
+        max_pages=max_pages,
+        delay_sec=delay,
+        headers=None,
+        session=session.client,
+        progress_cb=_dealer_progress_cb,
+    )
+    stats: IngestStats = upsert(products, offers)
+    rich.print(
+        {
+            "dealer": cfg.name,
+            "products_new": stats.products_new,
+            "products_updated": stats.products_updated,
+            "offers_upserted": stats.offers_upserted,
+            "offers_skipped": stats.offers_skipped,
+        }
+    )
+
+
+def _collect_dealer_urls(
+    cfg: DealerConfig,
+    session: DealerSession,
+    parse_sitemap_urls,
+) -> list[str]:
+    urls: list[str] = []
+    urls.extend(cfg.seeds.urls)
+    if cfg.seeds.sitemap:
+        rich.print(f"[cyan]Leggo sitemap[/cyan] {cfg.seeds.sitemap}")
+        more = parse_sitemap_urls(
+            cfg.seeds.sitemap,
+            headers=None,
+            limit=None,
+            session=session.client,
+        )
+        urls.extend(more)
+    return urls
+
+
+def _dealer_progress_cb(
+    page_url: str,
+    page_idx: int,
+    products_total: int,
+    offers_total: int,
+) -> None:
+    parsed = urlparse(page_url)
+    params = parse_qs(parsed.query or "")
+    page_hint = params.get("page", [""])[0] or params.get("skip", [""])[0]
+    label = page_hint or str(page_idx)
+    location = parsed.path or page_url
+    rich.print(
+        f"[dim]  ↳ pagina {label} ({location}) "
+        f"prodotti={products_total} offerte={offers_total}[/dim]"
+    )
 
 
 def main() -> None:

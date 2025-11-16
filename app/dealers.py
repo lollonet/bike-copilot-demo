@@ -75,83 +75,115 @@ def _load_raw() -> dict[str, Any]:
 
 def load_dealers() -> list[DealerConfig]:
     raw = _load_raw()
+    entries = _dealer_entries(raw)
+    return [_build_dealer_config(entry) for entry in entries]
+
+
+def _dealer_entries(raw: dict[str, Any]) -> list[dict[str, Any]]:
     dealers_raw = raw.get("dealers", [])
-    dealers: list[DealerConfig] = []
     if not isinstance(dealers_raw, list):
         raise ValueError("dealers must be a list in providers/dealers.yaml")
+    entries: list[dict[str, Any]] = []
     for entry in dealers_raw:
-        if not isinstance(entry, dict):
-            continue
-        key = str(entry.get("key") or "").strip()
-        name = str(entry.get("name") or key or "").strip()
-        dtype = str(entry.get("type") or "web").strip()
-        base_url_env = str(entry.get("base_url_env") or "").strip() or None
-        platform = str(entry.get("platform") or "").strip() or None
-        mapping = str(entry.get("mapping") or "").strip() or None
-        policy_url = str(entry.get("policy_url") or "").strip() or None
+        if isinstance(entry, dict):
+            entries.append(entry)
+    return entries
 
-        auth_raw = entry.get("auth") or {}
-        mode_env = str(auth_raw.get("mode_env") or "").strip() or None  # type: ignore[union-attr]
-        username_env = (
-            str(auth_raw.get("username_env") or "").strip() or None  # type: ignore[union-attr]
-        )
-        password_env = (
-            str(auth_raw.get("password_env") or "").strip() or None  # type: ignore[union-attr]
-        )
-        cookie_env = (
-            str(auth_raw.get("cookie_env") or "").strip() or None  # type: ignore[union-attr]
-        )
-        auth = DealerAuthConfig(
-            mode_env=mode_env,
-            username_env=username_env,
-            password_env=password_env,
-            cookie_env=cookie_env,
-        )
 
-        seeds_raw = entry.get("seeds") or {}
-        urls_raw = seeds_raw.get("urls") or []  # type: ignore[union-attr]
-        urls: list[str] = []
-        if isinstance(urls_raw, list):
-            for u in urls_raw:
-                urls.append(str(u))
-        sitemap = str(seeds_raw.get("sitemap") or "").strip() or None  # type: ignore[union-attr]
-        seeds = DealerSeeds(urls=urls, sitemap=sitemap)
+def _build_dealer_config(entry: dict[str, Any]) -> DealerConfig:
+    key, name, dtype, base_url_env, platform, mapping, policy_url = _dealer_base_fields(
+        entry
+    )
+    auth = _dealer_auth(entry)
+    seeds = _dealer_seeds(entry)
+    login_cfg = _dealer_login(entry)
+    return DealerConfig(
+        key=key,
+        name=name or key,
+        type=dtype,
+        base_url_env=base_url_env,
+        platform=platform,
+        mapping=mapping,
+        policy_url=policy_url,
+        auth=auth,
+        seeds=seeds,
+        login=login_cfg,
+    )
 
-        login_raw = entry.get("login") or {}
-        login_cfg: DealerLoginConfig | None = None
-        if isinstance(login_raw, dict) and login_raw.get("mode"):
-            login_cfg = DealerLoginConfig(
-                mode=str(login_raw.get("mode")).strip().lower(),
-                url=str(login_raw.get("url") or "").strip() or None,
-                method=str(login_raw.get("method") or "POST").strip().upper(),
-                username_field=str(login_raw.get("username_field") or "").strip()
-                or None,
-                password_field=str(login_raw.get("password_field") or "").strip()
-                or None,
-                extra_fields={
-                    str(k): v  # Preserve original types from YAML (bool, int, str)
-                    for k, v in ((login_raw.get("extra_fields") or {}).items())  # type: ignore[union-attr]
-                },
-                preflight_url=str(login_raw.get("preflight_url") or "").strip() or None,
-                encoding=str(login_raw.get("encoding") or "form").strip().lower()
-                or "form",
-            )
 
-        dealers.append(
-            DealerConfig(
-                key=key,
-                name=name or key,
-                type=dtype,
-                base_url_env=base_url_env,
-                platform=platform,
-                mapping=mapping,
-                policy_url=policy_url,
-                auth=auth,
-                seeds=seeds,
-                login=login_cfg,
-            )
-        )
-    return dealers
+def _dealer_base_fields(
+    entry: dict[str, Any],
+) -> tuple[str, str, str, str | None, str | None, str | None, str | None]:
+    key = _str_or_empty(entry.get("key"))
+    name = _str_or_empty(entry.get("name") or key)
+    dtype = _str_or_empty(entry.get("type") or "web")
+    base_url_env = _optional_str(entry.get("base_url_env"))
+    platform = _optional_str(entry.get("platform"))
+    mapping = _optional_str(entry.get("mapping"))
+    policy_url = _optional_str(entry.get("policy_url"))
+    return key, name, dtype, base_url_env, platform, mapping, policy_url
+
+
+def _dealer_auth(entry: dict[str, Any]) -> DealerAuthConfig:
+    auth_raw = entry.get("auth") or {}
+    mode_env = _optional_str(auth_raw.get("mode_env"))  # type: ignore[union-attr]
+    username_env = _optional_str(auth_raw.get("username_env"))  # type: ignore[union-attr]
+    password_env = _optional_str(auth_raw.get("password_env"))  # type: ignore[union-attr]
+    cookie_env = _optional_str(auth_raw.get("cookie_env"))  # type: ignore[union-attr]
+    return DealerAuthConfig(
+        mode_env=mode_env,
+        username_env=username_env,
+        password_env=password_env,
+        cookie_env=cookie_env,
+    )
+
+
+def _dealer_seeds(entry: dict[str, Any]) -> DealerSeeds:
+    seeds_raw = entry.get("seeds") or {}
+    urls_raw = seeds_raw.get("urls") or []  # type: ignore[union-attr]
+    urls: list[str] = []
+    if isinstance(urls_raw, list):
+        for u in urls_raw:
+            urls.append(str(u))
+    sitemap = (
+        str(seeds_raw.get("sitemap") or "").strip() or None  # type: ignore[union-attr]
+    )
+    return DealerSeeds(urls=urls, sitemap=sitemap)
+
+
+def _dealer_login(entry: dict[str, Any]) -> DealerLoginConfig | None:
+    login_raw = entry.get("login") or {}
+    if not isinstance(login_raw, dict) or not login_raw.get("mode"):
+        return None
+    extra_fields = _dealer_login_extra_fields(login_raw)
+    return DealerLoginConfig(
+        mode=_str_or_empty(login_raw.get("mode")).lower(),
+        url=_optional_str(login_raw.get("url")),
+        method=_str_or_empty(login_raw.get("method") or "POST").upper(),
+        username_field=_optional_str(login_raw.get("username_field")),
+        password_field=_optional_str(login_raw.get("password_field")),
+        extra_fields=extra_fields,
+        preflight_url=_optional_str(login_raw.get("preflight_url")),
+        encoding=(_str_or_empty(login_raw.get("encoding") or "form")).lower() or "form",
+    )
+
+
+def _dealer_login_extra_fields(login_raw: dict[str, Any]) -> dict[str, Any]:
+    extra_fields_raw = login_raw.get("extra_fields") or {}
+    extra_fields: dict[str, Any] = {}
+    if isinstance(extra_fields_raw, dict):
+        for k, v in extra_fields_raw.items():
+            extra_fields[str(k)] = v
+    return extra_fields
+
+
+def _str_or_empty(value: Any) -> str:
+    return str(value or "").strip()
+
+
+def _optional_str(value: Any) -> str | None:
+    text = str(value or "").strip()
+    return text or None
 
 
 def find_dealer(key: str) -> DealerConfig | None:

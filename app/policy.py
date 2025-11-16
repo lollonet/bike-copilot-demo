@@ -45,20 +45,34 @@ def parse_policy_html(html: str) -> PolicyExtract:
     - lead_days_std: detect patterns like 24-48 ore (→ 2) or "entro X giorni".
     Confidence increases when both cost and threshold are found.
     """
-    text = re.sub(r"\s+", " ", html, flags=re.M).lower()
+    text = _normalized_policy_text(html)
+    lead = _extract_lead_days(text)
+    free = _extract_free_threshold(text)
+    base = _extract_base_cost(text, free)
+    conf = _compute_confidence(base, free, lead)
 
+    return PolicyExtract(
+        base_cost=base, free_threshold=free, lead_days_std=lead, confidence=conf
+    )
+
+
+def _normalized_policy_text(html: str) -> str:
+    return re.sub(r"\s+", " ", html, flags=re.M).lower()
+
+
+def _extract_lead_days(text: str) -> int | None:
     # Lead time: 24-48 ore → 2; entro X giorni → X
-    lead: int | None = None
     m = re.search(r"(\d{1,2})\s*[-–]\s*(\d{1,2})\s*ore", text)
     if m:
         lo, hi = int(m.group(1)), int(m.group(2))
-        lead = max(1, round((lo + hi) / 24 / 2))
-    else:
-        m2 = re.search(r"entro\s*(\d{1,2})\s*giorni", text)
-        if m2:
-            lead = int(m2.group(1))
+        return max(1, round((lo + hi) / 24 / 2))
+    m2 = re.search(r"entro\s*(\d{1,2})\s*giorni", text)
+    if m2:
+        return int(m2.group(1))
+    return None
 
-    # Free threshold
+
+def _extract_free_threshold(text: str) -> float | None:
     free: float | None = None
     for sent in re.split(r"[\.!?]", text):
         if "gratuit" in sent or "gratis" in sent:
@@ -67,18 +81,28 @@ def parse_policy_html(html: str) -> PolicyExtract:
                 if m3:
                     free = _to_float(m3.group(1))
                     break
+    return free
 
+
+def _extract_base_cost(text: str, free: float | None) -> float | None:
     # Base cost: pick the smallest euro not part of threshold sentence
     euros = [_to_float(x) for x in EUR_RE.findall(text)]
-    euros = [e for e in euros if e is not None]
-    base: float | None = None
-    if euros:
-        base = min(euros)
-        if free and base and base >= free:
-            # swap: if min is actually threshold, try second min
-            pos = sorted(euros)
-            base = pos[1] if len(pos) > 1 else None
+    values = [e for e in euros if e is not None]
+    if not values:
+        return None
+    base = min(values)
+    if free and base and base >= free:
+        # swap: if min is actually threshold, try second min
+        ordered = sorted(values)
+        base = ordered[1] if len(ordered) > 1 else None
+    return base
 
+
+def _compute_confidence(
+    base: float | None,
+    free: float | None,
+    lead: int | None,
+) -> float:
     conf = 0.5
     if base is not None:
         conf += 0.2
@@ -86,8 +110,4 @@ def parse_policy_html(html: str) -> PolicyExtract:
         conf += 0.2
     if lead is not None:
         conf += 0.1
-    conf = min(1.0, conf)
-
-    return PolicyExtract(
-        base_cost=base, free_threshold=free, lead_days_std=lead, confidence=conf
-    )
+    return min(1.0, conf)
