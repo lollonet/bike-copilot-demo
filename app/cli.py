@@ -12,6 +12,7 @@ import os
 import random
 import httpx
 from sqlalchemy.orm import Session
+from sqlalchemy import select, func, asc
 
 from .adapters.csv_adapter import parse_offers_csv, parse_products_csv
 from .adapters.pdf_adapter import extract_from_pdf
@@ -45,9 +46,24 @@ app = typer.Typer(add_completion=True, no_args_is_help=True, help="Bike Copilot 
 def _offer_id_completions(incomplete: str) -> list[str]:
     create_all()
     with SessionLocal() as db:
-        rows: list[tuple[int, str, str, str, float]] = [
-            (o.id, o.product.brand, o.product.mpn, o.supplier, float(o.price))
-            for o in db.query(SupplierOffer).all()
+        rows_seq = db.execute(
+            select(
+                SupplierOffer.id,
+                Product.brand,
+                Product.mpn,
+                SupplierOffer.supplier,
+                SupplierOffer.price,
+            ).join(Product, SupplierOffer.product_id == Product.id)
+        ).all()
+        rows = [
+            (
+                int(r[0]),
+                str(r[1]),
+                str(r[2]),
+                str(r[3]),
+                float(r[4]) if r[4] is not None else None,
+            )
+            for r in rows_seq
         ]
     # complete by id prefix
     inc = incomplete.strip()
@@ -122,47 +138,33 @@ def _query_export_rows(
 ) -> list[
     tuple[SupplierOffer, str, float, bool, int | None, str, str, str, str | None]
 ]:
-    from sqlalchemy import asc
-
     with SessionLocal() as db:
-        q = _base_export_query(db)
-        q = _apply_export_filters(q, supplier, brand, category)
-        q = q.order_by(
-            asc(Product.brand), asc(Product.mpn), asc(SupplierOffer.supplier)
+        stmt = (
+            select(
+                SupplierOffer,
+                SupplierOffer.supplier,
+                SupplierOffer.price,
+                SupplierOffer.in_stock,
+                SupplierOffer.lead_time_days,
+                Product.brand,
+                Product.mpn,
+                Product.name,
+                Product.category,
+            )
+            .join(Product, SupplierOffer.product_id == Product.id)
+            .order_by(asc(Product.brand), asc(Product.mpn), asc(SupplierOffer.supplier))
         )
+        if supplier:
+            stmt = stmt.where(SupplierOffer.supplier == supplier)
+        if brand:
+            stmt = stmt.where(Product.brand == brand)
+        if category:
+            stmt = stmt.where(Product.category == category)
         if isinstance(limit, int) and limit > 0:
-            q = q.limit(limit)
-        rows = q.all()
+            stmt = stmt.limit(limit)
+        rows_raw = db.execute(stmt).all()
+        rows = [tuple(r) for r in rows_raw]
     return rows
-
-
-def _base_export_query(db: Session):
-    return db.query(
-        SupplierOffer,
-        SupplierOffer.supplier,
-        SupplierOffer.price,
-        SupplierOffer.in_stock,
-        SupplierOffer.lead_time_days,
-        Product.brand,
-        Product.mpn,
-        Product.name,
-        Product.category,
-    ).join(Product, SupplierOffer.product_id == Product.id)
-
-
-def _apply_export_filters(
-    q,
-    supplier: str | None,
-    brand: str | None,
-    category: str | None,
-):
-    if supplier:
-        q = q.filter(SupplierOffer.supplier == supplier)
-    if brand:
-        q = q.filter(Product.brand == brand)
-    if category:
-        q = q.filter(Product.category == category)
-    return q
 
 
 def _build_export_rows(
@@ -243,7 +245,9 @@ def pn_alias_import(
 def _build_norm_mpn_index(db: Session) -> dict[str, int]:
     from .pn import normalize_pn
 
-    rows = db.query(Product.id, Product.mpn).filter(Product.mpn.isnot(None)).all()
+    rows = db.execute(
+        select(Product.id, Product.mpn).where(Product.mpn.is_not(None))
+    ).all()
     norm_to_product: dict[str, int] = {}
     for pid, mpn in rows:
         try:
@@ -318,13 +322,11 @@ def _normalized_alias_codes(alias: AliasEntry, normalize_pn) -> tuple[str, str |
 
 
 def _find_existing_alias_row(db: Session, dealer: str | None, dealer_norm: str | None):
-    return (
-        db.query(PNMapping)
-        .filter(
+    return db.scalar(
+        select(PNMapping).where(
             PNMapping.dealer == dealer,
             PNMapping.dealer_pn_norm == dealer_norm,
         )
-        .first()
     )
 
 
@@ -397,7 +399,7 @@ def _upsert_dealer_policy(
     dealer: str,
     ext,
 ) -> None:
-    row = db.query(DealerPolicy).filter(DealerPolicy.dealer == dealer).first()
+    row = db.scalar(select(DealerPolicy).where(DealerPolicy.dealer == dealer))
     if row is None:
         db.add(
             DealerPolicy(
@@ -808,20 +810,18 @@ def _upsert_synthetic_offers(extra_offers, stats: IngestStats) -> IngestStats:
 
 
 def _compute_synth_summary() -> dict[str, int]:
-    from sqlalchemy import func
-
     with SessionLocal() as db:
         prod_count = int(
-            db.query(func.count(SupplierOffer.product_id.distinct())).scalar() or 0
+            db.scalar(select(func.count(func.distinct(SupplierOffer.product_id)))) or 0
         )
-        offer_count = int(db.query(func.count(SupplierOffer.id)).scalar() or 0)
+        offer_count = int(db.scalar(select(func.count(SupplierOffer.id))) or 0)
         sup_count = int(
-            db.query(func.count(SupplierOffer.supplier.distinct())).scalar() or 0
+            db.scalar(select(func.count(func.distinct(SupplierOffer.supplier)))) or 0
         )
         in_stock = int(
-            db.query(func.count(SupplierOffer.id))
-            .filter(SupplierOffer.in_stock)
-            .scalar()
+            db.scalar(
+                select(func.count(SupplierOffer.id)).where(SupplierOffer.in_stock)
+            )
             or 0
         )
     return {
@@ -926,7 +926,10 @@ def quote_cli(
         rich.print(out.model_dump())
 
 
-def _require_offer(db: SessionLocal, offer_id: int) -> SupplierOffer:
+from sqlalchemy.orm import Session
+
+
+def _require_offer(db: Session, offer_id: int) -> SupplierOffer:
     offer = db.get(SupplierOffer, offer_id)
     if offer is None:
         typer.secho("offer_id not found", fg=typer.colors.RED)
@@ -964,7 +967,7 @@ def _build_single_line_quote_context(
 
 
 def _log_cli_quote(
-    db: SessionLocal,
+    db: Session,
     offer_id: int,
     pdf_path: str | None,
 ) -> None:
@@ -1109,7 +1112,7 @@ def _perform_form_login(
     _ensure_credentials(cfg, username, password)
     _perform_preflight(client, cfg, login_cfg)
 
-    payload_items = _build_login_payload_items(login_cfg, username, password)
+    payload_items = _build_login_payload_items(login_cfg, username or "", password or "")
     resp = _submit_form_login_request(client, cfg, login_cfg, payload_items)
     if resp.status_code >= 400:
         raise typer.BadParameter(
@@ -1129,11 +1132,13 @@ def _ensure_credentials(
 def _build_login_payload_items(
     login_cfg: DealerLoginConfig, username: str, password: str
 ) -> list[tuple[str, str]]:
-    items: list[tuple[str, str]] = list(login_cfg.extra_fields.items())
-    if login_cfg.username_field:
-        items.append((login_cfg.username_field, username))
-    if login_cfg.password_field:
-        items.append((login_cfg.password_field, password))
+    items: list[tuple[str, str]] = list((login_cfg.extra_fields or {}).items())
+    user_field = login_cfg.username_field or ""
+    pass_field = login_cfg.password_field or ""
+    if user_field:
+        items.append((user_field, username))
+    if pass_field:
+        items.append((pass_field, password))
     return items
 
 
@@ -1144,7 +1149,7 @@ def _submit_form_login_request(
     payload_items: list[tuple[str, str]],
 ):
     method = (login_cfg.method or "POST").upper()
-    url = login_cfg.url
+    url = login_cfg.url or ""
     if method == "POST":
         encoding = (login_cfg.encoding or "form").lower()
         if encoding == "multipart":
@@ -1168,7 +1173,7 @@ def _perform_spa_login(
     _ensure_credentials(cfg, username, password)
     _perform_preflight(client, cfg, login_cfg)
 
-    payload = _build_spa_payload(login_cfg, username, password)
+    payload = _build_spa_payload(login_cfg, username or "", password or "")
     resp = _submit_spa_login_request(client, login_cfg, payload)
     if resp.status_code >= 400:
         raise typer.BadParameter(
@@ -1185,7 +1190,7 @@ def _build_spa_payload(
     username: str,
     password: str,
 ) -> dict[str, Any]:
-    payload: dict[str, Any] = dict(login_cfg.extra_fields)
+    payload: dict[str, Any] = dict(login_cfg.extra_fields or {})
     if login_cfg.username_field:
         payload[login_cfg.username_field] = username
     if login_cfg.password_field:
@@ -1199,7 +1204,8 @@ def _submit_spa_login_request(
     payload: dict[str, Any],
 ):
     client.headers["Content-Type"] = "application/json"
-    return client.post(login_cfg.url, json=payload)
+    url = login_cfg.url or ""
+    return client.post(url, json=payload)
 
 
 def _extract_spa_token(resp: httpx.Response) -> str | None:
@@ -1310,6 +1316,8 @@ def _sync_dealer_catalog_if_needed(
             "[yellow]Nessun URL seed configurato per il dealer; salta ingest catalogo.[/yellow]"
         )
         return
+    if mapping_path is None:
+        raise typer.BadParameter("Path mapping mancante per ingest catalogo")
     _run_dealer_catalog_ingest(
         cfg, urls, mapping_path, session, max_pages, delay, fetch_and_parse_urls
     )

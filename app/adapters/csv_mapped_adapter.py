@@ -120,7 +120,9 @@ def _build_offer(
     in_stock = bool(defaults.get("in_stock", True))
     lead_days = _lead_time_days(defaults)
     dealer_code = _dealer_code(row, cols)
-    extra = {"dealer_pn": dealer_code} if dealer_code else {}
+    extra: dict[str, str | int | float | bool | None] = (
+        {"dealer_pn": dealer_code} if dealer_code else {}
+    )
     price_raw = _row_value(row, cols, "price") or ""
     price = _normalize_price(price_raw)
     if price is None:

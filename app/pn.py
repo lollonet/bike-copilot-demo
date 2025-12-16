@@ -10,7 +10,7 @@ from typing import Iterable, Sequence
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
-from .models import Product, SessionLocal, PNMapping
+from .models import PNMapping, Product
 from .types import (
     PNOfferItem,
     SearchPNRequest,
@@ -54,19 +54,22 @@ def _gather_offers(products: Iterable[Product]) -> list[PNOfferItem]:
     return items
 
 
-def search_pn(req: SearchPNRequest) -> SearchPNResponse:
+def search_pn(req: SearchPNRequest, db: Session | None = None) -> SearchPNResponse:
     """Search offers by maker PN only using the local DB.
 
     Strategy v1: equality on normalized Product.mpn.
     Later we can add PNMapping and alias resolution.
     """
+    if db is None:
+        from .models import SessionLocal
+
+        with SessionLocal() as scoped_db:
+            return search_pn(req, scoped_db)
+
     target = normalize_pn(req.maker_pn)
-    with SessionLocal() as db:
-        products = db.scalars(
-            select(Product).options(selectinload(Product.offers))
-        ).all()
-        matches = _match_products_single(target, products, db)
-        offers = _gather_offers(matches)
+    products = db.scalars(select(Product).options(selectinload(Product.offers))).all()
+    matches = _match_products_single(target, products, db)
+    offers = _gather_offers(matches)
 
     # Filters
     if req.dealers:
@@ -110,7 +113,9 @@ def _match_products_single(
     return [p for p in products if p.id in pids]
 
 
-def search_pn_batch(req: SearchPNBatchRequest) -> SearchPNBatchResponse:
+def search_pn_batch(
+    req: SearchPNBatchRequest, db: Session | None = None
+) -> SearchPNBatchResponse:
     """Batch PN search avoiding repeated full-table scans.
 
     Strategy:
@@ -122,15 +127,18 @@ def search_pn_batch(req: SearchPNBatchRequest) -> SearchPNBatchResponse:
       - Apply dealers/in_stock filters and sort per PN
     """
     # Preserve original order and multiplicity; build a normalized cache
+    if db is None:
+        from .models import SessionLocal
+
+        with SessionLocal() as scoped_db:
+            return search_pn_batch(req, scoped_db)
+
     items: list[str] = [str(x) for x in (req.items or [])]
     targets = [normalize_pn(w) for w in items]
     target_set = set(t for t in targets if t)
 
-    with SessionLocal() as db:
-        products = db.scalars(
-            select(Product).options(selectinload(Product.offers))
-        ).all()
-        norm_map, id_index, pid_by_norm = _build_pn_indexes(products, target_set, db)
+    products = db.scalars(select(Product).options(selectinload(Product.offers))).all()
+    norm_map, id_index, pid_by_norm = _build_pn_indexes(products, target_set, db)
 
     results: list[SearchPNResponse] = []
     for original, norm in zip(items, targets):
@@ -163,18 +171,14 @@ def _build_pn_indexes(
 
     pid_by_norm: dict[str, set[int]] = {k: set() for k in target_set}
     if target_set:
-        rows = (
-            db.query(
-                PNMapping.maker_pn_norm,
-                PNMapping.dealer_pn_norm,
-                PNMapping.product_id,
+        rows = db.execute(
+            select(
+                PNMapping.maker_pn_norm, PNMapping.dealer_pn_norm, PNMapping.product_id
+            ).where(
+                PNMapping.maker_pn_norm.in_(list(target_set))
+                | PNMapping.dealer_pn_norm.in_(list(target_set))
             )
-            .filter(
-                (PNMapping.maker_pn_norm.in_(list(target_set)))
-                | (PNMapping.dealer_pn_norm.in_(list(target_set)))
-            )
-            .all()
-        )
+        ).all()
         for maker_norm, dealer_norm, pid in rows:
             value = int(pid)
             if maker_norm in pid_by_norm:

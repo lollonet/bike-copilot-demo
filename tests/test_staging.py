@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 import importlib
+from sqlalchemy import select
 
 
 def _setup_db(tmp_name: str):
@@ -51,7 +52,7 @@ def test_sha256_path_and_stage_file(tmp_path: Path) -> None:
     assert entry.content_hash == digest
 
     with SessionLocal() as db:
-        rows = db.query(RawIngest).all()
+        rows = db.scalars(select(RawIngest)).all()
         assert len(rows) == 1
         row = rows[0]
         assert row.id == entry.id

@@ -8,6 +8,11 @@ import httpx
 
 from .search import search
 from .types import Brake, Freehub, Rotor, SearchRequest
+from sqlalchemy.orm import Session
+from typing import Any, cast
+
+from sqlalchemy.orm import Session
+
 from .models import EventLog, SessionLocal, SupplierOffer
 from .quote import render_quote
 
@@ -189,9 +194,7 @@ def _create_local_quote(
         offer = db.get(SupplierOffer, int(offer_id))
         if offer is None:
             return "OFFERTA NON TROVATA", "", ""
-        context = _single_line_quote_context(
-            offer, customer, contact, validity, notes
-        )
+        context = _single_line_quote_context(offer, customer, contact, validity, notes)
         html_path, pdf_path = render_quote(context)
         _log_ui_quote_created(db, offer.id, pdf_path)
         return html_path, (pdf_path or ""), ""
@@ -226,7 +229,7 @@ def _single_line_quote_context(
 
 
 def _log_ui_quote_created(
-    db: SessionLocal,
+    db: Session,
     offer_id: int,
     pdf_path: str | None,
 ) -> None:
@@ -660,7 +663,7 @@ def build_interface() -> gr.Blocks:
             suppliers,
             in_stock,
         ]:
-            ctrl.change(
+            cast(Any, ctrl).change(  # type: ignore[attr-defined]
                 _on_search,
                 inputs=[
                     query,
@@ -966,7 +969,7 @@ def build_interface() -> gr.Blocks:
             info = mapping.get(int(offer_id)) or {}
             return f"**Offerta {offer_id}** — {info.get('brand', '')} {info.get('mpn', '')} — {info.get('supplier', '')} — €{info.get('price', '')}"
 
-        offer_select.change(
+        cast(Any, offer_select).change(  # type: ignore[attr-defined]
             _on_select, inputs=[offer_select, results_state], outputs=preview
         )
 
