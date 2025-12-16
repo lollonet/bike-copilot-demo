@@ -1112,7 +1112,9 @@ def _perform_form_login(
     _ensure_credentials(cfg, username, password)
     _perform_preflight(client, cfg, login_cfg)
 
-    payload_items = _build_login_payload_items(login_cfg, username or "", password or "")
+    payload_items = _build_login_payload_items(
+        login_cfg, username or "", password or ""
+    )
     resp = _submit_form_login_request(client, cfg, login_cfg, payload_items)
     if resp.status_code >= 400:
         raise typer.BadParameter(

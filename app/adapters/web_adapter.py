@@ -79,6 +79,10 @@ def _load_mapping(path: Path) -> WebMapping:
         mapping["category"] = str(data.get("category") or "")
     if "dealer_code" in data:
         mapping["dealer_code"] = str(data.get("dealer_code") or "")
+    if "in_stock" in data:
+        mapping["in_stock"] = str(data.get("in_stock") or "")
+    if "lead_time_days" in data:
+        mapping["lead_time_days"] = str(data.get("lead_time_days") or "")
     if "pagination" in data and isinstance(data.get("pagination"), dict):
         mapping["pagination"] = data["pagination"]  # type: ignore[assignment]
     if "search" in data and isinstance(data.get("search"), dict):

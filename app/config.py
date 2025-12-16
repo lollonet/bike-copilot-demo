@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from pydantic import Field
+from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -29,10 +29,14 @@ class Settings(BaseSettings):
     synonyms_path: str = Field(
         default="app/synonyms.yaml",
         description="Path to product attribute synonyms YAML",
+        validation_alias=AliasChoices("APP_SYNONYMS", "APP_SYNONYMS_PATH"),
     )
     category_synonyms_path: str = Field(
         default="app/category_synonyms.yaml",
         description="Path to category synonyms YAML",
+        validation_alias=AliasChoices(
+            "APP_CATEGORY_SYNONYMS", "APP_CATEGORY_SYNONYMS_PATH"
+        ),
     )
     basic_user: str = Field(default="", description="HTTP basic auth username")
     basic_pass: str = Field(default="", description="HTTP basic auth password")
