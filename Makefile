@@ -39,3 +39,9 @@ crawl-ciclodiffusione:
 Q ?= copertone sella casco catena
 web-crawl: crawl-montanini crawl-ciclodiffusione
 	@echo "Web crawl completed with queries: $(Q)"
+
+# Fetch a JS/login page rendered via Playwright (requires playwright installed)
+WAIT_MS ?= 1500
+fetch-rendered:
+	@if [ -z "$(URL)" ]; then echo "Missing URL. Usage: make fetch-rendered URL=https://example.com [WAIT_MS=1500]"; exit 1; fi
+	UV_CACHE_DIR=.uv-cache XDG_CACHE_HOME=.uv-cache PYTHONPATH=. uv run python -m app.cli fetch-rendered --url "$(URL)" --wait-ms $(WAIT_MS)

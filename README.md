@@ -58,7 +58,7 @@ make api        # Start FastAPI server (port 8000)
 make ui-pn      # Launch PN-first UI (port 7861)
 make crawl      # Run dealer synchronization
 make web-crawl  # Crawl Montanini + Ciclodiffusione (set Q="query1 query2")
-make fetch-rendered URL=...  # Playwright fetch for JS/login pages (see below)
+make fetch-rendered URL=...  # Playwright fetch for JS/login pages (requires playwright installed)
 ```
 
 ## 🏗️ System Components
