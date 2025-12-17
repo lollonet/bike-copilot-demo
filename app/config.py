@@ -29,14 +29,13 @@ class Settings(BaseSettings):
     synonyms_path: str = Field(
         default="app/synonyms.yaml",
         description="Path to product attribute synonyms YAML",
-        validation_alias=AliasChoices("APP_SYNONYMS", "APP_SYNONYMS_PATH"),
+        # env_prefix="APP_" → resolves APP_SYNONYMS / APP_SYNONYMS_PATH
+        validation_alias=AliasChoices("SYNONYMS", "SYNONYMS_PATH"),
     )
     category_synonyms_path: str = Field(
         default="app/category_synonyms.yaml",
         description="Path to category synonyms YAML",
-        validation_alias=AliasChoices(
-            "APP_CATEGORY_SYNONYMS", "APP_CATEGORY_SYNONYMS_PATH"
-        ),
+        validation_alias=AliasChoices("CATEGORY_SYNONYMS", "CATEGORY_SYNONYMS_PATH"),
     )
     basic_user: str = Field(default="", description="HTTP basic auth username")
     basic_pass: str = Field(default="", description="HTTP basic auth password")
