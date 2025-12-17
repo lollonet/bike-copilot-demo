@@ -222,10 +222,9 @@ cat idiomatic_assessment.md | less
 - T7 Systemd env example: ✅ presente (`deploy/bike-copilot.service`).
 
 ### Stato PR
-- Branch: `feat/req-001-logging-fixes`
-- PR #55 aperta verso `main`
-- Test: `uv run pytest -q` (76 passed)
+- PR #55 (feat/req-001-logging-fixes) **merged** into `main`.
+- Test su PR: `uv run pytest -q` (76 passed).
 
-**Ultimo aggiornamento:** 2025-12-17 03:03 UTC  
-**Branch:** feat/req-001-logging-fixes  
-**Ultimo commit:** 8f9b82c
+**Ultimo aggiornamento:** 2025-12-17 14:30 UTC  
+**Branch:** main  
+**Ultimo commit:** e8c1660

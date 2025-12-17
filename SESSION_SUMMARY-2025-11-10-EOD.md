@@ -38,7 +38,7 @@ Polish UI/UX and docs: facet chips and quick remove, small debounce on filter ch
 ## 4. Next Steps / Action Queue
 | ID | Task | Owner | Due | Status |
 |----|------|-------|-----|--------|
-| T1 | Add facet chips with quick remove near results | Copilot | 2025-11-11 | ✅ done |
+| T1 | Add facet chips with quick remove near results | Copilot | 2025-11-11 | ✅ done (UI filtri attivi) |
 | T2 | README: screenshots + “Scenario demo” | Copilot | 2025-11-11 | ✅ done (sezione + placeholder screenshot path) |
 | T3 | Category synonyms map (optional) | Copilot | 2025-11-12 | ✅ done |
 | T4 | Make targets: make web-crawl (providers) | Copilot | 2025-11-12 | ✅ done |
