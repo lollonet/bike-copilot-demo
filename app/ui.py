@@ -197,7 +197,11 @@ def _create_local_quote(
         if offer is None:
             return "OFFERTA NON TROVATA", "", ""
         context = _single_line_quote_context(offer, customer, contact, validity, notes)
-        html_path, pdf_path = render_quote(context)
+        try:
+            html_path, pdf_path = render_quote(context)
+        except Exception as exc:
+            log_exception("ui", "quote-local", "failed to render quote", exc, extra={"offer_id": offer_id})
+            return "ERRORE RENDERING", "", ""
         _log_ui_quote_created(db, offer.id, pdf_path)
         return html_path, (pdf_path or ""), ""
 
@@ -433,7 +437,8 @@ def build_interface() -> gr.Blocks:
             if budget is not None:
                 try:
                     bval = float(budget)
-                except Exception:
+                except Exception as exc:
+                    log_exception("ui", "filters", "invalid budget value", exc, extra={"budget": budget})
                     bval = 0.0
                 if bval > 0:
                     filters.append(f"budget:<= {bval:.0f}")
