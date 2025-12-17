@@ -103,6 +103,22 @@ with engine.begin() as conn:
     stale_count = conn.exec_driver_sql("SELECT COUNT(*) FROM supplier_offer WHERE stale = 1").scalar_one()
     print({"op": "reconcile-offers", "stale_marked": stale_count, "ts": now.isoformat()})
 PY
+
+.PHONY: reset-db
+reset-db:
+	UV_CACHE_DIR=.uv-cache XDG_CACHE_HOME=.uv-cache PYTHONPATH=. uv run python - <<'PY'
+from app import models
+import os
+
+url = models.settings.db_url
+if url.startswith("sqlite"):
+    path = url.split("///")[-1]
+    for p in [path, f"{path}-shm", f"{path}-wal"]:
+        if os.path.exists(p):
+            os.remove(p)
+models.create_all()
+print({"op": "reset-db", "url": url})
+PY
 # Fetch a JS/login page rendered via Playwright (requires playwright installed)
 WAIT_MS ?= 1500
 fetch-rendered:
