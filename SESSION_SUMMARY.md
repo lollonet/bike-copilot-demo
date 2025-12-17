@@ -1,200 +1,58 @@
-# Session Summary - November 15, 2025
+# Session History — Bike Copilot Demo
 
-## Panoramica della Sessione
+Questo file consolida le session summary; gli snapshot datati restano in file separati:
+- `SESSION_SUMMARY-2025-11-10.md` (kickoff)
+- `SESSION_SUMMARY-2025-11-10-EOD.md` (EOD)
+- `SESSION_SUMMARY-2025-11-15.md` (audit)
 
-Questa sessione ha completato due audit architetturali completi del codebase bike-copilot-demo:
-1. **Architecture Audit** - Analisi dell'architettura effettiva vs teorica
-2. **Idiomatic Assessment** - Valutazione dell'aderenza ai pattern delle dipendenze
-
----
-
-## File Generati
-
-### 1. architecture_audit.md
-**Posizione:** `/Users/claudio/Code/bike-copilot-demo/architecture_audit.md`
-**Dimensione:** ~60KB
-**Contenuto:** Audit architetturale completo basato su analisi del codice effettivamente utilizzato
-
-**Sezioni principali:**
-- Executive Summary con metriche chiave
-- Usage Verification Results (codice morto, moduli non importati)
-- Active Architecture Analysis (5 dimensioni di qualità)
-- Architectural Patterns (pattern attivi, inutilizzati, anti-pattern)
-- Implementation Roadmap (3 fasi di refactoring)
-
-### 2. idiomatic_assessment.md
-**Posizione:** `/Users/claudio/Code/bike-copilot-demo/idiomatic_assessment.md`
-**Dimensione:** ~80KB
-**Contenuto:** Assessment idiomatico basato su analisi del codice sorgente delle dipendenze in .venv
-
-**Sezioni principali:**
-- Executive Summary con scores per dimensione
-- Dimension 1: External Idiomaticity (FastAPI, SQLAlchemy, Pydantic, Typer)
-- Dimension 2: Internal Consistency (error handling, logging, config, types)
-- Dimension 3: Code Vitality (dead code, complexity, redundancy)
-- Dimension 4: Operational Excellence (logging, debug)
-- Dimension 5: Interface Coherence (CLI, API, error messages)
-- Violation Inventory (32 CRITICAL, 8 HIGH, 6 MEDIUM, 5 LOW)
-- Refactoring Roadmap (7 settimane di lavoro stimato)
+Di seguito lo stato **attuale** (dopo merge PR #55 su main, 2025-12-17).
 
 ---
 
-## Stato del Codebase
+## Stato aggiornato al 2025-12-17
 
-### Statistiche Generali
+### Problemi critici (dal audit 2025-11-15) — stato
+- pydantic-settings inutilizzata: **Risolto** (config migrata; deps aggiunte).
+- Legacy SQLAlchemy query API: **Risolto** (uso di `select()/scalars()`).
+- Silent `except Exception`: **Risolto** (catch loggano via `log_exception` o scope ristretto).
+- Logging coverage: **Completato** per handler critici (log strutturato).
+- Gerarchia custom exceptions: **Risolto** (`app/exceptions.py`).
 
-**Dimensioni:**
-- App code: 6,088 LOC (21 moduli in app/)
-- Test code: 3,116 LOC (20 test files)
-- Total: 9,204 LOC
+### Roadmap (stato)
+- Fase 1: pydantic-settings ✅; logging handler ✅; exceptions ✅; standard logging ✅.
+- Fase 2: Migrazione SQLA 2.0 ✅; refactoring complexity hotspots ❓ (non verificato).
+- Fase 3 (Medium Priority) — da avviare:
+  - Completare typing e rimuovere Any residui; rafforzare Protocol/TypedDict.
+  - Split god modules (>500 LOC) es. ui.py, cli.py, adapters/web_adapter.py in sottopacchetti.
+  - FastAPI polish: versioning /v1, tag/operation_id, esempi OpenAPI.
+  - Copertura test per nuovi split e router/versioning.
+- Fase 4 (Polish) — da avviare:
+  - Supporto .env completo e doc onboarding.
+  - API versioning stabile + percorso di deprecazione.
+  - Route tags coerenti; asset UX (screenshot reali, microcopy, debounce).
+  - Ops: verificare targets make (web-crawl/fetch-rendered), systemd + env sample.
 
-**Voti Complessivi:**
-- Architecture Audit: B- (7.5/10)
-- Idiomatic Assessment: C+ (6.5/10)
-- **Production Ready:** ⚠️ NO (critical issues da risolvere)
+### Task 2025-11-10 EOD — stato
+- T1 Facet chips/quick remove: ✅ (UI “Filtri attivi” rimovibili).
+- T2 README screenshot + scenario demo: ✅ (sezione + placeholder path screenshot).
+- T3 Category synonyms map: ✅ (`app/category_synonyms.yaml` + alias env).
+- T4 Make target `web-crawl`: ✅ (crawl montanini + ciclodiffusione, Q overridable).
+- T5 Playwright fetcher/login: ✅ (`app.cli fetch-rendered`, dip. opzionale).
+- T6 KPI doc + /kpi/today: ✅ endpoint attivo, REQ-008.
+- T7 Systemd env example: ✅ (`deploy/bike-copilot.service`).
 
----
+### PR e branch
+- PR #55 (feat/req-001-logging-fixes) **merged** in `main`.
+- Test: `uv run pytest -q` (76 passed).
 
-## Problemi Critici Identificati (Top 5)
+### Prossimi passi consigliati
+1. Aggiungere screenshot reali nei path indicati in README (`docs/screenshots/...`).
+2. (Opzionale) Verificare/refactor “complexity hotspots” (Fase 2) se ancora prioritari.
+3. Pulire file untracked locali (`.claude/`, `.codex/`, `.mcp.json`) se non servono.
 
-### 1. pydantic-settings Inutilizzata (CRITICAL)
-- **File:** requirements.txt:5
-- **Problema:** Dipendenza installata ma ZERO import nel codice
-- **Fix:** Rimuovere da requirements.txt (2 ore)
-- **Severity:** CRITICAL - indica migrazione incompleta
-
-### 2. Silent Exception Handling (28 violazioni CRITICAL)
-- **Pattern:** `except Exception:` senza logging
-- **File:** search.py, cli.py, api.py, quote.py, ingest.py, adapters/*
-- **Problema:** 72% degli exception handler sono silenziosi
-- **Impatto:** Debug impossibile in produzione, errori scompaiono
-- **Fix:** Aggiungere log_event() a tutti gli handler (1 settimana)
-
-### 3. Legacy SQLAlchemy Query API (CRITICAL)
-- **Istanze:** 18+ usi di db.query() deprecato
-- **File:** pn.py:167, optimizer.py:52, cli.py, tests/*
-- **Problema:** Usa API 1.x in codebase SQLAlchemy 2.0
-- **Fix:** Migrare a select() con Session.scalars() (1 settimana)
-```python
-# SBAGLIATO (attuale)
-products = db.query(Product).filter(Product.brand == brand).all()
-
-# CORRETTO (moderno 2.0)
-products = list(db.scalars(select(Product).where(Product.brand == brand)))
-```
-
-### 4. Logging Solo in 1/21 Moduli (CRITICAL)
-- **Coverage:** Solo api.py ha structured logging (82% moduli senza logging)
-- **Moduli critici senza log:** ingest.py, optimizer.py, quote.py, adapters/*
-- **Impatto:** Zero visibilità operativa su business logic
-- **Fix:** Estendere log_event() a tutti i moduli (3 giorni)
-
-### 5. Nessuna Gerarchia Custom Exceptions (CRITICAL)
-- **Problema:** 6,000+ LOC senza domain exceptions
-- **Impatto:** Uso forzato di ValueError per errori di dominio
-- **Fix:** Creare app/exceptions.py con DomainError, OptimizationError, etc. (3 giorni)
-
----
-
-## Metriche di Qualità
-
-### Code Vitality (9.5/10) ✅
-- Dead code: 0.3% (solo 2 funzioni non usate)
-- Circular dependencies: 0
-- Import graph pulito
-
-### Complexity (4.0/10) ❌
-- Funzioni con CC > 10: 55 (27%)
-- Top violator: `_build_dealer_session()` CC 772
-- God modules: 3 file > 500 linee
-
-### Test Coverage (7.0/10) ⚠️
-- Test files: 20
-- Test functions: 68
-- Test-to-code ratio: 51%
-- **Gap:** 7 moduli senza test (config, models, quote, types, etc.)
-
-### Error Handling (3.0/10) ❌
-- Silent failures: 72%
-- Custom exceptions: 0
-- Logging coverage: 18% moduli
-
-### Type Safety (7.5/10) ⚠️
-- Modern syntax (| None): 100%
-- Legacy imports (Dict/List): 20% residuo
-- from __future__ import: 91%
-
----
-
-## Roadmap Refactoring (7 settimane)
-
-### Fase 1: Critical Fixes (2 settimane)
-- [ ] Rimuovere pydantic-settings (2h)
-- [ ] Logging a tutti exception handlers (1w)
-- [ ] Creare gerarchia exceptions (3d)
-- [ ] Standardizzare logging (3d)
-
-### Fase 2: High Priority (2 settimane)
-- [ ] Migrazione SQLAlchemy 2.0 (1w)
-- [ ] Refactoring complexity hotspots (1w)
-
-### Fase 3: Medium Priority (2 settimane)
-- [ ] Completare typing migration (2d)
-- [ ] Splittare god modules (1w)
-- [ ] Aggiungere FastAPI features (3d)
-
-### Fase 4: Polish (1 settimana)
-- [ ] Supporto .env (1d)
-- [ ] API versioning (2d)
-- [ ] Route tags (1d)
-
----
-
-## Comandi Utili
-
-### Verifiche
-```bash
-# Test
-PYTHONPATH=. uv run pytest
-PYTHONPATH=. uv run pytest tests/test_ingest.py -v
-
-# Type checking
-uv run basedpyright app/
-
-# Linting
-uv run ruff check app/
-
-# Complexity
-uv run python scripts/complexity_gate.py
-```
-
-### Visualizza Report
-```bash
-cat architecture_audit.md | less
-cat idiomatic_assessment.md | less
-```
-
----
-
-## Prossimi Passi
-
-### Immediate (oggi)
-1. Rimuovere pydantic-settings da requirements.txt
-2. Decidere strategia logging (standardizzare su log_event?)
-
-### Short-term (questa settimana)
-1. Iniziare Fase 1, Priorità 2 (logging exceptions)
-2. Creare app/exceptions.py
-
-### Medium-term (2 settimane)
-1. Completare Fase 1 (critical fixes)
-2. Iniziare migrazione SQLAlchemy 2.0
-
----
-
-**Ultimo aggiornamento:** 2025-11-15 17:45
-**Branch:** feat/complexity-gate-cleanup
-**Ultimo commit:** f4c41ce
+**Ultimo aggiornamento:** 2025-12-17 14:30 UTC  
+**Branch:** main  
+**Ultimo commit:** e8c1660
 
 ---
 
@@ -208,24 +66,23 @@ cat idiomatic_assessment.md | less
 - Gerarchia custom exceptions: **Risolto** (`app/exceptions.py` introdotto).
 
 ### Stato roadmap
-- Fase 1: pydantic-settings ✅; logging handler ✅; gerarchia exceptions ✅; standard logging ✅ (log_exception strutturato).
+- Fase 1: pydantic-settings ✅; logging handler ✅; gerarchia exceptions ✅; standard logging ✅.
 - Fase 2: Migrazione SQLA 2.0 ✅; refactoring complexity hotspots ❓ (non verificato).
 - Fasi 3–4: non avviate.
 
 ### Task dalla sessione 2025-11-10 EOD
-- T1 Facet chips/quick remove: ✅ implementato (UI con checkbox “Filtri attivi” e rimozione rapida).
-- T2 README screenshot + scenario demo: ✅ sezione aggiunta + placeholder path screenshot.
+- T1 Facet chips/quick remove: ✅ implementato (UI “Filtri attivi”).
+- T2 README screenshot + scenario demo: ✅ sezione aggiunta + placeholder screenshot path.
 - T3 Category synonyms map: ✅ presente (`app/category_synonyms.yaml` + alias env).
-- T4 Make target `web-crawl`: ✅ aggiunto in Makefile (usa crawl-montanini + crawl-ciclodiffusione).
-- T5 Playwright fetcher/login: ✅ CLI `fetch-rendered` con login opzionale (dipendenza opzionale playwright).
+- T4 Make target `web-crawl`: ✅ aggiunto in Makefile (crawl montanini + ciclodiffusione).
+- T5 Playwright fetcher/login: ✅ CLI `fetch-rendered` con login opzionale (playwright opzionale).
 - T6 KPI doc + /kpi/today: ✅ endpoint attivo e doc KPI esistente.
 - T7 Systemd env example: ✅ presente (`deploy/bike-copilot.service`).
 
 ### Stato PR
-- Branch: `feat/req-001-logging-fixes`
-- PR #55 aperta verso `main`
-- Test: `uv run pytest -q` (76 passed)
+- PR #55 (feat/req-001-logging-fixes) **merged** into `main`.
+- Test: `uv run pytest -q` (76 passed).
 
-**Ultimo aggiornamento:** 2025-12-17 03:03 UTC  
-**Branch:** feat/req-001-logging-fixes  
-**Ultimo commit:** 8f9b82c
+**Ultimo aggiornamento:** 2025-12-17 14:30 UTC  
+**Branch:** main  
+**Ultimo commit:** e8c1660
