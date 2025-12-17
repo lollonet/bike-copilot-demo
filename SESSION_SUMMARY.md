@@ -221,6 +221,6 @@ cat idiomatic_assessment.md | less
 - T6 KPI doc + /kpi/today: ✅ endpoint attivo e doc KPI esistente.
 - T7 Systemd env example: ✅ presente (`deploy/bike-copilot.service`).
 
-**Ultimo aggiornamento:** 2025-12-17 02:35 UTC  
-**Branch:** main  
-**Ultimo commit:** 583ff27
+**Ultimo aggiornamento:** 2025-12-17 02:45 UTC  
+**Branch:** feat/req-001-logging-fixes  
+**Ultimo commit:** 07c1791
