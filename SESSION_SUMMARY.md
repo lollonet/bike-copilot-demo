@@ -208,7 +208,7 @@ cat idiomatic_assessment.md | less
 - Gerarchia custom exceptions: **Risolto** (`app/exceptions.py` introdotto).
 
 ### Stato roadmap
-- Fase 1: pydantic-settings ✅; logging handler ❌; gerarchia exceptions ❌; standard logging ❌.
+- Fase 1: pydantic-settings ✅; logging handler ✅; gerarchia exceptions ✅; standard logging ✅ (log_exception strutturato).
 - Fase 2: Migrazione SQLA 2.0 ✅; refactoring complexity hotspots ❓ (non verificato).
 - Fasi 3–4: non avviate.
 
@@ -221,6 +221,11 @@ cat idiomatic_assessment.md | less
 - T6 KPI doc + /kpi/today: ✅ endpoint attivo e doc KPI esistente.
 - T7 Systemd env example: ✅ presente (`deploy/bike-copilot.service`).
 
-**Ultimo aggiornamento:** 2025-12-17 02:58 UTC  
+### Stato PR
+- Branch: `feat/req-001-logging-fixes`
+- PR #55 aperta verso `main`
+- Test: `uv run pytest -q` (76 passed)
+
+**Ultimo aggiornamento:** 2025-12-17 03:03 UTC  
 **Branch:** feat/req-001-logging-fixes  
-**Ultimo commit:** b988841
+**Ultimo commit:** 8f9b82c
