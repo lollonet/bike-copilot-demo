@@ -35,6 +35,7 @@ crawl-ciclodiffusione:
 	done
 
 # Convenience wrapper: crawl providers with optional queries (defaults provided)
-Q ?= "copertone sella casco catena"
+# NOTE: keep unquoted so Make for-loop splits into separate queries.
+Q ?= copertone sella casco catena
 web-crawl: crawl-montanini crawl-ciclodiffusione
 	@echo "Web crawl completed with queries: $(Q)"
