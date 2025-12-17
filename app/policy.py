@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from typing import Final
+from typing import Final, cast
 
 
 EUR_RE: Final[re.Pattern[str]] = re.compile(r"€\s*([0-9]+(?:[\.,][0-9]{1,2})?)")
@@ -90,7 +90,7 @@ def _extract_base_cost(text: str, free: float | None) -> float | None:
     values = [e for e in euros if e is not None]
     if not values:
         return None
-    base = min(values)
+    base: float | None = min(values)
     if free and base and base >= free:
         # swap: if min is actually threshold, try second min
         ordered = sorted(values)
@@ -111,3 +111,18 @@ def _compute_confidence(
     if lead is not None:
         conf += 0.1
     return min(1.0, conf)
+
+
+def _shipping_policy_from_html(html: str) -> tuple[float, float, int, float]:
+    """Backward-compatible wrapper used by legacy callers; kept for tests."""
+    base_raw = _extract_base_cost(html, None)
+    free_raw = _extract_free_threshold(html)
+    lead_raw = _extract_lead_days(_normalized_policy_text(html))
+    conf = _compute_confidence(base_raw, free_raw, lead_raw)
+    base_val: float = float(base_raw) if base_raw is not None else 0.0
+    free_val: float = float(free_raw) if free_raw is not None else 0.0
+    lead_val: int = int(lead_raw) if lead_raw is not None else 0
+    base: float = base_val
+    free_thr: float = free_val
+    lead_days: int = lead_val
+    return base, free_thr, lead_days, conf

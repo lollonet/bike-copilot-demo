@@ -33,7 +33,7 @@ from .types import (
 )
 
 
-def _shipping_costs(lines: List[OptimizeLine]) -> float:
+def _shipping_costs(lines: List[OptimizeLine], db=None) -> float:
     """Compute shipping as sum of per-dealer costs using each dealer's line subtotal.
 
     Free-shipping thresholds are evaluated against the subtotal of the lines
@@ -42,7 +42,7 @@ def _shipping_costs(lines: List[OptimizeLine]) -> float:
     if not lines:
         return 0.0
     per_dealer = _dealer_subtotals(lines)
-    policy = _load_shipping_policy(list(per_dealer.keys()))
+    policy = _load_shipping_policy(list(per_dealer.keys()), db=db)
     total = 0.0
     for dealer, dealer_subtotal in per_dealer.items():
         total += _shipping_for_dealer(dealer, dealer_subtotal, policy)
@@ -59,16 +59,21 @@ def _dealer_subtotals(lines: List[OptimizeLine]) -> Dict[str, float]:
 
 
 def _load_shipping_policy(
-    dealers: List[str],
+    dealers: List[str], db=None
 ) -> Dict[str, Tuple[float | None, float | None]]:
-    with SessionLocal() as db:
-        rows = (
-            db.query(
-                DealerPolicy.dealer, DealerPolicy.base_cost, DealerPolicy.free_threshold
-            )
-            .filter(DealerPolicy.dealer.in_(dealers))
-            .all()
-        )
+    from sqlalchemy import select
+    from sqlalchemy.orm import Session
+
+    if db is None:
+        with SessionLocal() as scoped_db:
+            return _load_shipping_policy(dealers, scoped_db)
+
+    assert isinstance(db, Session)
+    rows = db.execute(
+        select(
+            DealerPolicy.dealer, DealerPolicy.base_cost, DealerPolicy.free_threshold
+        ).where(DealerPolicy.dealer.in_(dealers))
+    ).all()
     policy: Dict[str, Tuple[float | None, float | None]] = {}
     for name, cost, thr in rows:
         policy[str(name)] = (
@@ -115,20 +120,22 @@ def _pick_fastest(offers: List[PNOfferItem]) -> PNOfferItem | None:
     return sorted(offers, key=key)[0]
 
 
-def optimize(req: OptimizeRequest) -> OptimizeResponse:
+def optimize(req: OptimizeRequest, db=None) -> OptimizeResponse:
     """Optimize an order given PN items and heuristic params.
 
     Public semantics are preserved: the same scenarios and cost model apply.
     """
     items = req.items
     params: OptimizeParams = req.params
-    batch = search_pn_batch(SearchPNBatchRequest(items=[it.maker_pn for it in items]))
+    batch = search_pn_batch(
+        SearchPNBatchRequest(items=[it.maker_pn for it in items]), db=db
+    )
     per_pn: List[List[PNOfferItem]] = [res.offers for res in batch.results]
     qty_list: List[int] = [max(1, int(it.qty)) for it in items]
 
     locked_offers, lock_notes = _apply_locked_dealers(per_pn, items)
     lines, scenario_notes = _lines_for_scenario(items, locked_offers, qty_list, params)
-    dealers, costs = _compute_costs(lines, params)
+    dealers, costs = _compute_costs(lines, params, db=db)
     notes = lock_notes + scenario_notes
     log_event(
         "INFO",
@@ -381,11 +388,11 @@ def _initial_max_n_lines(
 
 
 def _compute_costs(
-    lines: List[OptimizeLine], params: OptimizeParams
+    lines: List[OptimizeLine], params: OptimizeParams, db=None
 ) -> Tuple[List[str], OptimizeCost]:
     dealers = sorted(list({line.dealer for line in lines}))
     subtotal = sum(line.line_total for line in lines)
-    ship = _shipping_costs(lines)
+    ship = _shipping_costs(lines, db=db)
     lead_avg = _avg_lead(lines)
     penalties = (
         params.penale_dealer * max(0, len(dealers) - 1) + params.penale_lead * lead_avg

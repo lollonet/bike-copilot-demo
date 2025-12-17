@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 import importlib
+from sqlalchemy import select, func
 
 from app.types import ProductInput, OfferInput
 
@@ -82,9 +83,9 @@ def test_upsert_creates_product_offer_and_mapping():
     assert stats.offers_skipped == 0
 
     with SessionLocal() as db:
-        products = db.query(Product).all()
-        offers_db = db.query(SupplierOffer).all()
-        mappings = db.query(PNMapping).all()
+        products = db.scalars(select(Product)).all()
+        offers_db = db.scalars(select(SupplierOffer)).all()
+        mappings = db.scalars(select(PNMapping)).all()
         assert len(products) == 1
         assert len(offers_db) == 1
         assert len(mappings) == 1
@@ -141,8 +142,8 @@ def test_upsert_updates_price_and_history():
     upsert(core, [second_offer])
 
     with SessionLocal() as db:
-        offers_db = db.query(SupplierOffer).all()
-        history = db.query(PriceHistory).all()
+        offers_db = db.scalars(select(SupplierOffer)).all()
+        history = db.scalars(select(PriceHistory)).all()
         assert len(offers_db) == 1
         assert offers_db[0].price == 23.5
         assert len(history) == 1
@@ -180,8 +181,8 @@ def test_upsert_skips_offers_without_product():
     assert stats.offers_skipped == 1
 
     with SessionLocal() as db:
-        assert db.query(Product).count() == 0
-        assert db.query(SupplierOffer).count() == 0
+        assert db.scalar(select(func.count(Product.id))) == 0
+        assert db.scalar(select(func.count(SupplierOffer.id))) == 0
 
 
 def test_upsert_deduplicates_offers_in_single_batch():
@@ -237,8 +238,8 @@ def test_upsert_deduplicates_offers_in_single_batch():
     assert stats.offers_skipped == 0
 
     with SessionLocal() as db:
-        offers_db = db.query(SupplierOffer).all()
-        history = db.query(PriceHistory).all()
+        offers_db = db.scalars(select(SupplierOffer)).all()
+        history = db.scalars(select(PriceHistory)).all()
         assert len(offers_db) == 1
         assert offers_db[0].price == 23.5
         assert offers_db[0].in_stock is False

@@ -95,13 +95,29 @@ def _parse_in_stock(raw: object) -> bool:
         return raw.strip().lower() in {"1", "true", "yes", "y"}
     if raw is None:
         return False
-    return bool(int(raw))
+    val = _safe_int(raw)
+    return bool(val) if val is not None else False
 
 
 def _parse_lead_time_days(raw: object) -> int | None:
     if _is_missing(raw):
         return None
-    lead_str = str(raw)
-    if lead_str.isdigit():
-        return int(lead_str)
-    return None
+    try:
+        if isinstance(raw, (int, float)):
+            return int(raw)
+        lead_str = str(raw)
+    except Exception:
+        return None
+    return int(lead_str) if lead_str.isdigit() else None
+
+
+def _safe_int(raw: object) -> int | None:
+    try:
+        if isinstance(raw, bool):
+            return int(raw)
+        if isinstance(raw, (int, float)):
+            return int(raw)
+        s = str(raw)
+        return int(s) if s.isdigit() else None
+    except Exception:
+        return None

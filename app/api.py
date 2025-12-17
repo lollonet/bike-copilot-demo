@@ -14,9 +14,9 @@ from sqlalchemy import select, func
 from sqlalchemy.orm import Session
 
 from .config import settings
+from .deps import SessionDep
 from .models import (
     EventLog,
-    SessionLocal,
     SupplierOffer,
     Product,
     PNMapping,
@@ -95,8 +95,8 @@ def health(request: Request) -> Mapping[str, object]:
 
 
 @app.post("/search", response_model=SearchResponse, responses={400: {"model": Problem}})
-def api_search(req: SearchRequest, request: Request) -> SearchResponse:
-    res = search(req)
+def api_search(req: SearchRequest, request: Request, db: SessionDep) -> SearchResponse:
+    res = search(req, db)
     log_event(
         "INFO",
         op="search",
@@ -109,8 +109,8 @@ def api_search(req: SearchRequest, request: Request) -> SearchResponse:
 
 
 @app.post("/facets", response_model=FacetsResponse, responses={400: {"model": Problem}})
-def api_facets(req: SearchRequest, request: Request) -> FacetsResponse:
-    res = compute_facets(req)
+def api_facets(req: SearchRequest, request: Request, db: SessionDep) -> FacetsResponse:
+    res = compute_facets(req, db)
     log_event(
         "INFO",
         op="facets",
@@ -128,8 +128,10 @@ def api_facets(req: SearchRequest, request: Request) -> FacetsResponse:
 @app.post(
     "/search_pn", response_model=SearchPNResponse, responses={400: {"model": Problem}}
 )
-def api_search_pn(req: SearchPNRequest, request: Request) -> SearchPNResponse:
-    res = search_pn(req)
+def api_search_pn(
+    req: SearchPNRequest, request: Request, db: SessionDep
+) -> SearchPNResponse:
+    res = search_pn(req, db)
     log_event(
         "INFO",
         op="search_pn",
@@ -147,9 +149,9 @@ def api_search_pn(req: SearchPNRequest, request: Request) -> SearchPNResponse:
     responses={400: {"model": Problem}},
 )
 def api_search_pn_batch(
-    req: SearchPNBatchRequest, request: Request
+    req: SearchPNBatchRequest, request: Request, db: SessionDep
 ) -> SearchPNBatchResponse:
-    res = search_pn_batch(req)
+    res = search_pn_batch(req, db)
     log_event(
         "INFO",
         op="search_pn_batch",
@@ -162,21 +164,15 @@ def api_search_pn_batch(
 
 
 @app.get("/dealers", response_model=DealersResponse)
-def api_dealers() -> DealersResponse:
+def api_dealers(db: SessionDep) -> DealersResponse:
     create_all()
-    with SessionLocal() as db:
-        # Fetch per-dealer offers count and max(updated_at)
-        from sqlalchemy import func
-
-        rows = (
-            db.query(
-                SupplierOffer.supplier,
-                func.count(SupplierOffer.id),
-                func.max(SupplierOffer.updated_at),
-            )
-            .group_by(SupplierOffer.supplier)
-            .all()
-        )
+    rows = db.execute(
+        select(
+            SupplierOffer.supplier,
+            func.count(SupplierOffer.id),
+            func.max(SupplierOffer.updated_at),
+        ).group_by(SupplierOffer.supplier)
+    ).all()
     dealers = [
         DealerInfo(name=str(name), offers=int(cnt), last_updated=upd)
         for (name, cnt, upd) in rows
@@ -185,8 +181,10 @@ def api_dealers() -> DealersResponse:
 
 
 @app.post("/optimize", response_model=OptimizeResponse)
-def api_optimize(req: OptimizeRequest, request: Request) -> OptimizeResponse:
-    res = optimize(req)
+def api_optimize(
+    req: OptimizeRequest, request: Request, db: SessionDep
+) -> OptimizeResponse:
+    res = optimize(req, db=db)
     log_event(
         "INFO",
         op="optimize",
@@ -227,13 +225,15 @@ def head_file(name: str, _: None = Depends(require_auth)) -> Response:
 
 @app.post("/quote", response_model=QuoteResponse, responses={400: {"model": Problem}})
 def api_quote(
-    req: QuoteRequest, request: Request, _: None = Depends(require_auth)
+    req: QuoteRequest,
+    request: Request,
+    db: SessionDep,
+    _: None = Depends(require_auth),
 ) -> QuoteResponse:
     create_all()
-    with SessionLocal() as db:
-        items = _quote_items_from_request(db, req)
-        response = _render_and_log_quote(db, request, req, items)
-        return response
+    items = _quote_items_from_request(db, req)
+    response = _render_and_log_quote(db, request, req, items)
+    return response
 
 
 def _quote_items_from_request(
@@ -354,41 +354,43 @@ def _build_quote_response(
 
 
 @app.get("/kpi/today")
-def kpi_today(request: Request, _: None = Depends(require_auth)) -> dict[str, int]:
+def kpi_today(
+    request: Request, db: SessionDep, _: None = Depends(require_auth)
+) -> dict[str, int]:
     create_all()
     now = datetime.now(timezone.utc)
     start = datetime(year=now.year, month=now.month, day=now.day, tzinfo=timezone.utc)
-    with SessionLocal() as db:
-        rows = db.scalars(select(EventLog.type).where(EventLog.ts >= start)).all()
-        counts: dict[str, int] = {}
-        for t in rows:
-            counts[t] = counts.get(t, 0) + 1
-        log_event(
-            "INFO",
-            op="kpi",
-            kind="api",
-            message="kpi today",
-            trace_id=getattr(request.state, "trace_id", None),
-            extra={"counts": counts},
-        )
-        return counts
+    rows = db.scalars(select(EventLog.type).where(EventLog.ts >= start)).all()
+    counts: dict[str, int] = {}
+    for t in rows:
+        counts[t] = counts.get(t, 0) + 1
+    log_event(
+        "INFO",
+        op="kpi",
+        kind="api",
+        message="kpi today",
+        trace_id=getattr(request.state, "trace_id", None),
+        extra={"counts": counts},
+    )
+    return counts
 
 
 @app.get("/kpi/summary", response_model=KPISummaryResponse)
-def kpi_summary(_: Request, __: None = Depends(require_auth)) -> KPISummaryResponse:
+def kpi_summary(
+    _: Request, db: SessionDep, __: None = Depends(require_auth)
+) -> KPISummaryResponse:
     create_all()
     # Use naive UTC consistently to match SQLite naive timestamps
     now = datetime.utcnow()
     cutoff = now - timedelta(hours=24)
-    with SessionLocal() as db:
-        (
-            products_total,
-            prod_with_offers,
-            offers_total,
-            offers_24h,
-        ) = _compute_kpi_totals(db, cutoff)
-        per_dealer = _compute_kpi_per_dealer(db, now, cutoff)
-        unmapped = _count_unmapped_pn(db)
+    (
+        products_total,
+        prod_with_offers,
+        offers_total,
+        offers_24h,
+    ) = _compute_kpi_totals(db, cutoff)
+    per_dealer = _compute_kpi_per_dealer(db, now, cutoff)
+    unmapped = _count_unmapped_pn(db)
 
     coverage = _kpi_coverage_pct(products_total, prod_with_offers)
     upd_pct = _kpi_update_pct(offers_total, offers_24h)
@@ -405,15 +407,17 @@ def kpi_summary(_: Request, __: None = Depends(require_auth)) -> KPISummaryRespo
 
 
 def _compute_kpi_totals(db: Session, cutoff: datetime) -> tuple[int, int, int, int]:
-    products_total = int(db.query(func.count(Product.id)).scalar() or 0)
+    products_total = int(db.scalar(select(func.count(Product.id))) or 0)
     products_with_offers = int(
-        db.query(SupplierOffer.product_id).distinct().count() or 0
+        db.scalar(select(func.count(func.distinct(SupplierOffer.product_id)))) or 0
     )
-    offers_total = int(db.query(func.count(SupplierOffer.id)).scalar() or 0)
+    offers_total = int(db.scalar(select(func.count(SupplierOffer.id))) or 0)
     offers_24h = int(
-        db.query(func.count(SupplierOffer.id))
-        .filter(SupplierOffer.updated_at >= cutoff)
-        .scalar()
+        db.scalar(
+            select(func.count(SupplierOffer.id)).where(
+                SupplierOffer.updated_at >= cutoff
+            )
+        )
         or 0
     )
     return products_total, products_with_offers, offers_total, offers_24h
@@ -434,15 +438,13 @@ def _compute_kpi_per_dealer(
 def _dealer_aggregation_rows(
     db: Session,
 ) -> list[tuple[str, int, datetime | None]]:
-    rows = (
-        db.query(
+    rows = db.execute(
+        select(
             SupplierOffer.supplier,
             func.count(SupplierOffer.id),
             func.max(SupplierOffer.updated_at),
-        )
-        .group_by(SupplierOffer.supplier)
-        .all()
-    )
+        ).group_by(SupplierOffer.supplier)
+    ).all()
     result: list[tuple[str, int, datetime | None]] = []
     for dealer, cnt, last_upd in rows:
         result.append((str(dealer), int(cnt or 0), last_upd))
@@ -470,12 +472,12 @@ def _kpi_dealer_entry(
 
 def _offers_updated_24h_for_dealer(db: Session, dealer: str, cutoff: datetime) -> int:
     return int(
-        db.query(func.count(SupplierOffer.id))
-        .filter(
-            SupplierOffer.supplier == dealer,
-            SupplierOffer.updated_at >= cutoff,
+        db.scalar(
+            select(func.count(SupplierOffer.id)).where(
+                SupplierOffer.supplier == dealer,
+                SupplierOffer.updated_at >= cutoff,
+            )
         )
-        .scalar()
         or 0
     )
 
@@ -493,7 +495,9 @@ def _dealer_lag_days(now: datetime, last_updated: datetime | None) -> float | No
 
 def _count_unmapped_pn(db: Session) -> int:
     # PN non mappati: offerte con extra.dealer_pn senza riga PNMapping corrispondente
-    candidates = db.query(SupplierOffer).filter(SupplierOffer.extra.isnot(None)).all()
+    candidates = db.scalars(
+        select(SupplierOffer).where(SupplierOffer.extra.isnot(None))
+    ).all()
     unmapped = 0
     for offer in candidates:
         try:
@@ -501,13 +505,11 @@ def _count_unmapped_pn(db: Session) -> int:
             if not dealer_code:
                 continue
             dealer_norm = normalize_pn(dealer_code)
-            exists = (
-                db.query(PNMapping.id)
-                .filter(
+            exists = db.scalar(
+                select(PNMapping.id).where(
                     PNMapping.dealer == offer.supplier,
                     PNMapping.dealer_pn_norm == dealer_norm,
                 )
-                .first()
             )
             if not exists:
                 unmapped += 1

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+from sqlalchemy import select
 
 
 def _setup_db(tmp_name: str):
@@ -124,15 +125,14 @@ def test_pn_mapping_updates_on_same_dealer_code():
     pn_alias_import(temp_path)
 
     with SessionLocal() as db:
-        rows = (
-            db.query(PNMapping)
-            .filter(
-                PNMapping.dealer == "DealerA", PNMapping.dealer_pn_norm == "ICNHG601116"
+        rows = db.scalars(
+            select(PNMapping).where(
+                PNMapping.dealer == "DealerA",
+                PNMapping.dealer_pn_norm == "ICNHG601116",
             )
-            .all()
-        )
+        ).all()
         assert len(rows) == 1, "Expected single mapping per dealer code"
         row = rows[0]
         # It should now point to the CN-HG701 product
-        prod = db.query(Product).filter(Product.id == row.product_id).first()
+        prod = db.scalar(select(Product).where(Product.id == row.product_id))
         assert prod and prod.mpn == "CN-HG701"

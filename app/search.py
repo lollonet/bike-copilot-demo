@@ -1,14 +1,14 @@
 from __future__ import annotations
 
 
-import yaml
 import os
+import yaml
 from sqlalchemy import select
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import Session, selectinload
 
 from .config import settings
 from .logging_utils import log_event
-from .models import EventLog, Product, SessionLocal, SupplierOffer
+from .models import EventLog, Product, SupplierOffer
 from .types import FacetsResponse, OfferItem, SearchRequest, SearchResponse
 
 
@@ -130,13 +130,10 @@ def final_score(offer: SupplierOffer, comp_score: int, min_price: float) -> floa
     return 0.35 * avail + 0.25 * comp + 0.20 * lead + 0.20 * price_norm
 
 
-def _prefilter_products(request: SearchRequest) -> list[Product]:
+def _prefilter_products(request: SearchRequest, db: Session) -> list[Product]:
     """Load all products and apply text/attribute filters at product level."""
     synonyms = _load_synonyms()
-    with SessionLocal() as db:
-        products = db.scalars(
-            select(Product).options(selectinload(Product.offers))
-        ).all()
+    products = db.scalars(select(Product).options(selectinload(Product.offers))).all()
     qtext = (request.query_text or "").strip().lower()
     tokens = [t for t in qtext.split() if t]
     filtered: list[Product] = []
@@ -194,35 +191,41 @@ def _effective_budget_max(budget_max: float | None) -> float | None:
     return value
 
 
-def _log_search_event(request: SearchRequest, items: list[OfferItem]) -> None:
-    with SessionLocal() as log_db:
-        log_db.add(
-            EventLog(
-                type="search",
-                payload={
-                    "filters": {
-                        "speed": request.speed,
-                        "freehub": request.freehub.value if request.freehub else None,
-                        "brake": request.brake.value if request.brake else None,
-                        "axle": request.axle,
-                        "rotor": request.rotor.value if request.rotor else None,
-                        "budget_max": request.budget_max,
-                    },
-                    "results": len(items),
+def _log_search_event(
+    db: Session, request: SearchRequest, items: list[OfferItem]
+) -> None:
+    db.add(
+        EventLog(
+            type="search",
+            payload={
+                "filters": {
+                    "speed": request.speed,
+                    "freehub": request.freehub.value if request.freehub else None,
+                    "brake": request.brake.value if request.brake else None,
+                    "axle": request.axle,
+                    "rotor": request.rotor.value if request.rotor else None,
+                    "budget_max": request.budget_max,
                 },
-            )
+                "results": len(items),
+            },
         )
-        log_db.commit()
+    )
+    db.commit()
 
 
-def search(request: SearchRequest) -> SearchResponse:
+def search(request: SearchRequest, db: Session | None = None) -> SearchResponse:
     synonyms = _load_synonyms()
-    filtered = _prefilter_products(request)
+    if db is None:
+        from .models import SessionLocal
+
+        with SessionLocal() as scoped_db:
+            return search(request, scoped_db)
+    filtered = _prefilter_products(request, db)
     offers = _gather_scored_offers(request, filtered, synonyms)
     if not offers:
         return SearchResponse(items=[])
     items = _build_search_items(offers)
-    _log_search_event(request, items)
+    _log_search_event(db, request, items)
     return SearchResponse(items=items)
 
 
@@ -294,9 +297,14 @@ def _gather_scored_offers(
     return offers
 
 
-def facets(request: SearchRequest) -> FacetsResponse:
+def facets(request: SearchRequest, db: Session | None = None) -> FacetsResponse:
     synonyms = _load_synonyms()
-    filtered = _prefilter_products(request)
+    if db is None:
+        from .models import SessionLocal
+
+        with SessionLocal() as scoped_db:
+            return facets(request, scoped_db)
+    filtered = _prefilter_products(request, db)
     counts, prices, offer_total = _compute_facets_for_products(
         request, filtered, synonyms
     )

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable, NotRequired, TypedDict, TYPE_CHECKING
+from typing import Any, Callable, NotRequired, TypedDict, TYPE_CHECKING
 from urllib.parse import parse_qsl, urlencode, urlparse
 
 from bs4 import BeautifulSoup
@@ -28,13 +28,14 @@ class SearchMapping(TypedDict, total=False):
     url_template: str  # e.g. https://shop.example/search?q={q}
 
 
-class WebMapping(TypedDict):
+class WebMapping(TypedDict, total=False):
     supplier: str
     root: str
     brand: str
     mpn: str
     name: str
     price: str
+    category: str
     in_stock: NotRequired[str]
     lead_time_days: NotRequired[str]
     dealer_code: NotRequired[str]
@@ -65,7 +66,32 @@ def _load_mapping(path: Path) -> WebMapping:
     missing = required - set(data.keys())
     if missing:
         raise ValueError(f"mapping YAML missing keys: {sorted(missing)}")
-    return WebMapping(**data)
+    mapping: WebMapping = {
+        "supplier": str(data.get("supplier", "")),
+        "root": str(data.get("root", "")),
+        "brand": str(data.get("brand", "")),
+        "mpn": str(data.get("mpn", "")),
+        "name": str(data.get("name", "")),
+        "price": str(data.get("price", "")),
+    }
+    # Optional fields
+    if "category" in data:
+        mapping["category"] = str(data.get("category") or "")
+    if "dealer_code" in data:
+        mapping["dealer_code"] = str(data.get("dealer_code") or "")
+    if "in_stock" in data:
+        mapping["in_stock"] = str(data.get("in_stock") or "")
+    if "lead_time_days" in data:
+        mapping["lead_time_days"] = str(data.get("lead_time_days") or "")
+    if "pagination" in data and isinstance(data.get("pagination"), dict):
+        mapping["pagination"] = data["pagination"]  # type: ignore[assignment]
+    if "search" in data and isinstance(data.get("search"), dict):
+        mapping["search"] = data["search"]  # type: ignore[assignment]
+    if "item_link" in data:
+        mapping["item_link"] = str(data.get("item_link") or "")
+    if "detail" in data and isinstance(data.get("detail"), dict):
+        mapping["detail"] = data["detail"]  # type: ignore[assignment]
+    return mapping
 
 
 def _text(el) -> str:
@@ -813,13 +839,15 @@ def _should_paginate(
     return bool(follow_next and pagination_cfg)
 
 
-def _pagination_mode(pcfg: PaginationMapping) -> str:
+def _pagination_mode(pcfg: PaginationMapping | None) -> str:
+    if pcfg is None:
+        return "none"
     mode_value = pcfg.get("mode")
     return mode_value.lower() if isinstance(mode_value, str) else "link"
 
 
 def _pagination_chain_link(
-    pcfg: PaginationMapping,
+    pcfg: PaginationMapping | None,
     first_html: str,
     first_url: str,
     max_pages: int,
@@ -828,6 +856,9 @@ def _pagination_chain_link(
     fetch_fn: Callable[[str], str],
 ) -> list[tuple[str, str]]:
     import time as _time
+
+    if pcfg is None:
+        return []
 
     next_sel_raw = pcfg.get("next")
     next_sel = next_sel_raw if isinstance(next_sel_raw, str) else ""
@@ -897,13 +928,15 @@ def _resolve_query_limit(
 
 
 def _pagination_chain_query(
-    pcfg: PaginationMapping,
+    pcfg: PaginationMapping | None,
     first_html: str,
     first_url: str,
     ctx: FetchContext,
 ) -> list[tuple[str, str]]:
     import time as _time
 
+    if pcfg is None:
+        return []
     limit = _resolve_query_limit(pcfg, first_html)
     if limit is None or limit <= 0:
         return []

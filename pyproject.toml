@@ -7,8 +7,29 @@ description = "BassCodeBase: uv-managed Python project"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
-  # Migrated from requirements.txt
-  "PyYAML>=6.0",
+  # Runtime deps (migrated from requirements.txt)
+  "fastapi>=0.115.0",
+  "uvicorn[standard]>=0.30.6",
+  "gradio>=4.44.0",
+  "pydantic>=2.6.4",
+  "pydantic-settings>=2.2.1",
+  "sqlalchemy>=2.0.25",
+  "pandas>=2.2.2",
+  "rapidfuzz>=3.9.6",
+  "pyyaml>=6.0.1",
+  "jinja2>=3.1.3",
+  "pdfkit>=1.0.0",
+  "python-multipart>=0.0.9",
+  "httpx>=0.27.0",
+  "pdfplumber>=0.11.0",
+  "typer>=0.12.5",
+  "rich>=13.7.1",
+  "beautifulsoup4>=4.12.3",
+  # Tooling / typing
+  "mypy>=1.8.0",
+  "types-pyyaml>=6.0.12.20240111",
+  "pytest>=8.2.0",
+  "basedpyright>=1.10.2",
 ]
 
 # Using uv for dependency resolution and sync. No build system is required

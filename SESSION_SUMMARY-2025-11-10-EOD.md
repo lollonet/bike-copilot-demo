@@ -38,13 +38,13 @@ Polish UI/UX and docs: facet chips and quick remove, small debounce on filter ch
 ## 4. Next Steps / Action Queue
 | ID | Task | Owner | Due | Status |
 |----|------|-------|-----|--------|
-| T1 | Add facet chips with quick remove near results | Copilot | 2025-11-11 | todo |
-| T2 | README: screenshots + “Scenario demo” | Copilot | 2025-11-11 | todo |
-| T3 | Category synonyms map (optional) | Copilot | 2025-11-12 | planned |
-| T4 | Make targets: make web-crawl (providers) | Copilot | 2025-11-12 | planned |
-| T5 | Optional Playwright fetcher + login | Copilot | 2025-11-14 | planned |
-| T6 | KPI doc + sanity checks (/kpi/today) | Copilot | 2025-11-11 | todo |
-| T7 | Systemd env example + notes | Copilot | 2025-11-12 | planned |
+| T1 | Add facet chips with quick remove near results | Copilot | 2025-11-11 | ❌ not done |
+| T2 | README: screenshots + “Scenario demo” | Copilot | 2025-11-11 | ❌ not done |
+| T3 | Category synonyms map (optional) | Copilot | 2025-11-12 | ✅ done |
+| T4 | Make targets: make web-crawl (providers) | Copilot | 2025-11-12 | ❌ not done |
+| T5 | Optional Playwright fetcher + login | Copilot | 2025-11-14 | ❌ not done |
+| T6 | KPI doc + sanity checks (/kpi/today) | Copilot | 2025-11-11 | ✅ done |
+| T7 | Systemd env example + notes | Copilot | 2025-11-12 | ✅ done |
 
 ## 5. Reference Files
 - VISION.md (current)
@@ -65,4 +65,3 @@ Polish UI/UX and docs: facet chips and quick remove, small debounce on filter ch
 - Summary of progress: —  
 - Updated decisions: —  
 - Closure: —  
-

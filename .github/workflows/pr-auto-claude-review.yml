@@ -1,0 +1,76 @@
+name: PR Auto-Comment (@claude review)
+
+on:
+  pull_request:
+    # Non commentare alla creazione; solo su push successivi
+    types: [synchronize]
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+jobs:
+  ensure-claude-comment:
+    if: ${{ !github.event.pull_request.draft }}
+    runs-on: ubuntu-latest
+    concurrency:
+      group: pr-auto-claude-${{ github.event.pull_request.number }}
+      cancel-in-progress: false
+    env:
+      CODE_DIRS: "app src scripts providers tests"
+      CODE_EXTS: "py sh yaml yml"
+      SKIP_DIRS: "docs .github"
+    steps:
+      - name: Decide if code changes exist and comment is missing
+        id: decide
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const {owner, repo} = context.repo;
+            const pr = context.payload.pull_request;
+            // Consenti skip via etichetta
+            const labels = (pr.labels || []).map(l => (typeof l === 'string' ? l : l.name));
+            if (labels.includes('skip-claude-review')) {
+              core.info('skip-claude-review label presente → skip');
+              core.setOutput('should_comment','false');
+              return;
+            }
+            // Build regex
+            const words = s => (s||'').split(/\s+/).filter(Boolean);
+            const esc = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            const dirs = words(process.env.CODE_DIRS);
+            const exts = words(process.env.CODE_EXTS);
+            const skipDirs = words(process.env.SKIP_DIRS);
+            const dirRe = new RegExp(`^(${dirs.map(esc).join('|')})/`, 'i');
+            const extRe = new RegExp(`\\.(${exts.map(esc).join('|')})$`, 'i');
+            const skipDirRe = new RegExp(`^(${skipDirs.map(esc).join('|')})/`, 'i');
+            // File nella PR
+            const files = await github.paginate(github.rest.pulls.listFiles, {owner, repo, pull_number: pr.number, per_page: 100});
+            const considered = files.filter(f => ['added','modified','renamed','removed','copied','changed'].includes(f.status));
+            const codeChanged = considered.some(f => dirRe.test(f.filename) && extRe.test(f.filename));
+            const prDocsOnly = considered.length > 0 && considered.every(f => skipDirRe.test(f.filename));
+            core.info(`codeChanged=${codeChanged} prDocsOnly=${prDocsOnly}`);
+            // Commenti esistenti
+            const issueComments = await github.paginate(github.rest.issues.listComments, {owner, repo, issue_number: pr.number, per_page: 100});
+            const reviewComments = await github.paginate(github.rest.pulls.listReviewComments, {owner, repo, pull_number: pr.number, per_page: 100});
+            const topLevelReviews = await github.paginate(github.rest.pulls.listReviews, {owner, repo, pull_number: pr.number, per_page: 100});
+            const hasTrigger = [...issueComments, ...reviewComments, ...topLevelReviews]
+              .some(c => (c.body || '').includes('@claude review'));
+            const should = codeChanged && !hasTrigger && !prDocsOnly;
+            core.info(`hasTrigger=${hasTrigger} should_comment=${should}`);
+            core.setOutput('should_comment', should ? 'true' : 'false');
+
+      - name: Post trigger comment
+        if: steps.decide.outputs.should_comment == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const {owner, repo} = context.repo;
+            const pr = context.payload.pull_request;
+            await github.rest.issues.createComment({
+              owner,
+              repo,
+              issue_number: pr.number,
+              body: '@claude review'
+            });

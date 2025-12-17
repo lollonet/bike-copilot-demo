@@ -355,10 +355,10 @@ def _find_pn_mapping(
     dealer: str,
     dealer_norm: str,
 ) -> PNMapping | None:
-    return (
-        db.query(PNMapping)
-        .filter(PNMapping.dealer == dealer, PNMapping.dealer_pn_norm == dealer_norm)
-        .first()
+    return db.scalar(
+        select(PNMapping).where(
+            PNMapping.dealer == dealer, PNMapping.dealer_pn_norm == dealer_norm
+        )
     )
 
 
@@ -383,10 +383,10 @@ def _insert_or_update_pn_mapping(
             )
             db.flush()
     except IntegrityError:
-        existing = (
-            db.query(PNMapping)
-            .filter(PNMapping.dealer == dealer, PNMapping.dealer_pn_norm == dealer_norm)
-            .first()
+        existing = db.scalar(
+            select(PNMapping).where(
+                PNMapping.dealer == dealer, PNMapping.dealer_pn_norm == dealer_norm
+            )
         )
         if existing:
             existing.product_id = product_id

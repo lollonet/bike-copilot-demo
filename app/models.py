@@ -31,7 +31,7 @@ class Base(DeclarativeBase):
 
 
 def get_engine():
-    engine = create_engine(settings.db_url, echo=False, future=True)
+    engine = create_engine(settings.db_url, echo=False)
 
     if settings.db_url.startswith("sqlite"):
 
@@ -45,9 +45,7 @@ def get_engine():
     return engine
 
 
-SessionLocal = sessionmaker(
-    bind=get_engine(), autoflush=False, autocommit=False, future=True
-)
+SessionLocal = sessionmaker(bind=get_engine(), autoflush=False, autocommit=False)
 
 
 class Product(Base):
