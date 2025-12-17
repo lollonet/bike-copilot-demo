@@ -195,3 +195,32 @@ cat idiomatic_assessment.md | less
 **Ultimo aggiornamento:** 2025-11-15 17:45
 **Branch:** feat/complexity-gate-cleanup
 **Ultimo commit:** f4c41ce
+
+---
+
+## 2025-12-17 — Verifica stato roadmap e task pendenti
+
+### Stato dei problemi critici (audit 2025-11-15)
+- pydantic-settings inutilizzata: **Risolto** (config migrata; deps aggiunte).
+- Legacy SQLAlchemy query API: **Risolto** (uso di `select()/scalars()`).
+- Silent `except Exception`: **Parziale** (10 handler ancora senza log).
+- Logging coverage: **Parziale** (log_event presente in 6 moduli su 21).
+- Gerarchia custom exceptions: **Non fatto** (nessun `app/exceptions.py`).
+
+### Stato roadmap
+- Fase 1: pydantic-settings ✅; logging handler ❌; gerarchia exceptions ❌; standard logging ❌.
+- Fase 2: Migrazione SQLA 2.0 ✅; refactoring complexity hotspots ❓ (non verificato).
+- Fasi 3–4: non avviate.
+
+### Task dalla sessione 2025-11-10 EOD
+- T1 Facet chips/quick remove: ❌ non implementato.
+- T2 README screenshot + scenario demo: ❌ non presenti.
+- T3 Category synonyms map: ✅ presente (`app/category_synonyms.yaml` + alias env).
+- T4 Make target `web-crawl`: ❌ non esiste target nel Makefile.
+- T5 Playwright fetcher/login: ❌ non presente.
+- T6 KPI doc + /kpi/today: ✅ endpoint attivo e doc KPI esistente.
+- T7 Systemd env example: ✅ presente (`deploy/bike-copilot.service`).
+
+**Ultimo aggiornamento:** 2025-12-17 01:27 UTC  
+**Branch:** feat/req-001-di-sqla-mypy  
+**Ultimo commit:** c7dfb08
