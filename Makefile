@@ -66,6 +66,43 @@ all-dealers-crawl: crawl-montanini crawl-ciclodiffusione crawl-rms crawl-ciclopr
 # Full ingest: seed CSV demo + crawls (auth dealers skipped if env assente)
 ingest-all: seed all-dealers-crawl
 	@echo "Ingest-all completed."
+
+.PHONY: reconcile-offers
+# Reconciliation: mark offers missing after crawl as stale (soft-delete flag) for all suppliers in DB
+reconcile-offers:
+	UV_CACHE_DIR=.uv-cache XDG_CACHE_HOME=.uv-cache PYTHONPATH=. uv run python - <<'PY'
+from app import models
+from sqlalchemy import select
+from datetime import datetime, timezone
+
+models.create_all()
+engine = models.get_engine()
+with engine.begin() as conn:
+    # compute latest crawl timestamp per supplier
+    res = conn.execute(
+        select(models.SupplierOffer.supplier, models.SupplierOffer.updated_at)
+    ).all()
+    latest = {}
+    for supplier, ts in res:
+        if supplier not in latest or (ts and latest[supplier] and ts > latest[supplier]):
+            latest[supplier] = ts
+
+    # set a 'stale' flag on offers not updated in this run (soft delete)
+    # NOTE: adds column if missing (sqlite pragma) and uses UTC timestamp
+    conn.exec_driver_sql("ALTER TABLE supplier_offer ADD COLUMN stale BOOLEAN DEFAULT 0") if "stale" not in [c[1] for c in conn.exec_driver_sql("PRAGMA table_info(supplier_offer)").fetchall()] else None
+
+    now = datetime.now(timezone.utc)
+    for supplier, ts in latest.items():
+        if ts is None:
+            continue
+        conn.exec_driver_sql(
+            "UPDATE supplier_offer SET stale = 1 WHERE supplier = ? AND updated_at < ?",
+            (supplier, ts),
+        )
+    # log summary
+    stale_count = conn.exec_driver_sql("SELECT COUNT(*) FROM supplier_offer WHERE stale = 1").scalar_one()
+    print({"op": "reconcile-offers", "stale_marked": stale_count, "ts": now.isoformat()})
+PY
 # Fetch a JS/login page rendered via Playwright (requires playwright installed)
 WAIT_MS ?= 1500
 fetch-rendered:
