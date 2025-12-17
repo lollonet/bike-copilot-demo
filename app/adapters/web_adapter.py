@@ -9,6 +9,7 @@ from bs4 import BeautifulSoup
 import yaml
 
 from ..types import OfferInput, ProductInput
+from ..logging_utils import log_exception
 
 if TYPE_CHECKING:
     import httpx
@@ -785,7 +786,8 @@ def _sleep_with_delay(time_mod, delay_sec: float) -> None:
 def _safe_fetch(fetch_fn: Callable[[str], str], url: str) -> str | None:
     try:
         return fetch_fn(url)
-    except Exception:
+    except Exception as exc:
+        log_exception("web-adapter", "fetch", "failed to fetch url", exc, extra={"url": url})
         return None
 
 
@@ -1075,7 +1077,8 @@ def _parse_sitemap_xml(
     seen: set[str] = set()
     try:
         root = ET.fromstring(xml_text)
-    except Exception:
+    except Exception as exc:
+        log_exception("web-adapter", "sitemap", "failed to parse sitemap xml", exc)
         return []
     ns = "{http://www.sitemaps.org/schemas/sitemap/0.9}"
     urls: list[str] = []

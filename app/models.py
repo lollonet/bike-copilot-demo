@@ -24,6 +24,7 @@ from sqlalchemy.orm import (
 )
 
 from .config import settings
+from .logging_utils import log_exception
 
 
 class Base(DeclarativeBase):
@@ -122,8 +123,8 @@ def create_all() -> None:
                     conn.exec_driver_sql(
                         "ALTER TABLE product ADD COLUMN category VARCHAR(100)"
                     )
-            except Exception:
-                pass
+            except Exception as exc:
+                log_exception("db", "migrate", "failed sqlite pragma/alter", exc)
     Base.metadata.create_all(engine)
 
 

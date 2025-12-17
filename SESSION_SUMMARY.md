@@ -203,9 +203,9 @@ cat idiomatic_assessment.md | less
 ### Stato dei problemi critici (audit 2025-11-15)
 - pydantic-settings inutilizzata: **Risolto** (config migrata; deps aggiunte).
 - Legacy SQLAlchemy query API: **Risolto** (uso di `select()/scalars()`).
-- Silent `except Exception`: **Parziale** (10 handler ancora senza log).
-- Logging coverage: **Parziale** (log_event presente in 6 moduli su 21).
-- Gerarchia custom exceptions: **Non fatto** (nessun `app/exceptions.py`).
+- Silent `except Exception`: **Risolto** (tutti i catch ora loggano via `log_exception` o hanno scope ristretto).
+- Logging coverage: **Migliorato** (handler ora loggano errori runtime; restano moduli senza log strutturale).
+- Gerarchia custom exceptions: **Risolto** (`app/exceptions.py` introdotto).
 
 ### Stato roadmap
 - Fase 1: pydantic-settings ✅; logging handler ❌; gerarchia exceptions ❌; standard logging ❌.
@@ -221,6 +221,6 @@ cat idiomatic_assessment.md | less
 - T6 KPI doc + /kpi/today: ✅ endpoint attivo e doc KPI esistente.
 - T7 Systemd env example: ✅ presente (`deploy/bike-copilot.service`).
 
-**Ultimo aggiornamento:** 2025-12-17 01:27 UTC  
-**Branch:** feat/req-001-di-sqla-mypy  
-**Ultimo commit:** c7dfb08
+**Ultimo aggiornamento:** 2025-12-17 02:35 UTC  
+**Branch:** main  
+**Ultimo commit:** 583ff27

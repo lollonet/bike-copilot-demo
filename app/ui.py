@@ -6,6 +6,7 @@ from typing import Any
 import gradio as gr
 import httpx
 
+from .logging_utils import log_exception
 from .search import search
 from .types import Brake, Freehub, Rotor, SearchRequest
 from sqlalchemy.orm import Session
@@ -183,7 +184,8 @@ def _try_create_quote_via_api(
             data.get("pdf_path") or "",
             data.get("file_url") or "",
         )
-    except Exception:
+    except Exception as exc:
+        log_exception("ui", "quote-api", "failed to create quote via api", exc)
         return None
 
 
@@ -598,7 +600,8 @@ def build_interface() -> gr.Blocks:
                     facet_brake_upd = gr.update()
                     facet_rotor_upd = gr.update()
                     facet_axle_upd = gr.update()
-            except Exception:
+            except Exception as exc:
+                log_exception("ui", "facets", "failed to build facets", exc)
                 suppliers_upd = gr.update()
                 category_upd = gr.update()
                 budget_upd = gr.update()
@@ -938,7 +941,8 @@ def build_interface() -> gr.Blocks:
         def _sync_budget_from_slider(val: float | int | None):
             try:
                 v = float(val or 0)
-            except Exception:
+            except Exception as exc:
+                log_exception("ui", "budget", "invalid slider value", exc, extra={"val": val})
                 v = 0.0
             if v <= 0:
                 return gr.update(value=None)
@@ -947,7 +951,8 @@ def build_interface() -> gr.Blocks:
         def _sync_slider_from_budget(val: float | None):
             try:
                 v = float(val) if val is not None else 0.0
-            except Exception:
+            except Exception as exc:
+                log_exception("ui", "budget", "invalid budget value", exc, extra={"val": val})
                 v = 0.0
             return gr.update(value=(0 if v <= 0 else v))
 
@@ -964,7 +969,8 @@ def build_interface() -> gr.Blocks:
             # Extract offer_id from label prefix
             try:
                 offer_id = int(str(offer_label).split(" · ")[0])
-            except Exception:
+            except Exception as exc:
+                log_exception("ui", "select-offer", "failed to parse offer label", exc, extra={"label": offer_label})
                 return "Seleziona un'offerta per i dettagli"
             info = mapping.get(int(offer_id)) or {}
             return f"**Offerta {offer_id}** — {info.get('brand', '')} {info.get('mpn', '')} — {info.get('supplier', '')} — €{info.get('price', '')}"
@@ -1018,7 +1024,8 @@ def build_interface() -> gr.Blocks:
                 return gr.update(), cart, gr.update()
             try:
                 offer_id = int(str(offer_label).split(" · ")[0])
-            except Exception:
+            except Exception as exc:
+                log_exception("ui", "cart-add", "failed to parse offer label", exc, extra={"label": offer_label})
                 return gr.update(), cart, gr.update()
             info = mapping.get(offer_id)
             if not info:
@@ -1046,7 +1053,8 @@ def build_interface() -> gr.Blocks:
                 return gr.update(), cart, gr.update(), _totals_md(cart)
             try:
                 offer_id = int(str(cart_label).split(" · ")[0])
-            except Exception:
+            except Exception as exc:
+                log_exception("ui", "cart-remove", "failed to parse cart label", exc, extra={"label": cart_label})
                 return gr.update(), cart, gr.update(), _totals_md(cart)
             if offer_id in cart:
                 cart.pop(offer_id)
@@ -1075,7 +1083,8 @@ def build_interface() -> gr.Blocks:
                 return gr.update(), cart, gr.update(), _totals_md(cart)
             try:
                 offer_id = int(str(cart_label).split(" · ")[0])
-            except Exception:
+            except Exception as exc:
+                log_exception("ui", "cart-adjust", "failed to parse cart label", exc, extra={"label": cart_label})
                 return gr.update(), cart, gr.update(), _totals_md(cart)
             if offer_id not in cart:
                 return gr.update(), cart, gr.update(), _totals_md(cart)
@@ -1166,7 +1175,8 @@ def build_interface() -> gr.Blocks:
                     return "Seleziona un'offerta", "", ""
                 try:
                     offer_id = int(str(offer_label).split(" · ")[0])
-                except Exception:
+                except Exception as exc:
+                    log_exception("ui", "quote", "failed to parse offer label", exc, extra={"label": offer_label})
                     return "Seleziona un'offerta", "", ""
                 items = [{"offer_id": offer_id, "qty": 1}]
             # Call API
@@ -1189,7 +1199,8 @@ def build_interface() -> gr.Blocks:
                     )
                 # Fall back to local multi-line rendering on non-200
                 return _render_local_cart(items, customer, contact, validity, notes)
-            except Exception:
+            except Exception as exc:
+                log_exception("ui", "quote", "failed to create quote", exc)
                 # Robust fallback to local multi-line rendering
                 return _render_local_cart(items, customer, contact, validity, notes)
 

@@ -106,7 +106,7 @@ def _parse_lead_time_days(raw: object) -> int | None:
         if isinstance(raw, (int, float)):
             return int(raw)
         lead_str = str(raw)
-    except Exception:
+    except (TypeError, ValueError):
         return None
     return int(lead_str) if lead_str.isdigit() else None
 
@@ -119,5 +119,5 @@ def _safe_int(raw: object) -> int | None:
             return int(raw)
         s = str(raw)
         return int(s) if s.isdigit() else None
-    except Exception:
+    except (TypeError, ValueError):
         return None
