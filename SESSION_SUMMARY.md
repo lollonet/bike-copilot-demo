@@ -21,7 +21,16 @@ Di seguito lo stato **attuale** (dopo merge PR #55 su main, 2025-12-17).
 ### Roadmap (stato)
 - Fase 1: pydantic-settings ✅; logging handler ✅; exceptions ✅; standard logging ✅.
 - Fase 2: Migrazione SQLA 2.0 ✅; refactoring complexity hotspots ❓ (non verificato).
-- Fasi 3–4: non avviate.
+- Fase 3 (Medium Priority) — da avviare:
+  - Completare typing e rimuovere Any residui; rafforzare Protocol/TypedDict.
+  - Split god modules (>500 LOC) es. ui.py, cli.py, adapters/web_adapter.py in sottopacchetti.
+  - FastAPI polish: versioning /v1, tag/operation_id, esempi OpenAPI.
+  - Copertura test per nuovi split e router/versioning.
+- Fase 4 (Polish) — da avviare:
+  - Supporto .env completo e doc onboarding.
+  - API versioning stabile + percorso di deprecazione.
+  - Route tags coerenti; asset UX (screenshot reali, microcopy, debounce).
+  - Ops: verificare targets make (web-crawl/fetch-rendered), systemd + env sample.
 
 ### Task 2025-11-10 EOD — stato
 - T1 Facet chips/quick remove: ✅ (UI “Filtri attivi” rimovibili).

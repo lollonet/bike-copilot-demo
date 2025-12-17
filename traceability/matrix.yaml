@@ -63,6 +63,7 @@ REQ-008:
   commits: []
   files:
   - README.md
+  - SESSION_SUMMARY.md
   - docs/requirements/REQ-008.kpi-freshness.md
   - docs/requirements/REQ-INDEX.md
   prs: []
