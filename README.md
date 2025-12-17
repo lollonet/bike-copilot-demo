@@ -56,9 +56,12 @@ make status     # Run all quality checks (lint, format, type)
 make test       # Execute test suite with coverage
 make api        # Start FastAPI server (port 8000)
 make ui-pn      # Launch PN-first UI (port 7861)
-make crawl      # Run dealer synchronization
-make web-crawl  # Crawl Montanini + Ciclodiffusione (set Q="query1 query2")
-make fetch-rendered URL=...  # Playwright fetch for JS/login pages (requires playwright installed)
+make crawl      # Dealer sync (alias web-crawl: Montanini + Ciclodiffusione)
+make all-dealers-crawl  # Crawl tutti i dealer via seed URL (RMS/CicloPromo richiedono credenziali)
+make ingest-all # Seed CSV demo + crawl di tutti i dealer + reconcile
+make reconcile-offers  # Marca stale le offerte non aggiornate nell’ultima run
+make reset-db   # Resetta il DB SQLite locale e ricrea le tabelle
+make fetch-rendered URL=...  # Playwright fetch per pagine JS/login (extra opzionale)
 ```
 
 ## 🏗️ System Components
