@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable, NotRequired, TypedDict, TYPE_CHECKING
+from typing import Callable, NotRequired, TypedDict, TYPE_CHECKING
 from urllib.parse import parse_qsl, urlencode, urlparse
 
 from bs4 import BeautifulSoup
@@ -29,14 +29,16 @@ class SearchMapping(TypedDict, total=False):
     url_template: str  # e.g. https://shop.example/search?q={q}
 
 
-class WebMapping(TypedDict, total=False):
+class WebMapping(TypedDict):
+    # Required mapping fields for page parsing
     supplier: str
     root: str
     brand: str
     mpn: str
     name: str
     price: str
-    category: str
+    # Optional fields
+    category: NotRequired[str]
     in_stock: NotRequired[str]
     lead_time_days: NotRequired[str]
     dealer_code: NotRequired[str]
@@ -787,7 +789,9 @@ def _safe_fetch(fetch_fn: Callable[[str], str], url: str) -> str | None:
     try:
         return fetch_fn(url)
     except Exception as exc:
-        log_exception("web-adapter", "fetch", "failed to fetch url", exc, extra={"url": url})
+        log_exception(
+            "web-adapter", "fetch", "failed to fetch url", exc, extra={"url": url}
+        )
         return None
 
 
