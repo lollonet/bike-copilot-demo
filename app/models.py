@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy import (
     JSON,
@@ -82,7 +82,7 @@ class SupplierOffer(Base):
     in_stock: Mapped[bool] = mapped_column(Boolean, default=False)
     lead_time_days: Mapped[int | None] = mapped_column(Integer, nullable=True)
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime, default=datetime.utcnow, index=True
+        DateTime, default=lambda: datetime.now(timezone.utc), index=True
     )
     currency: Mapped[str | None] = mapped_column(String(8), nullable=True)
     extra: Mapped[dict[str, str | int | float | bool | None] | None] = mapped_column(
@@ -100,7 +100,9 @@ class EventLog(Base):
     __tablename__ = "event_log"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    ts: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, index=True)
+    ts: Mapped[datetime] = mapped_column(
+        DateTime, default=lambda: datetime.now(timezone.utc), index=True
+    )
     type: Mapped[str] = mapped_column(String(50), index=True)
     payload: Mapped[dict[str, str | int | float | bool | None] | None] = mapped_column(
         JSON, nullable=True
@@ -136,7 +138,9 @@ class DealerPolicy(Base):
     base_cost: Mapped[float | None] = mapped_column(Float, nullable=True)
     free_threshold: Mapped[float | None] = mapped_column(Float, nullable=True)
     lead_days_std: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=lambda: datetime.now(timezone.utc)
+    )
     source: Mapped[str | None] = mapped_column(String(50), nullable=True)
     confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
 
@@ -162,7 +166,9 @@ class RawIngest(Base):
     __tablename__ = "raw_ingest"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    ts: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, index=True)
+    ts: Mapped[datetime] = mapped_column(
+        DateTime, default=lambda: datetime.now(timezone.utc), index=True
+    )
     provider: Mapped[str] = mapped_column(String(50), index=True)
     kind: Mapped[str] = mapped_column(String(50), index=True)
     uri: Mapped[str] = mapped_column(String(500))
@@ -177,7 +183,9 @@ class PriceHistory(Base):
     __tablename__ = "price_history"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    ts: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, index=True)
+    ts: Mapped[datetime] = mapped_column(
+        DateTime, default=lambda: datetime.now(timezone.utc), index=True
+    )
     offer_id: Mapped[int] = mapped_column(ForeignKey("supplier_offer.id"), index=True)
     price: Mapped[float] = mapped_column(Float)
     source_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)

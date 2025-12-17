@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 
 import jinja2
@@ -29,7 +29,7 @@ def render_quote(context: dict[str, Any]) -> tuple[str, str | None]:
 
 
 def _quote_paths(out_dir: Path) -> tuple[Path, Path]:
-    ts = datetime.utcnow().strftime("%Y%m%d-%H%M%S")
+    ts = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
     base = f"QUOTE-{ts}"
     html_path = out_dir / f"{base}.html"
     pdf_path = out_dir / f"{base}.pdf"

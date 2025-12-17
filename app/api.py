@@ -381,7 +381,7 @@ def kpi_summary(
 ) -> KPISummaryResponse:
     create_all()
     # Use naive UTC consistently to match SQLite naive timestamps
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     cutoff = now - timedelta(hours=24)
     (
         products_total,
@@ -485,12 +485,11 @@ def _offers_updated_24h_for_dealer(db: Session, dealer: str, cutoff: datetime) -
 def _dealer_lag_days(now: datetime, last_updated: datetime | None) -> float | None:
     if last_updated is None:
         return None
-    last_update = (
-        last_updated.replace(tzinfo=None)
-        if getattr(last_updated, "tzinfo", None)
-        else last_updated
-    )
-    return max(0.0, (now - last_update).total_seconds() / 86400.0)
+    last_update = last_updated
+    if last_update.tzinfo is None:
+        last_update = last_update.replace(tzinfo=timezone.utc)
+    current = now if now.tzinfo is not None else now.replace(tzinfo=timezone.utc)
+    return max(0.0, (current - last_update).total_seconds() / 86400.0)
 
 
 def _count_unmapped_pn(db: Session) -> int:

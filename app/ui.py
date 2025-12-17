@@ -252,7 +252,8 @@ def build_interface() -> gr.Blocks:
       #results-col { flex: 1 1 100% !important; }
     }
     """
-    with gr.Blocks(title="Bike Copilot Demo", css=css) as demo:
+    with gr.Blocks(title="Bike Copilot Demo") as demo:
+        gr.HTML(f"<style>{css}</style>")
         gr.Markdown("""
         ## Bike Copilot — Ricerca e Preventivo
         Cerca un componente, confronta le offerte e genera un preventivo in 1 click.
