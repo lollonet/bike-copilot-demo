@@ -208,22 +208,22 @@ cat idiomatic_assessment.md | less
 - Gerarchia custom exceptions: **Risolto** (`app/exceptions.py` introdotto).
 
 ### Stato roadmap
-- Fase 1: pydantic-settings ✅; logging handler ✅; gerarchia exceptions ✅; standard logging ✅ (log_exception strutturato).
+- Fase 1: pydantic-settings ✅; logging handler ✅; gerarchia exceptions ✅; standard logging ✅.
 - Fase 2: Migrazione SQLA 2.0 ✅; refactoring complexity hotspots ❓ (non verificato).
 - Fasi 3–4: non avviate.
 
 ### Task dalla sessione 2025-11-10 EOD
-- T1 Facet chips/quick remove: ✅ implementato (UI con checkbox “Filtri attivi” e rimozione rapida).
-- T2 README screenshot + scenario demo: ✅ sezione aggiunta + placeholder path screenshot.
+- T1 Facet chips/quick remove: ✅ implementato (UI “Filtri attivi”).
+- T2 README screenshot + scenario demo: ✅ sezione aggiunta + placeholder screenshot path.
 - T3 Category synonyms map: ✅ presente (`app/category_synonyms.yaml` + alias env).
-- T4 Make target `web-crawl`: ✅ aggiunto in Makefile (usa crawl-montanini + crawl-ciclodiffusione).
-- T5 Playwright fetcher/login: ✅ CLI `fetch-rendered` con login opzionale (dipendenza opzionale playwright).
+- T4 Make target `web-crawl`: ✅ aggiunto in Makefile (crawl montanini + ciclodiffusione).
+- T5 Playwright fetcher/login: ✅ CLI `fetch-rendered` con login opzionale (playwright opzionale).
 - T6 KPI doc + /kpi/today: ✅ endpoint attivo e doc KPI esistente.
 - T7 Systemd env example: ✅ presente (`deploy/bike-copilot.service`).
 
 ### Stato PR
 - PR #55 (feat/req-001-logging-fixes) **merged** into `main`.
-- Test su PR: `uv run pytest -q` (76 passed).
+- Test: `uv run pytest -q` (76 passed).
 
 **Ultimo aggiornamento:** 2025-12-17 14:30 UTC  
 **Branch:** main  
