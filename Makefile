@@ -31,7 +31,7 @@ crawl-ciclodiffusione:
 	@echo "Crawl Ciclodiffusione (Storeden) for queries: $(Q)"
 	@for q in $(Q); do \
 		echo "-- $$q"; \
-		UV_CACHE_DIR=.uv-cache XDG_CACHE_HOME=.uv-cache PYTHONPATH=. uv run python -m app.cli search-web --query "$$q" --mapping providers/web-ciclodiffusione.yaml --max-pages 3 --delay 0.8; \
+		UV_CACHE_DIR=.uv-cache XDG_CACHE_HOME=.uv-cache PYTHONPATH=. uv run python -m app.cli search-web --query "$$q" --mapping providers/web-ciclodiffusione.yaml --max-pages 5 --delay 0.8; \
 	done
 
 # Convenience wrapper: crawl providers with optional queries (defaults provided)
@@ -50,14 +50,14 @@ crawl-rms:
 	@if [ -z "$$DEALER_RMS_AUTH_MODE" ]; then \
 		echo "Skipping RMS: set DEALER_RMS_* env vars (see providers/dealers.yaml)"; \
 	else \
-		UV_CACHE_DIR=.uv-cache XDG_CACHE_HOME=.uv-cache PYTHONPATH=. uv run python -m app.cli search-web --query "$(Q)" --mapping providers/web-rms.yaml --max-pages 2 --delay 1.0; \
+		UV_CACHE_DIR=.uv-cache XDG_CACHE_HOME=.uv-cache PYTHONPATH=. uv run python - <<'PY'\nfrom app.cli import fetch_and_parse_urls\nfrom pathlib import Path\nfrom app.adapters.web_adapter import parse_file as parse_web_file\nimport yaml\n\nmapping = Path(\"providers/web-rms.yaml\")\ndata = yaml.safe_load(Path(\"providers/dealers.yaml\").read_text(encoding=\"utf-8\")) or {}\nurls = []\nfor d in data.get(\"dealers\", []):\n    if d.get(\"key\") == \"rms\":\n        urls = d.get(\"seeds\", {}).get(\"urls\", [])\n        break\n\nif not urls:\n    print(\"No RMS seed URLs configured; skipping\")\nelse:\n    products, offers = fetch_and_parse_urls(urls, mapping)\n    from app.ingest import upsert\n    stats = upsert(products, offers)\n    print(stats)\nPY; \
 	fi
 
 crawl-ciclopromo:
 	@if [ -z "$$DEALER_CICLOPROMO_AUTH_MODE" ]; then \
 		echo "Skipping CicloPromo: set DEALER_CICLOPROMO_* env vars (see providers/dealers.yaml)"; \
 	else \
-		UV_CACHE_DIR=.uv-cache XDG_CACHE_HOME=.uv-cache PYTHONPATH=. uv run python -m app.cli search-web --query "$(Q)" --mapping providers/web-ciclopromo.yaml --max-pages 2 --delay 1.0; \
+		UV_CACHE_DIR=.uv-cache XDG_CACHE_HOME=.uv-cache PYTHONPATH=. uv run python - <<'PY'\nfrom app.cli import fetch_and_parse_urls\nfrom pathlib import Path\nfrom app.adapters.web_adapter import parse_file as parse_web_file\nimport yaml\n\nmapping = Path(\"providers/web-ciclopromo.yaml\")\ndata = yaml.safe_load(Path(\"providers/dealers.yaml\").read_text(encoding=\"utf-8\")) or {}\nurls = []\nfor d in data.get(\"dealers\", []):\n    if d.get(\"key\") == \"ciclopromo\":\n        urls = d.get(\"seeds\", {}).get(\"urls\", [])\n        break\n\nif not urls:\n    print(\"No CicloPromo seed URLs configured; skipping\")\nelse:\n    products, offers = fetch_and_parse_urls(urls, mapping)\n    from app.ingest import upsert\n    stats = upsert(products, offers)\n    print(stats)\nPY; \
 	fi
 
 all-dealers-crawl: crawl-montanini crawl-ciclodiffusione crawl-rms crawl-ciclopromo
