@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from pydantic import BaseModel, Field
 
@@ -23,7 +23,7 @@ class Brake(str, Enum):
 class Problem(BaseModel):
     kind: str
     message: str
-    ts: datetime = Field(default_factory=datetime.utcnow)
+    ts: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     trace_id: str | None = None
 
 
@@ -55,7 +55,7 @@ class OfferItem(BaseModel):
 
 class SearchResponse(BaseModel):
     items: list[OfferItem]
-    ts: datetime = Field(default_factory=datetime.utcnow)
+    ts: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 class QuoteRequest(BaseModel):
@@ -112,7 +112,7 @@ class PNOfferItem(BaseModel):
 class SearchPNResponse(BaseModel):
     maker_pn: str
     offers: list[PNOfferItem]
-    ts: datetime = Field(default_factory=datetime.utcnow)
+    ts: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 class SearchPNBatchRequest(BaseModel):
@@ -123,7 +123,7 @@ class SearchPNBatchRequest(BaseModel):
 
 class SearchPNBatchResponse(BaseModel):
     results: list[SearchPNResponse]
-    ts: datetime = Field(default_factory=datetime.utcnow)
+    ts: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 class DealerInfo(BaseModel):
@@ -134,7 +134,7 @@ class DealerInfo(BaseModel):
 
 class DealersResponse(BaseModel):
     dealers: list[DealerInfo]
-    ts: datetime = Field(default_factory=datetime.utcnow)
+    ts: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 # KPI summary boundary
@@ -154,7 +154,7 @@ class KPISummaryResponse(BaseModel):
     updated_24h_pct: float
     pn_unmapped: int
     per_dealer: list[KPIDealerEntry]
-    ts: datetime = Field(default_factory=datetime.utcnow)
+    ts: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 # Optimizer boundary
@@ -201,7 +201,7 @@ class OptimizeResponse(BaseModel):
     dealers: list[str]
     costs: OptimizeCost
     notes: list[str] = Field(default_factory=list)
-    ts: datetime = Field(default_factory=datetime.utcnow)
+    ts: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 # Internal ingest boundary (provider adapters → ingest orchestrator)

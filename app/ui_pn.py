@@ -6,6 +6,8 @@ from typing import Any, Dict, List, Tuple
 import gradio as gr
 import httpx
 
+from .logging_utils import log_exception
+
 API_BASE = os.environ.get("APP_API_BASE", "http://localhost:8000").rstrip("/")
 _auth_credentials: tuple[str, str] | None = None
 _basic_user = os.environ.get("APP_BASIC_USER")
@@ -40,7 +42,8 @@ def load_dealers() -> List[str]:
     try:
         data = _api_get("/dealers")
         return sorted([d["name"] for d in data.get("dealers", []) if d.get("name")])
-    except Exception:
+    except Exception as exc:
+        log_exception("ui-pn", "dealers", "failed to load dealers", exc)
         return []
 
 
@@ -127,6 +130,7 @@ def _call_quote_api(items: List[Dict[str, Any]], notes: str) -> Dict[str, Any]:
             payload["notes"] = note_txt
         return _api_post("/quote", payload)
     except Exception as exc:
+        log_exception("ui-pn", "quote-api", "quote api call failed", exc)
         return {"error": str(exc)}
 
 
@@ -167,6 +171,7 @@ def _call_optimize_api(
         }
         return _api_post("/optimize", payload)
     except Exception as exc:
+        log_exception("ui-pn", "optimize-api", "optimize api call failed", exc)
         return {"error": str(exc)}
 
 

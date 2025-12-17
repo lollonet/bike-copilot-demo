@@ -6,6 +6,7 @@ from typing import Any
 import gradio as gr
 import httpx
 
+from .logging_utils import log_exception
 from .search import search
 from .types import Brake, Freehub, Rotor, SearchRequest
 from sqlalchemy.orm import Session
@@ -183,7 +184,8 @@ def _try_create_quote_via_api(
             data.get("pdf_path") or "",
             data.get("file_url") or "",
         )
-    except Exception:
+    except Exception as exc:
+        log_exception("ui", "quote-api", "failed to create quote via api", exc)
         return None
 
 
@@ -195,7 +197,11 @@ def _create_local_quote(
         if offer is None:
             return "OFFERTA NON TROVATA", "", ""
         context = _single_line_quote_context(offer, customer, contact, validity, notes)
-        html_path, pdf_path = render_quote(context)
+        try:
+            html_path, pdf_path = render_quote(context)
+        except Exception as exc:
+            log_exception("ui", "quote-local", "failed to render quote", exc, extra={"offer_id": offer_id})
+            return "ERRORE RENDERING", "", ""
         _log_ui_quote_created(db, offer.id, pdf_path)
         return html_path, (pdf_path or ""), ""
 
@@ -250,7 +256,8 @@ def build_interface() -> gr.Blocks:
       #results-col { flex: 1 1 100% !important; }
     }
     """
-    with gr.Blocks(title="Bike Copilot Demo", css=css) as demo:
+    with gr.Blocks(title="Bike Copilot Demo") as demo:
+        gr.HTML(f"<style>{css}</style>")
         gr.Markdown("""
         ## Bike Copilot — Ricerca e Preventivo
         Cerca un componente, confronta le offerte e genera un preventivo in 1 click.
@@ -289,6 +296,15 @@ def build_interface() -> gr.Blocks:
                 value=0,
                 info="Usa lo slider per impostare rapidamente il budget (0 = nessun limite).",
             )
+
+        with gr.Row():
+            active_filters = gr.CheckboxGroup(
+                label="Filtri attivi (seleziona e rimuovi)",
+                choices=[],
+                value=[],
+                interactive=True,
+            )
+            remove_filters_btn = gr.Button("Rimuovi filtri selezionati", variant="secondary")
 
         with gr.Row():
             with gr.Column(scale=1):
@@ -389,6 +405,44 @@ def build_interface() -> gr.Blocks:
                 file_url = gr.Textbox(
                     label="URL file (se API attiva)", interactive=False
                 )
+
+        def _active_filters_list(
+            category,
+            suppliers_sel,
+            in_stock_only,
+            speed,
+            freehub,
+            brake,
+            axle,
+            rotor,
+            budget,
+        ) -> list[str]:
+            filters: list[str] = []
+            if category:
+                filters.append(f"category:{category}")
+            if suppliers_sel:
+                filters.append(f"suppliers:{','.join(sorted(suppliers_sel))}")
+            if in_stock_only:
+                filters.append("in_stock:true")
+            if speed:
+                filters.append(f"speed:{speed}")
+            if freehub:
+                filters.append(f"freehub:{freehub}")
+            if brake:
+                filters.append(f"brake:{brake}")
+            if axle:
+                filters.append(f"axle:{axle}")
+            if rotor:
+                filters.append(f"rotor:{rotor}")
+            if budget is not None:
+                try:
+                    bval = float(budget)
+                except Exception as exc:
+                    log_exception("ui", "filters", "invalid budget value", exc, extra={"budget": budget})
+                    bval = 0.0
+                if bval > 0:
+                    filters.append(f"budget:<= {bval:.0f}")
+            return filters
 
         def _on_search(
             query,
@@ -598,7 +652,8 @@ def build_interface() -> gr.Blocks:
                     facet_brake_upd = gr.update()
                     facet_rotor_upd = gr.update()
                     facet_axle_upd = gr.update()
-            except Exception:
+            except Exception as exc:
+                log_exception("ui", "facets", "failed to build facets", exc)
                 suppliers_upd = gr.update()
                 category_upd = gr.update()
                 budget_upd = gr.update()
@@ -608,6 +663,19 @@ def build_interface() -> gr.Blocks:
                 facet_brake_upd = gr.update()
                 facet_rotor_upd = gr.update()
                 facet_axle_upd = gr.update()
+
+            af = _active_filters_list(
+                category,
+                suppliers_sel,
+                in_stock_only,
+                speed,
+                freehub,
+                brake,
+                axle,
+                rotor,
+                budget,
+            )
+            active_filters_upd = gr.update(choices=af, value=af)
 
             return (
                 rows,
@@ -623,6 +691,7 @@ def build_interface() -> gr.Blocks:
                 facet_brake_upd,
                 facet_rotor_upd,
                 facet_axle_upd,
+                active_filters_upd,
             )
 
         search_btn.click(
@@ -653,6 +722,7 @@ def build_interface() -> gr.Blocks:
                 facet_brake,
                 facet_rotor,
                 facet_axle,
+                active_filters,
             ],
         )
 
@@ -691,6 +761,7 @@ def build_interface() -> gr.Blocks:
                     facet_brake,
                     facet_rotor,
                     facet_axle,
+                    active_filters,
                 ],
             )
 
@@ -723,6 +794,7 @@ def build_interface() -> gr.Blocks:
                 facet_brake,
                 facet_rotor,
                 facet_axle,
+                active_filters,
             ],
         )
 
@@ -745,6 +817,7 @@ def build_interface() -> gr.Blocks:
                 gr.update(choices=[], value=None),  # facet_brake
                 gr.update(choices=[], value=None),  # facet_rotor
                 gr.update(choices=[], value=None),  # facet_axle
+                gr.update(choices=[], value=[]),  # active_filters
             )
 
         clear_btn.click(
@@ -768,6 +841,110 @@ def build_interface() -> gr.Blocks:
                 facet_brake,
                 facet_rotor,
                 facet_axle,
+                active_filters,
+            ],
+        )
+
+        def _remove_filters(
+            selected: list[str] | None,
+            category_val,
+            suppliers_val,
+            in_stock_val,
+            speed_val,
+            freehub_val,
+            brake_val,
+            axle_val,
+            rotor_val,
+            budget_val,
+            budget_slider_val,
+        ):
+            selected_set = set(selected or [])
+
+            def _has(prefix: str) -> bool:
+                return any(s.startswith(prefix + ":") for s in selected_set)
+
+            category_new = "" if _has("category") else category_val
+            suppliers_new = [] if _has("suppliers") else suppliers_val
+            in_stock_new = False if _has("in_stock") else in_stock_val
+            speed_new = "" if _has("speed") else speed_val
+            freehub_new = "" if _has("freehub") else freehub_val
+            brake_new = "" if _has("brake") else brake_val
+            axle_new = "" if _has("axle") else axle_val
+            rotor_new = "" if _has("rotor") else rotor_val
+            budget_new = None if _has("budget") else budget_val
+            budget_slider_new = 0 if _has("budget") else budget_slider_val
+
+            return (
+                category_new,
+                suppliers_new,
+                in_stock_new,
+                speed_new,
+                freehub_new,
+                brake_new,
+                axle_new,
+                rotor_new,
+                budget_new,
+                budget_slider_new,
+                gr.update(choices=[], value=[]),
+            )
+
+        remove_filters_btn.click(
+            _remove_filters,
+            inputs=[
+                active_filters,
+                category,
+                suppliers,
+                in_stock,
+                speed,
+                freehub,
+                brake,
+                axle,
+                rotor,
+                budget,
+                budget_slider,
+            ],
+            outputs=[
+                category,
+                suppliers,
+                in_stock,
+                speed,
+                freehub,
+                brake,
+                axle,
+                rotor,
+                budget,
+                budget_slider,
+                active_filters,
+            ],
+        ).then(
+            _on_search,
+            inputs=[
+                query,
+                speed,
+                freehub,
+                brake,
+                axle,
+                rotor,
+                budget,
+                category,
+                suppliers,
+                in_stock,
+            ],
+            outputs=[
+                results,
+                offer_select,
+                results_state,
+                status,
+                suppliers,
+                category,
+                budget,
+                budget_slider,
+                facet_speed,
+                facet_freehub,
+                facet_brake,
+                facet_rotor,
+                facet_axle,
+                active_filters,
             ],
         )
 
@@ -803,6 +980,7 @@ def build_interface() -> gr.Blocks:
                 facet_brake,
                 facet_rotor,
                 facet_axle,
+                active_filters,
             ],
         )
         facet_freehub.change(
@@ -835,6 +1013,7 @@ def build_interface() -> gr.Blocks:
                 facet_brake,
                 facet_rotor,
                 facet_axle,
+                active_filters,
             ],
         )
         facet_brake.change(
@@ -867,6 +1046,7 @@ def build_interface() -> gr.Blocks:
                 facet_brake,
                 facet_rotor,
                 facet_axle,
+                active_filters,
             ],
         )
         facet_rotor.change(
@@ -899,6 +1079,7 @@ def build_interface() -> gr.Blocks:
                 facet_brake,
                 facet_rotor,
                 facet_axle,
+                active_filters,
             ],
         )
         facet_axle.change(
@@ -931,6 +1112,7 @@ def build_interface() -> gr.Blocks:
                 facet_brake,
                 facet_rotor,
                 facet_axle,
+                active_filters,
             ],
         )
 
@@ -938,7 +1120,8 @@ def build_interface() -> gr.Blocks:
         def _sync_budget_from_slider(val: float | int | None):
             try:
                 v = float(val or 0)
-            except Exception:
+            except Exception as exc:
+                log_exception("ui", "budget", "invalid slider value", exc, extra={"val": val})
                 v = 0.0
             if v <= 0:
                 return gr.update(value=None)
@@ -947,7 +1130,8 @@ def build_interface() -> gr.Blocks:
         def _sync_slider_from_budget(val: float | None):
             try:
                 v = float(val) if val is not None else 0.0
-            except Exception:
+            except Exception as exc:
+                log_exception("ui", "budget", "invalid budget value", exc, extra={"val": val})
                 v = 0.0
             return gr.update(value=(0 if v <= 0 else v))
 
@@ -964,7 +1148,8 @@ def build_interface() -> gr.Blocks:
             # Extract offer_id from label prefix
             try:
                 offer_id = int(str(offer_label).split(" · ")[0])
-            except Exception:
+            except Exception as exc:
+                log_exception("ui", "select-offer", "failed to parse offer label", exc, extra={"label": offer_label})
                 return "Seleziona un'offerta per i dettagli"
             info = mapping.get(int(offer_id)) or {}
             return f"**Offerta {offer_id}** — {info.get('brand', '')} {info.get('mpn', '')} — {info.get('supplier', '')} — €{info.get('price', '')}"
@@ -1018,7 +1203,8 @@ def build_interface() -> gr.Blocks:
                 return gr.update(), cart, gr.update()
             try:
                 offer_id = int(str(offer_label).split(" · ")[0])
-            except Exception:
+            except Exception as exc:
+                log_exception("ui", "cart-add", "failed to parse offer label", exc, extra={"label": offer_label})
                 return gr.update(), cart, gr.update()
             info = mapping.get(offer_id)
             if not info:
@@ -1046,7 +1232,8 @@ def build_interface() -> gr.Blocks:
                 return gr.update(), cart, gr.update(), _totals_md(cart)
             try:
                 offer_id = int(str(cart_label).split(" · ")[0])
-            except Exception:
+            except Exception as exc:
+                log_exception("ui", "cart-remove", "failed to parse cart label", exc, extra={"label": cart_label})
                 return gr.update(), cart, gr.update(), _totals_md(cart)
             if offer_id in cart:
                 cart.pop(offer_id)
@@ -1075,7 +1262,8 @@ def build_interface() -> gr.Blocks:
                 return gr.update(), cart, gr.update(), _totals_md(cart)
             try:
                 offer_id = int(str(cart_label).split(" · ")[0])
-            except Exception:
+            except Exception as exc:
+                log_exception("ui", "cart-adjust", "failed to parse cart label", exc, extra={"label": cart_label})
                 return gr.update(), cart, gr.update(), _totals_md(cart)
             if offer_id not in cart:
                 return gr.update(), cart, gr.update(), _totals_md(cart)
@@ -1166,7 +1354,8 @@ def build_interface() -> gr.Blocks:
                     return "Seleziona un'offerta", "", ""
                 try:
                     offer_id = int(str(offer_label).split(" · ")[0])
-                except Exception:
+                except Exception as exc:
+                    log_exception("ui", "quote", "failed to parse offer label", exc, extra={"label": offer_label})
                     return "Seleziona un'offerta", "", ""
                 items = [{"offer_id": offer_id, "qty": 1}]
             # Call API
@@ -1189,7 +1378,8 @@ def build_interface() -> gr.Blocks:
                     )
                 # Fall back to local multi-line rendering on non-200
                 return _render_local_cart(items, customer, contact, validity, notes)
-            except Exception:
+            except Exception as exc:
+                log_exception("ui", "quote", "failed to create quote", exc)
                 # Robust fallback to local multi-line rendering
                 return _render_local_cart(items, customer, contact, validity, notes)
 

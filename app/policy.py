@@ -32,7 +32,7 @@ def _to_float(txt: str) -> float | None:
     t = txt.replace(" ", "").replace(",", ".")
     try:
         return float(t)
-    except Exception:
+    except (TypeError, ValueError):
         return None
 
 
