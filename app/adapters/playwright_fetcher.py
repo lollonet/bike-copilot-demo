@@ -1,3 +1,4 @@
+# pyright: reportMissingImports=false
 """Optional Playwright-based fetcher for JS-heavy or login pages.
 
 Usage is lazy-imported so projects without playwright installed keep working.
@@ -8,7 +9,11 @@ Install extra manually when needed:
 
 from __future__ import annotations
 
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    # Only for type checkers; runtime import is lazy in fetch_rendered
+    from playwright.sync_api import sync_playwright  # type: ignore[reportMissingImports]
 
 
 def fetch_rendered(
@@ -26,7 +31,7 @@ def fetch_rendered(
     If login_url and credentials are provided, performs a simple form login first.
     """
     try:
-        from playwright.sync_api import sync_playwright
+        from playwright.sync_api import sync_playwright  # type: ignore[reportMissingImports]
     except ImportError as exc:
         raise RuntimeError(
             "playwright not installed. Run: pip install playwright && playwright install chromium"

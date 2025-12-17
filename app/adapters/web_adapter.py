@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable, NotRequired, TypedDict, TYPE_CHECKING
+from typing import Callable, NotRequired, TypedDict, TYPE_CHECKING
 from urllib.parse import parse_qsl, urlencode, urlparse
 
 from bs4 import BeautifulSoup
@@ -29,7 +29,8 @@ class SearchMapping(TypedDict, total=False):
     url_template: str  # e.g. https://shop.example/search?q={q}
 
 
-class WebMapping(TypedDict, total=False):
+class WebMapping(TypedDict):
+    # Required mapping fields for page parsing
     supplier: str
     root: str
     brand: str
@@ -37,6 +38,7 @@ class WebMapping(TypedDict, total=False):
     name: str
     price: str
     category: str
+    # Optional fields
     in_stock: NotRequired[str]
     lead_time_days: NotRequired[str]
     dealer_code: NotRequired[str]
@@ -63,7 +65,7 @@ class FetchContext:
 
 def _load_mapping(path: Path) -> WebMapping:
     data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
-    required = {"supplier", "root", "brand", "mpn", "name", "price"}
+    required = {"supplier", "root", "brand", "mpn", "name", "price", "category"}
     missing = required - set(data.keys())
     if missing:
         raise ValueError(f"mapping YAML missing keys: {sorted(missing)}")
@@ -74,10 +76,9 @@ def _load_mapping(path: Path) -> WebMapping:
         "mpn": str(data.get("mpn", "")),
         "name": str(data.get("name", "")),
         "price": str(data.get("price", "")),
+        "category": str(data.get("category", "")),
     }
     # Optional fields
-    if "category" in data:
-        mapping["category"] = str(data.get("category") or "")
     if "dealer_code" in data:
         mapping["dealer_code"] = str(data.get("dealer_code") or "")
     if "in_stock" in data:
@@ -787,7 +788,9 @@ def _safe_fetch(fetch_fn: Callable[[str], str], url: str) -> str | None:
     try:
         return fetch_fn(url)
     except Exception as exc:
-        log_exception("web-adapter", "fetch", "failed to fetch url", exc, extra={"url": url})
+        log_exception(
+            "web-adapter", "fetch", "failed to fetch url", exc, extra={"url": url}
+        )
         return None
 
 
