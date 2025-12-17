@@ -33,3 +33,8 @@ crawl-ciclodiffusione:
 		echo "-- $$q"; \
 		UV_CACHE_DIR=.uv-cache XDG_CACHE_HOME=.uv-cache PYTHONPATH=. uv run python -m app.cli search-web --query "$$q" --mapping providers/web-ciclodiffusione.yaml --max-pages 3 --delay 0.8; \
 	done
+
+# Convenience wrapper: crawl providers with optional queries (defaults provided)
+Q ?= "copertone sella casco catena"
+web-crawl: crawl-montanini crawl-ciclodiffusione
+	@echo "Web crawl completed with queries: $(Q)"

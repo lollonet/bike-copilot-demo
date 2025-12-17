@@ -57,6 +57,8 @@ make test       # Execute test suite with coverage
 make api        # Start FastAPI server (port 8000)
 make ui-pn      # Launch PN-first UI (port 7861)
 make crawl      # Run dealer synchronization
+make web-crawl  # Crawl Montanini + Ciclodiffusione (set Q="query1 query2")
+make fetch-rendered URL=...  # Playwright fetch for JS/login pages (see below)
 ```
 
 ## 🏗️ System Components
@@ -200,6 +202,31 @@ Response:
   }
 }
 ```
+
+## 📸 Screenshots (da aggiornare)
+- UI Search (desktop): `docs/screenshots/ui-search.png`
+- Risultati + facet chips: `docs/screenshots/ui-results.png`
+- Preventivo PDF/HTML: `docs/screenshots/ui-quote.png`
+
+Rigenera gli screenshot lanciando l’UI (`make ui`) e usando uno strumento di cattura; salva nei path sopra per tenerli versionati.
+
+## 🎬 Scenario Demo (miglior-prezzo)
+1. `make seed` per popolare il DB locale con catalogo demo.
+2. `make api` e in altro terminale `make ui` (o `make ui-pn` per la variante PN-first).
+3. Cerca ad es. “freno” con budget 80€ e in-stock attivo.
+4. Applica facet (categoria, fornitore) e usa i chip “Filtri attivi” per rimuoverli rapidamente.
+5. Seleziona un’offerta, genera preventivo; verifica `out/QUOTE-*.html`/`.pdf`.
+
+## 🌐 Web crawl & Playwright (JS/login)
+- `make web-crawl Q="sella casco"`: esegue crawl Montanini + Ciclodiffusione con query fornite.
+- CLI Playwright (opzionale, richiede `pip install playwright && playwright install chromium`):
+  ```bash
+  uv run python -m app.cli fetch-rendered --url https://example.com/prod --wait-ms 2000
+  # Login form
+  uv run python -m app.cli fetch-rendered --url https://example.com/area \
+      --login-url https://example.com/login --username user --password pass \
+      --user-selector '#email' --pass-selector '#pwd' --submit-selector 'button[type=submit]'
+  ```
 
 ## 🔐 Security Architecture
 

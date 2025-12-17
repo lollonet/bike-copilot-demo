@@ -213,14 +213,14 @@ cat idiomatic_assessment.md | less
 - Fasi 3–4: non avviate.
 
 ### Task dalla sessione 2025-11-10 EOD
-- T1 Facet chips/quick remove: ❌ non implementato.
-- T2 README screenshot + scenario demo: ❌ non presenti.
+- T1 Facet chips/quick remove: ✅ implementato (UI con checkbox “Filtri attivi” e rimozione rapida).
+- T2 README screenshot + scenario demo: ✅ sezione aggiunta + placeholder path screenshot.
 - T3 Category synonyms map: ✅ presente (`app/category_synonyms.yaml` + alias env).
-- T4 Make target `web-crawl`: ❌ non esiste target nel Makefile.
-- T5 Playwright fetcher/login: ❌ non presente.
+- T4 Make target `web-crawl`: ✅ aggiunto in Makefile (usa crawl-montanini + crawl-ciclodiffusione).
+- T5 Playwright fetcher/login: ✅ CLI `fetch-rendered` con login opzionale (dipendenza opzionale playwright).
 - T6 KPI doc + /kpi/today: ✅ endpoint attivo e doc KPI esistente.
 - T7 Systemd env example: ✅ presente (`deploy/bike-copilot.service`).
 
-**Ultimo aggiornamento:** 2025-12-17 02:45 UTC  
+**Ultimo aggiornamento:** 2025-12-17 02:58 UTC  
 **Branch:** feat/req-001-logging-fixes  
-**Ultimo commit:** 07c1791
+**Ultimo commit:** b988841

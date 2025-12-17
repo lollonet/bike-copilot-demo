@@ -293,6 +293,15 @@ def build_interface() -> gr.Blocks:
             )
 
         with gr.Row():
+            active_filters = gr.CheckboxGroup(
+                label="Filtri attivi (seleziona e rimuovi)",
+                choices=[],
+                value=[],
+                interactive=True,
+            )
+            remove_filters_btn = gr.Button("Rimuovi filtri selezionati", variant="secondary")
+
+        with gr.Row():
             with gr.Column(scale=1):
                 gr.Markdown("### Pannello filtri")
                 # Technical state (handled by the post-search facet tree)
@@ -391,6 +400,43 @@ def build_interface() -> gr.Blocks:
                 file_url = gr.Textbox(
                     label="URL file (se API attiva)", interactive=False
                 )
+
+        def _active_filters_list(
+            category,
+            suppliers_sel,
+            in_stock_only,
+            speed,
+            freehub,
+            brake,
+            axle,
+            rotor,
+            budget,
+        ) -> list[str]:
+            filters: list[str] = []
+            if category:
+                filters.append(f"category:{category}")
+            if suppliers_sel:
+                filters.append(f"suppliers:{','.join(sorted(suppliers_sel))}")
+            if in_stock_only:
+                filters.append("in_stock:true")
+            if speed:
+                filters.append(f"speed:{speed}")
+            if freehub:
+                filters.append(f"freehub:{freehub}")
+            if brake:
+                filters.append(f"brake:{brake}")
+            if axle:
+                filters.append(f"axle:{axle}")
+            if rotor:
+                filters.append(f"rotor:{rotor}")
+            if budget is not None:
+                try:
+                    bval = float(budget)
+                except Exception:
+                    bval = 0.0
+                if bval > 0:
+                    filters.append(f"budget:<= {bval:.0f}")
+            return filters
 
         def _on_search(
             query,
@@ -612,6 +658,19 @@ def build_interface() -> gr.Blocks:
                 facet_rotor_upd = gr.update()
                 facet_axle_upd = gr.update()
 
+            af = _active_filters_list(
+                category,
+                suppliers_sel,
+                in_stock_only,
+                speed,
+                freehub,
+                brake,
+                axle,
+                rotor,
+                budget,
+            )
+            active_filters_upd = gr.update(choices=af, value=af)
+
             return (
                 rows,
                 gr.update(choices=labels, value=default_label),
@@ -626,6 +685,7 @@ def build_interface() -> gr.Blocks:
                 facet_brake_upd,
                 facet_rotor_upd,
                 facet_axle_upd,
+                active_filters_upd,
             )
 
         search_btn.click(
@@ -656,6 +716,7 @@ def build_interface() -> gr.Blocks:
                 facet_brake,
                 facet_rotor,
                 facet_axle,
+                active_filters,
             ],
         )
 
@@ -694,6 +755,7 @@ def build_interface() -> gr.Blocks:
                     facet_brake,
                     facet_rotor,
                     facet_axle,
+                    active_filters,
                 ],
             )
 
@@ -726,6 +788,7 @@ def build_interface() -> gr.Blocks:
                 facet_brake,
                 facet_rotor,
                 facet_axle,
+                active_filters,
             ],
         )
 
@@ -748,6 +811,7 @@ def build_interface() -> gr.Blocks:
                 gr.update(choices=[], value=None),  # facet_brake
                 gr.update(choices=[], value=None),  # facet_rotor
                 gr.update(choices=[], value=None),  # facet_axle
+                gr.update(choices=[], value=[]),  # active_filters
             )
 
         clear_btn.click(
@@ -771,6 +835,110 @@ def build_interface() -> gr.Blocks:
                 facet_brake,
                 facet_rotor,
                 facet_axle,
+                active_filters,
+            ],
+        )
+
+        def _remove_filters(
+            selected: list[str] | None,
+            category_val,
+            suppliers_val,
+            in_stock_val,
+            speed_val,
+            freehub_val,
+            brake_val,
+            axle_val,
+            rotor_val,
+            budget_val,
+            budget_slider_val,
+        ):
+            selected_set = set(selected or [])
+
+            def _has(prefix: str) -> bool:
+                return any(s.startswith(prefix + ":") for s in selected_set)
+
+            category_new = "" if _has("category") else category_val
+            suppliers_new = [] if _has("suppliers") else suppliers_val
+            in_stock_new = False if _has("in_stock") else in_stock_val
+            speed_new = "" if _has("speed") else speed_val
+            freehub_new = "" if _has("freehub") else freehub_val
+            brake_new = "" if _has("brake") else brake_val
+            axle_new = "" if _has("axle") else axle_val
+            rotor_new = "" if _has("rotor") else rotor_val
+            budget_new = None if _has("budget") else budget_val
+            budget_slider_new = 0 if _has("budget") else budget_slider_val
+
+            return (
+                category_new,
+                suppliers_new,
+                in_stock_new,
+                speed_new,
+                freehub_new,
+                brake_new,
+                axle_new,
+                rotor_new,
+                budget_new,
+                budget_slider_new,
+                gr.update(choices=[], value=[]),
+            )
+
+        remove_filters_btn.click(
+            _remove_filters,
+            inputs=[
+                active_filters,
+                category,
+                suppliers,
+                in_stock,
+                speed,
+                freehub,
+                brake,
+                axle,
+                rotor,
+                budget,
+                budget_slider,
+            ],
+            outputs=[
+                category,
+                suppliers,
+                in_stock,
+                speed,
+                freehub,
+                brake,
+                axle,
+                rotor,
+                budget,
+                budget_slider,
+                active_filters,
+            ],
+        ).then(
+            _on_search,
+            inputs=[
+                query,
+                speed,
+                freehub,
+                brake,
+                axle,
+                rotor,
+                budget,
+                category,
+                suppliers,
+                in_stock,
+            ],
+            outputs=[
+                results,
+                offer_select,
+                results_state,
+                status,
+                suppliers,
+                category,
+                budget,
+                budget_slider,
+                facet_speed,
+                facet_freehub,
+                facet_brake,
+                facet_rotor,
+                facet_axle,
+                active_filters,
             ],
         )
 
@@ -806,6 +974,7 @@ def build_interface() -> gr.Blocks:
                 facet_brake,
                 facet_rotor,
                 facet_axle,
+                active_filters,
             ],
         )
         facet_freehub.change(
@@ -838,6 +1007,7 @@ def build_interface() -> gr.Blocks:
                 facet_brake,
                 facet_rotor,
                 facet_axle,
+                active_filters,
             ],
         )
         facet_brake.change(
@@ -870,6 +1040,7 @@ def build_interface() -> gr.Blocks:
                 facet_brake,
                 facet_rotor,
                 facet_axle,
+                active_filters,
             ],
         )
         facet_rotor.change(
@@ -902,6 +1073,7 @@ def build_interface() -> gr.Blocks:
                 facet_brake,
                 facet_rotor,
                 facet_axle,
+                active_filters,
             ],
         )
         facet_axle.change(
@@ -934,6 +1106,7 @@ def build_interface() -> gr.Blocks:
                 facet_brake,
                 facet_rotor,
                 facet_axle,
+                active_filters,
             ],
         )
 

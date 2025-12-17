@@ -25,6 +25,7 @@ from .adapters.web_adapter import (
     parse_sitemap_urls,
 )
 from .adapters.csv_mapped_adapter import parse_unified_csv
+from .adapters.playwright_fetcher import fetch_rendered
 from .ingest import IngestStats, upsert
 from .models import (
     EventLog,
@@ -673,6 +674,35 @@ def reset_db() -> None:
     # Recreate
     create_all()
     rich.print({"db": "reset", "url": url})
+
+
+@app.command("fetch-rendered")
+def fetch_rendered_cmd(
+    url: str = typer.Argument(..., help="URL to fetch with Playwright Chromium"),
+    wait_ms: int = typer.Option(1500, help="Wait after load (ms)"),
+    login_url: str | None = typer.Option(None, help="Login page URL (optional)"),
+    username: str | None = typer.Option(None, help="Login username"),
+    password: str | None = typer.Option(None, help="Login password"),
+    user_selector: str = typer.Option("#username", help="CSS selector for username"),
+    pass_selector: str = typer.Option("#password", help="CSS selector for password"),
+    submit_selector: str = typer.Option("button[type=submit]", help="Submit button selector"),
+) -> None:
+    """Fetch a JS-heavy page; optional simple form login."""
+    try:
+        html = fetch_rendered(
+            url,
+            wait_ms=wait_ms,
+            login_url=login_url,
+            username=username,
+            password=password,
+            user_selector=user_selector,
+            pass_selector=pass_selector,
+            submit_selector=submit_selector,
+        )
+        rich.print(html)
+    except Exception as exc:
+        log_exception("cli", "fetch-rendered", "failed to fetch rendered page", exc, extra={"url": url})
+        raise typer.Exit(code=1)
 
 
 @app.command("ingest-csv-synth")
