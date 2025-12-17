@@ -37,8 +37,8 @@ class WebMapping(TypedDict):
     mpn: str
     name: str
     price: str
-    category: str
     # Optional fields
+    category: NotRequired[str]
     in_stock: NotRequired[str]
     lead_time_days: NotRequired[str]
     dealer_code: NotRequired[str]
@@ -65,7 +65,7 @@ class FetchContext:
 
 def _load_mapping(path: Path) -> WebMapping:
     data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
-    required = {"supplier", "root", "brand", "mpn", "name", "price", "category"}
+    required = {"supplier", "root", "brand", "mpn", "name", "price"}
     missing = required - set(data.keys())
     if missing:
         raise ValueError(f"mapping YAML missing keys: {sorted(missing)}")
@@ -76,9 +76,10 @@ def _load_mapping(path: Path) -> WebMapping:
         "mpn": str(data.get("mpn", "")),
         "name": str(data.get("name", "")),
         "price": str(data.get("price", "")),
-        "category": str(data.get("category", "")),
     }
     # Optional fields
+    if "category" in data:
+        mapping["category"] = str(data.get("category") or "")
     if "dealer_code" in data:
         mapping["dealer_code"] = str(data.get("dealer_code") or "")
     if "in_stock" in data:
