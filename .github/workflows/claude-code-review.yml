@@ -4,15 +4,15 @@ on:
   pull_request:
     types: [opened, synchronize]
 
-permissions:
-  contents: read
-  pull-requests: write
-  issues: write
-  id-token: write
-
 jobs:
   claude-review:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
+      id-token: write
+
     # Skip draft PRs and PRs with skip label
     if: |
       !github.event.pull_request.draft &&
@@ -22,22 +22,13 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          fetch-depth: 1
 
       - name: Run Claude Code Review
         uses: anthropics/claude-code-action@v1
         with:
-          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-          allowed_tools: |
-            Read
-            Glob
-            Grep
-            Bash(gh pr view:*)
-            Bash(gh pr diff:*)
-            Bash(gh issue view:*)
-            Bash(git log:*)
-            Bash(git diff:*)
-            Bash(git show:*)
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          claude_args: '--allowed-tools "Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh pr comment:*),Bash(gh issue view:*),Bash(git log:*),Bash(git diff:*),Bash(git show:*)"'
           prompt: |
             You are a senior code reviewer. Analyze this pull request and provide a thorough review.
 
