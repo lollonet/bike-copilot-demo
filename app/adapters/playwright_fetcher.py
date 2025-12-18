@@ -38,16 +38,20 @@ def fetch_rendered(
         ) from exc
 
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)
-        page = browser.new_page()
-        if login_url and username and password:
-            page.goto(login_url, wait_until="networkidle")
-            page.fill(user_selector, username)
-            page.fill(pass_selector, password)
-            page.click(submit_selector)
+        browser = None
+        try:
+            browser = p.chromium.launch(headless=True)
+            page = browser.new_page()
+            if login_url and username and password:
+                page.goto(login_url, wait_until="networkidle")
+                page.fill(user_selector, username)
+                page.fill(pass_selector, password)
+                page.click(submit_selector)
+                page.wait_for_timeout(wait_ms)
+            page.goto(url, wait_until="networkidle")
             page.wait_for_timeout(wait_ms)
-        page.goto(url, wait_until="networkidle")
-        page.wait_for_timeout(wait_ms)
-        html = page.content()
-        browser.close()
-        return html
+            html = page.content()
+            return html
+        finally:
+            if browser:
+                browser.close()

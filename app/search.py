@@ -75,9 +75,12 @@ def canon_category(value: str | None) -> str | None:
 
 
 def _load_synonyms() -> dict[str, dict[str, list[str]]]:
-    with open(settings.synonyms_path, "r", encoding="utf-8") as f:
-        data: dict[str, dict[str, list[str]]] = yaml.safe_load(f) or {}
-    return data
+    try:
+        with open(settings.synonyms_path, "r", encoding="utf-8") as f:
+            data: dict[str, dict[str, list[str]]] = yaml.safe_load(f) or {}
+        return data
+    except (OSError, FileNotFoundError):
+        return {}
 
 
 def apply_synonyms(
@@ -122,7 +125,11 @@ def compatibility_score(
 
 
 def final_score(offer: SupplierOffer, comp_score: int, min_price: float) -> float:
-    price_norm = (min_price / offer.price) if (offer.price and min_price) else 0.5
+    price_norm = (
+        (min_price / offer.price)
+        if (offer.price and offer.price > 0 and min_price)
+        else 0.5
+    )
     avail = 1.0 if offer.in_stock else 0.0
     lead_days = offer.lead_time_days if offer.lead_time_days is not None else 7
     lead = 1.0 / (1.0 + float(lead_days))

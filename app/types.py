@@ -68,6 +68,8 @@ class QuoteRequest(BaseModel):
     customer_contact: str
     validity_days: int = 7
     notes: str | None = None
+    apply_vat: bool | None = None
+    vat_rate: float | None = None
 
 
 class QuoteResponse(BaseModel):

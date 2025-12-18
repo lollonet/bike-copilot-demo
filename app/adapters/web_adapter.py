@@ -9,12 +9,13 @@ from bs4 import BeautifulSoup
 import yaml
 
 from ..types import OfferInput, ProductInput
-from ..logging_utils import log_exception
+from ..logging_utils import log_exception, log_event
 
 if TYPE_CHECKING:
     import httpx
 
 ProgressCallback = Callable[[str, int, int, int], None]
+MAX_SITEMAP_DEPTH = 10
 
 
 class PaginationMapping(TypedDict, total=False):
@@ -117,22 +118,28 @@ def _to_bool(s: str) -> bool:
 
 
 def _to_price(s: str) -> float:
-    t = (
-        s.strip()
-        .replace("€", "")
-        .replace("\xa0", "")
-        .replace(" ", "")
-        .replace("\u202f", "")
-    )
-    # Handle thousands separator "." with decimal "," (e.g. 1.349,00)
-    if "," in t and "." in t and t.find(",") > t.find("."):
-        t = t.replace(".", "")
-    # handle 12,34 and 12.34
-    if "," in t and t.count(",") == 1:
-        t = t.replace(",", ".")
-    else:
-        t = t.replace(",", "")
-    return float(t)
+    """Parse price string to float, tolerant to locale formats and errors."""
+    if not s:
+        return 0.0
+    try:
+        t = (
+            s.strip()
+            .replace("€", "")
+            .replace("\xa0", "")
+            .replace(" ", "")
+            .replace("\u202f", "")
+        )
+        # Handle thousands separator "." with decimal "," (e.g. 1.349,00)
+        if "," in t and "." in t and t.rfind(",") > t.rfind("."):
+            t = t.replace(".", "")
+        # handle 12,34 and 12.34
+        if "," in t and t.count(",") == 1:
+            t = t.replace(",", ".")
+        else:
+            t = t.replace(",", "")
+        return float(t) if t else 0.0
+    except (ValueError, AttributeError):
+        return 0.0
 
 
 def _price_text(el) -> str:
@@ -1075,9 +1082,19 @@ def parse_sitemap_urls(
 def _parse_sitemap_xml(
     xml_text: str,
     fetch_fn: Callable[[str], str],
+    depth: int = 0,
 ) -> list[str]:
     import xml.etree.ElementTree as ET
 
+    if depth > MAX_SITEMAP_DEPTH:
+        log_event(
+            "WARN",
+            op="web-adapter",
+            kind="sitemap",
+            message=f"Max depth {MAX_SITEMAP_DEPTH} reached; skipping nested sitemap",
+            trace_id=None,
+        )
+        return []
     seen: set[str] = set()
     try:
         root = ET.fromstring(xml_text)
@@ -1093,7 +1110,7 @@ def _parse_sitemap_xml(
                 continue
             seen.add(loc)
             child = fetch_fn(loc)
-            urls.extend(_parse_sitemap_xml(child, fetch_fn))
+            urls.extend(_parse_sitemap_xml(child, fetch_fn, depth + 1))
     elif root.tag.endswith("urlset"):
         for u in root.findall(f"{ns}url"):
             loc = u.findtext(f"{ns}loc") or ""

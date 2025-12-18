@@ -45,6 +45,9 @@ def _shipping_costs(lines: List[OptimizeLine], db=None) -> float:
     policy = _load_shipping_policy(list(per_dealer.keys()), db=db)
     total = 0.0
     for dealer, dealer_subtotal in per_dealer.items():
+        # If dealer offers free shipping threshold and line_total is zero (e.g., missing price), skip shipping
+        if dealer_subtotal <= 0:
+            continue
         total += _shipping_for_dealer(dealer, dealer_subtotal, policy)
     return total
 
@@ -295,7 +298,9 @@ def _common_dealers(per_pn: List[List[PNOfferItem]]) -> set[str]:
     per_pn_dealers: List[set[str]] = [
         set(o.dealer for o in offers) for offers in per_pn
     ]
-    return set.intersection(*per_pn_dealers) if per_pn_dealers else set()
+    if not per_pn_dealers:
+        return set()
+    return set.intersection(*per_pn_dealers)
 
 
 def _single_dealer_candidate(

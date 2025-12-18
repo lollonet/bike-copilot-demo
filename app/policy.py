@@ -9,6 +9,8 @@ import re
 from dataclasses import dataclass
 from typing import Final
 
+from .logging_utils import log_event
+
 
 EUR_RE: Final[re.Pattern[str]] = re.compile(r"€\s*([0-9]+(?:[\.,][0-9]{1,2})?)")
 THRESHOLD_HINTS: Final[tuple[str, ...]] = (
@@ -50,6 +52,19 @@ def parse_policy_html(html: str) -> PolicyExtract:
     free = _extract_free_threshold(text)
     base = _extract_base_cost(text, free)
     conf = _compute_confidence(base, free, lead)
+    log_event(
+        "DEBUG",
+        op="policy",
+        kind="extraction",
+        message="Extracted shipping policy values",
+        trace_id=None,
+        extra={
+            "base_cost": base,
+            "free_threshold": free,
+            "lead_days": lead,
+            "snippet": text[:200],
+        },
+    )
 
     return PolicyExtract(
         base_cost=base, free_threshold=free, lead_days_std=lead, confidence=conf
@@ -85,15 +100,36 @@ def _extract_free_threshold(text: str) -> float | None:
 
 
 def _extract_base_cost(text: str, free: float | None) -> float | None:
-    # Base cost: pick the smallest euro not part of threshold sentence
-    euros = [_to_float(x) for x in EUR_RE.findall(text)]
-    values = [e for e in euros if e is not None]
-    if not values:
-        return None
-    base: float | None = min(values)
+    # Base cost: prefer euro amounts near shipping hints and not near free/threshold hints
+    shipping_hints = ("spedizion", "shipping", "costo", "cost")
+    sentences = re.split(r"[\.!?]", text)
+    candidates: list[float] = []
+    values_all: list[float] = []
+    for sent in sentences:
+        euros = [_to_float(x) for x in EUR_RE.findall(sent)]
+        values = [e for e in euros if e is not None]
+        if not values:
+            continue
+        if any(h in sent for h in ("gratuit", "gratis")) and any(
+            h in sent for h in THRESHOLD_HINTS
+        ):
+            # sentence about free threshold; skip for base determination
+            continue
+        if any(h in sent for h in shipping_hints):
+            candidates.append(min(values))
+    base: float | None = min(candidates) if candidates else None
+
+    # Fallback: use global minimum if nothing matched
+    if base is None:
+        euros_all = [_to_float(x) for x in EUR_RE.findall(text)]
+        values_all = [e for e in euros_all if e is not None]
+        base = min(values_all) if values_all else None
+
     if free and base and base >= free:
-        # swap: if min is actually threshold, try second min
-        ordered = sorted(values)
+        # swap: if min is actually threshold, try second min from candidates/all
+        ordered = sorted(
+            candidates if candidates else [e for e in values_all if e is not None]
+        )
         base = ordered[1] if len(ordered) > 1 else None
     return base
 

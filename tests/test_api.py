@@ -104,6 +104,14 @@ def test_quote_and_files(client: TestClient) -> None:
     assert fr2.status_code == 404
 
 
+def test_files_path_traversal_blocked(client: TestClient) -> None:
+    auth = ("demo", "demo123")
+    resp = client.get("/files/../../.env", auth=auth)
+    assert resp.status_code == 403
+    resp2 = client.get("/files/../../../etc/passwd", auth=auth)
+    assert resp2.status_code == 403
+
+
 def test_kpi_today_requires_auth(client: TestClient) -> None:
     """kpi/today must be protected by basic auth."""
     r = client.get("/kpi/today")

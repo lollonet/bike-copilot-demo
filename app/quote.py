@@ -37,12 +37,18 @@ def _quote_paths(out_dir: Path) -> tuple[Path, Path]:
 
 
 def _render_quote_html(context: dict[str, Any]) -> str:
-    env = jinja2.Environment(loader=jinja2.FileSystemLoader("app/templates"))
+    templates_dir = Path(__file__).parent / "templates"
+    env = jinja2.Environment(loader=jinja2.FileSystemLoader(str(templates_dir)))
     tmpl = env.get_template("quote.html")
-    # Inject env-level defaults like VAT into the template context
+    # Inject env-level defaults like VAT into the template context.
+    # Respect an explicit env_vat provided in context (e.g., apply_vat flag / vat_rate override).
+    ctx_vat = context.get("env_vat")
+    vat_value = (
+        float(os.environ.get("APP_VAT", "0")) if ctx_vat is None else float(ctx_vat)
+    )
     full_context: dict[str, Any] = {
         **context,
-        "env_vat": float(os.environ.get("APP_VAT", "0")),
+        "env_vat": vat_value,
         "shop_name": os.environ.get("APP_SHOP_NAME", ""),
         "shop_address": os.environ.get("APP_SHOP_ADDRESS", ""),
         "shop_contact": os.environ.get("APP_SHOP_CONTACT", ""),
