@@ -1,6 +1,7 @@
 REQ-001:
   commits: []
   files:
+  - .codepilot/sessions/2025-12-18-auth-fix.md
   - README.md
   - docs/architecture/ARC-001-ci-cd.md
   - docs/requirements/REQ-001.standards-adoption.md
@@ -26,6 +27,7 @@ REQ-003:
 REQ-004:
   commits: []
   files:
+  - .codepilot/sessions/2025-12-17-parallel-ingest.md
   - MOCKUP-README.md
   - docs/architecture/ARC-020-ux-wireframes.md
   - docs/requirements/REQ-004.ui-pn-first.md
@@ -36,6 +38,7 @@ REQ-004:
 REQ-005:
   commits: []
   files:
+  - .codepilot/sessions/2025-12-17-parallel-ingest.md
   - MOCKUP-README.md
   - docs/architecture/ARC-020-ux-wireframes.md
   - docs/requirements/REQ-005.order-optimizer.md
@@ -54,6 +57,8 @@ REQ-006:
 REQ-007:
   commits: []
   files:
+  - .codepilot/sessions/2025-12-17-parallel-ingest.md
+  - .codepilot/sessions/2025-12-18-auth-fix.md
   - README.md
   - docs/requirements/REQ-007.dealer-management.md
   - docs/requirements/REQ-INDEX.md
