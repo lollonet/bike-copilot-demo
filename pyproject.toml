@@ -38,3 +38,8 @@ dependencies = [
 [tool.uv]
 ## Configure uv behavior. Keep defaults; set cache inside workspace to avoid home writes.
 cache-dir = ".cache/uv"
+
+[dependency-groups]
+dev = [
+    "ruff>=0.14.9",
+]
