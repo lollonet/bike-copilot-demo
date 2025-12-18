@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 import argparse
+from collections import defaultdict
+from datetime import datetime, timezone
 from dataclasses import dataclass
 from pathlib import Path
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
+from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 
 from .logging_utils import log_event
 from .models import (
@@ -135,6 +138,7 @@ def _upsert_offers_and_mappings(
     db: Session, offers: list[OfferInput], stats: IngestStats
 ) -> IngestStats:
     existing_offers: dict[tuple[int, str], SupplierOffer] = {}
+    seen: dict[str, set[int]] = defaultdict(set)
     for o in offers:
         product = _product_for_offer(db, o)
         if product is None:
@@ -145,6 +149,7 @@ def _upsert_offers_and_mappings(
         offer_existing, is_from_current_batch = _get_offer_from_cache_or_db(
             db, existing_offers, cache_key
         )
+        seen[o.supplier].add(product_id)
         stats, offer_existing, is_new_offer = _ensure_offer(
             db, product_id, o, existing_offers, cache_key, offer_existing, stats
         )
@@ -155,6 +160,8 @@ def _upsert_offers_and_mappings(
         )
         _upsert_pn_mapping(db, product, o)
 
+    for supplier, ids in seen.items():
+        _reconcile_offers(db, supplier, ids)
     db.commit()
     return stats
 
@@ -251,27 +258,40 @@ def _try_create_offer(
     cache_key: tuple[int, str],
     stats: IngestStats,
 ) -> tuple[IngestStats, SupplierOffer | None]:
-    try:
-        with db.begin_nested():
-            offer = SupplierOffer(
-                product_id=product_id,
-                supplier=offer_input.supplier,
-                price=offer_input.price,
-                in_stock=offer_input.in_stock,
-                lead_time_days=offer_input.lead_time_days,
-            )
-            db.add(offer)
-            db.flush()
-            existing_offers[cache_key] = offer
-            updated_stats = IngestStats(
-                products_new=stats.products_new,
-                products_updated=stats.products_updated,
-                offers_upserted=stats.offers_upserted + 1,
-                offers_skipped=stats.offers_skipped,
-            )
-            return updated_stats, offer
-    except IntegrityError:
-        return stats, None
+    ts = datetime.now(timezone.utc)
+    stmt = sqlite_insert(SupplierOffer).values(
+        product_id=product_id,
+        supplier=offer_input.supplier,
+        price=offer_input.price,
+        in_stock=offer_input.in_stock,
+        lead_time_days=offer_input.lead_time_days,
+        updated_at=ts,
+    )
+    stmt = stmt.on_conflict_do_update(
+        index_elements=["product_id", "supplier"],
+        set_={
+            "price": stmt.excluded.price,
+            "in_stock": stmt.excluded.in_stock,
+            "lead_time_days": stmt.excluded.lead_time_days,
+            "updated_at": stmt.excluded.updated_at,
+        },
+    )
+    db.execute(stmt)
+    offer = db.scalar(
+        select(SupplierOffer).where(
+            SupplierOffer.product_id == product_id,
+            SupplierOffer.supplier == offer_input.supplier,
+        )
+    )
+    if offer is not None:
+        existing_offers[cache_key] = offer
+    updated_stats = IngestStats(
+        products_new=stats.products_new,
+        products_updated=stats.products_updated,
+        offers_upserted=stats.offers_upserted + 1,
+        offers_skipped=stats.offers_skipped,
+    )
+    return updated_stats, offer
 
 
 def _recover_offer_after_integrity_error(
@@ -309,6 +329,7 @@ def _update_offer_and_history(
         offer_existing.price = offer_input.price
         offer_existing.in_stock = offer_input.in_stock
         offer_existing.lead_time_days = offer_input.lead_time_days
+        offer_existing.updated_at = datetime.now(timezone.utc)
     if is_new_offer:
         return stats
     return IngestStats(
@@ -391,6 +412,23 @@ def _insert_or_update_pn_mapping(
         if existing:
             existing.product_id = product_id
             existing.maker_pn_norm = maker_norm
+
+
+def _reconcile_offers(db: Session, supplier: str, seen_product_ids: set[int]) -> int:
+    """Mark offers not seen in this ingest as out of stock."""
+    if not seen_product_ids:
+        return 0
+    stmt = (
+        update(SupplierOffer)
+        .where(
+            SupplierOffer.supplier == supplier,
+            SupplierOffer.in_stock.is_(True),
+            SupplierOffer.product_id.notin_(seen_product_ids),
+        )
+        .values(in_stock=False, updated_at=datetime.now(timezone.utc))
+    )
+    result = db.execute(stmt)
+    return getattr(result, "rowcount", 0)
 
 
 def main() -> None:

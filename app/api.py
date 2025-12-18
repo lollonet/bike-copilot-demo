@@ -1,33 +1,35 @@
 from __future__ import annotations
 
+import os
+import secrets
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from shutil import which
-
-import os
-import secrets
 from typing import Mapping
 
+from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, Response
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from sqlalchemy import select, func
 from sqlalchemy.orm import Session
-import yaml
 
-from .config import settings
-from .deps import SessionDep
-from .models import (
+load_dotenv()
+
+from .config import settings  # noqa: E402
+from .deps import SessionDep  # noqa: E402
+from .models import (  # noqa: E402
     EventLog,
     SupplierOffer,
     Product,
     PNMapping,
     create_all,
 )
-from .optimizer import optimize
-from .search import facets as compute_facets
-from .search import search
-from .types import (
+from .optimizer import optimize  # noqa: E402
+from .search import facets as compute_facets  # noqa: E402
+from .search import search  # noqa: E402
+from .dealers import load_dealers  # noqa: E402
+from .types import (  # noqa: E402
     Problem,
     QuoteRequest,
     QuoteResponse,
@@ -45,13 +47,24 @@ from .types import (
     KPISummaryResponse,
     KPIDealerEntry,
 )
-from .logging_utils import log_event, log_exception
-from .pn import search_pn, search_pn_batch, normalize_pn
+from .logging_utils import log_event, log_exception  # noqa: E402
+from .pn import search_pn, search_pn_batch, normalize_pn  # noqa: E402
 
 
 app = FastAPI(title="Bike Copilot Demo")
 
 _basic = HTTPBasic(auto_error=False)
+
+
+@app.middleware("http")
+async def block_files_traversal(request: Request, call_next):
+    path = request.url.path
+    raw_path = request.scope.get("raw_path", b"")
+    if path.startswith("/.") or path.startswith("/etc/"):
+        return Response(status_code=403)
+    if raw_path.startswith(b"/files/") and b".." in raw_path:
+        return Response(status_code=403)
+    return await call_next(request)
 
 
 def require_auth(creds: HTTPBasicCredentials | None = Depends(_basic)) -> None:
@@ -180,19 +193,19 @@ def api_dealers(db: SessionDep) -> DealersResponse:
         for (name, cnt, upd) in rows
     }
 
-    # Fallback: include dealers defined in providers/dealers.yaml even if DB is empty
-    providers_path = Path("providers/dealers.yaml")
+    # Include dealers defined in providers/dealers.yaml (absolute path via dealers.load_dealers)
     file_dealers: dict[str, DealerInfo] = {}
     try:
-        if providers_path.exists():
-            data = yaml.safe_load(providers_path.read_text(encoding="utf-8")) or {}
-            for d in data.get("dealers", []):
-                name = str(d.get("name") or d.get("key") or "").strip()
-                if not name:
-                    continue
-                file_dealers[name] = DealerInfo(name=name, offers=0, last_updated=None)
+        for d in load_dealers():
+            fallback = DealerInfo(name=d.name, offers=0, last_updated=None)
+            db_info = db_dealers.get(d.name, fallback)
+            file_dealers[d.name] = DealerInfo(
+                name=d.name,
+                offers=db_info.offers,
+                last_updated=db_info.last_updated,
+            )
     except Exception as exc:  # pragma: no cover - fallback only
-        log_exception("api", "dealers", "failed to load providers/dealers.yaml", exc)
+        log_exception("api", "dealers", "failed to load dealers from YAML", exc)
 
     merged: dict[str, DealerInfo] = {**file_dealers, **db_dealers}
     dealers = sorted(merged.values(), key=lambda d: d.name.lower())
@@ -220,23 +233,52 @@ def api_optimize(
 
 
 @app.get("/files/{name:path}")
-def serve_file(name: str, _: None = Depends(require_auth)) -> FileResponse:
+def serve_file(
+    name: str, request: Request, _: None = Depends(require_auth)
+) -> FileResponse:
     # Only serve .html or .pdf from the out directory; prevent traversal.
-    from pathlib import Path
-
     allowed = {".html", ".pdf"}
-    p = Path(settings.out_dir) / name
+    if name.startswith("."):
+        raise HTTPException(status_code=403, detail="Access denied")
+    if (
+        ".." in request.url.path
+        or ".." in name
+        or Path(name).is_absolute()
+        or ".." in Path(name).parts
+    ):
+        raise HTTPException(status_code=403, detail="Access denied")
+    base_dir = Path(settings.out_dir).resolve()
+    p = (base_dir / name).resolve()
+    # Security: block path traversal attempts
+    try:
+        p.relative_to(base_dir)
+    except ValueError:
+        raise HTTPException(status_code=403, detail="Access denied")
     if not p.is_file() or p.suffix.lower() not in allowed:
         raise HTTPException(status_code=404, detail="Not found")
     return FileResponse(str(p))
 
 
 @app.head("/files/{name:path}")
-def head_file(name: str, _: None = Depends(require_auth)) -> Response:
-    from pathlib import Path
-
+def head_file(
+    name: str, request: Request, _: None = Depends(require_auth)
+) -> Response:
     allowed = {".html", ".pdf"}
-    p = Path(settings.out_dir) / name
+    if name.startswith("."):
+        raise HTTPException(status_code=403, detail="Access denied")
+    if (
+        ".." in request.url.path
+        or ".." in name
+        or Path(name).is_absolute()
+        or ".." in Path(name).parts
+    ):
+        raise HTTPException(status_code=403, detail="Access denied")
+    base_dir = Path(settings.out_dir).resolve()
+    p = (base_dir / name).resolve()
+    try:
+        p.relative_to(base_dir)
+    except ValueError:
+        raise HTTPException(status_code=403, detail="Access denied")
     if not p.is_file() or p.suffix.lower() not in allowed:
         raise HTTPException(status_code=404, detail="Not found")
     return Response(status_code=200)
@@ -317,12 +359,20 @@ def _render_and_log_quote(
 def _quote_context(
     req: QuoteRequest, items: list[dict[str, object]]
 ) -> dict[str, object]:
+    # VAT resolution: request override wins, then apply_vat flag, else env APP_VAT
+    if req.apply_vat is False:
+        vat_rate = 0.0
+    elif req.vat_rate is not None:
+        vat_rate = float(req.vat_rate)
+    else:
+        vat_rate = float(os.environ.get("APP_VAT", "0") or 0)
     return {
         "customer_name": req.customer_name,
         "customer_contact": req.customer_contact,
         "validity_days": req.validity_days,
         "notes": req.notes,
         "items": items,
+        "env_vat": vat_rate,
     }
 
 
@@ -532,7 +582,9 @@ def _count_unmapped_pn(db: Session) -> int:
             if not exists:
                 unmapped += 1
         except Exception as exc:
-            log_exception("kpi", "pn-mapping", "failed to compute unmapped dealer PN", exc)
+            log_exception(
+                "kpi", "pn-mapping", "failed to compute unmapped dealer PN", exc
+            )
             continue
     return unmapped
 
