@@ -10,9 +10,8 @@ from .logging_utils import log_exception
 from .search import search
 from .types import Brake, Freehub, Rotor, SearchRequest
 from sqlalchemy.orm import Session
-from typing import Any, cast
+from typing import cast
 
-from sqlalchemy.orm import Session
 
 from .models import EventLog, SessionLocal, SupplierOffer
 from .quote import render_quote
@@ -200,7 +199,13 @@ def _create_local_quote(
         try:
             html_path, pdf_path = render_quote(context)
         except Exception as exc:
-            log_exception("ui", "quote-local", "failed to render quote", exc, extra={"offer_id": offer_id})
+            log_exception(
+                "ui",
+                "quote-local",
+                "failed to render quote",
+                exc,
+                extra={"offer_id": offer_id},
+            )
             return "ERRORE RENDERING", "", ""
         _log_ui_quote_created(db, offer.id, pdf_path)
         return html_path, (pdf_path or ""), ""
@@ -304,7 +309,9 @@ def build_interface() -> gr.Blocks:
                 value=[],
                 interactive=True,
             )
-            remove_filters_btn = gr.Button("Rimuovi filtri selezionati", variant="secondary")
+            remove_filters_btn = gr.Button(
+                "Rimuovi filtri selezionati", variant="secondary"
+            )
 
         with gr.Row():
             with gr.Column(scale=1):
@@ -438,7 +445,13 @@ def build_interface() -> gr.Blocks:
                 try:
                     bval = float(budget)
                 except Exception as exc:
-                    log_exception("ui", "filters", "invalid budget value", exc, extra={"budget": budget})
+                    log_exception(
+                        "ui",
+                        "filters",
+                        "invalid budget value",
+                        exc,
+                        extra={"budget": budget},
+                    )
                     bval = 0.0
                 if bval > 0:
                     filters.append(f"budget:<= {bval:.0f}")
@@ -1121,7 +1134,9 @@ def build_interface() -> gr.Blocks:
             try:
                 v = float(val or 0)
             except Exception as exc:
-                log_exception("ui", "budget", "invalid slider value", exc, extra={"val": val})
+                log_exception(
+                    "ui", "budget", "invalid slider value", exc, extra={"val": val}
+                )
                 v = 0.0
             if v <= 0:
                 return gr.update(value=None)
@@ -1131,7 +1146,9 @@ def build_interface() -> gr.Blocks:
             try:
                 v = float(val) if val is not None else 0.0
             except Exception as exc:
-                log_exception("ui", "budget", "invalid budget value", exc, extra={"val": val})
+                log_exception(
+                    "ui", "budget", "invalid budget value", exc, extra={"val": val}
+                )
                 v = 0.0
             return gr.update(value=(0 if v <= 0 else v))
 
@@ -1149,7 +1166,13 @@ def build_interface() -> gr.Blocks:
             try:
                 offer_id = int(str(offer_label).split(" · ")[0])
             except Exception as exc:
-                log_exception("ui", "select-offer", "failed to parse offer label", exc, extra={"label": offer_label})
+                log_exception(
+                    "ui",
+                    "select-offer",
+                    "failed to parse offer label",
+                    exc,
+                    extra={"label": offer_label},
+                )
                 return "Seleziona un'offerta per i dettagli"
             info = mapping.get(int(offer_id)) or {}
             return f"**Offerta {offer_id}** — {info.get('brand', '')} {info.get('mpn', '')} — {info.get('supplier', '')} — €{info.get('price', '')}"
@@ -1204,7 +1227,13 @@ def build_interface() -> gr.Blocks:
             try:
                 offer_id = int(str(offer_label).split(" · ")[0])
             except Exception as exc:
-                log_exception("ui", "cart-add", "failed to parse offer label", exc, extra={"label": offer_label})
+                log_exception(
+                    "ui",
+                    "cart-add",
+                    "failed to parse offer label",
+                    exc,
+                    extra={"label": offer_label},
+                )
                 return gr.update(), cart, gr.update()
             info = mapping.get(offer_id)
             if not info:
@@ -1233,7 +1262,13 @@ def build_interface() -> gr.Blocks:
             try:
                 offer_id = int(str(cart_label).split(" · ")[0])
             except Exception as exc:
-                log_exception("ui", "cart-remove", "failed to parse cart label", exc, extra={"label": cart_label})
+                log_exception(
+                    "ui",
+                    "cart-remove",
+                    "failed to parse cart label",
+                    exc,
+                    extra={"label": cart_label},
+                )
                 return gr.update(), cart, gr.update(), _totals_md(cart)
             if offer_id in cart:
                 cart.pop(offer_id)
@@ -1263,7 +1298,13 @@ def build_interface() -> gr.Blocks:
             try:
                 offer_id = int(str(cart_label).split(" · ")[0])
             except Exception as exc:
-                log_exception("ui", "cart-adjust", "failed to parse cart label", exc, extra={"label": cart_label})
+                log_exception(
+                    "ui",
+                    "cart-adjust",
+                    "failed to parse cart label",
+                    exc,
+                    extra={"label": cart_label},
+                )
                 return gr.update(), cart, gr.update(), _totals_md(cart)
             if offer_id not in cart:
                 return gr.update(), cart, gr.update(), _totals_md(cart)
@@ -1355,7 +1396,13 @@ def build_interface() -> gr.Blocks:
                 try:
                     offer_id = int(str(offer_label).split(" · ")[0])
                 except Exception as exc:
-                    log_exception("ui", "quote", "failed to parse offer label", exc, extra={"label": offer_label})
+                    log_exception(
+                        "ui",
+                        "quote",
+                        "failed to parse offer label",
+                        exc,
+                        extra={"label": offer_label},
+                    )
                     return "Seleziona un'offerta", "", ""
                 items = [{"offer_id": offer_id, "qty": 1}]
             # Call API
