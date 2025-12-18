@@ -13,7 +13,7 @@ from typing import Optional, TYPE_CHECKING
 
 if TYPE_CHECKING:
     # Only for type checkers; runtime import is lazy in fetch_rendered
-    from playwright.sync_api import sync_playwright  # type: ignore[reportMissingImports]
+    pass  # type: ignore[reportMissingImports]
 
 
 def fetch_rendered(

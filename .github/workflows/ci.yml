@@ -1,41 +1,87 @@
 name: CI
+
 on:
-  push: {branches: ["**"]}
+  push:
+    branches: [main]
   pull_request:
+    branches: [main]
+
 jobs:
-  build:
+  lint-typecheck-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          version: "latest"
+
+      - name: Set up Python 3.12
+        run: uv python install 3.12
+
+      - name: Install dependencies
+        run: uv sync --frozen
+
+      - name: Lint with ruff
+        run: uv run ruff check app/ tests/
+
+      - name: Check formatting with ruff
+        run: uv run ruff format --check app/ tests/
+
+      - name: Type check with basedpyright
+        run: uv run basedpyright app/
+
+      - name: Run tests with pytest
+        run: uv run pytest -v --tb=short tests/
+
+  complexity:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-      - name: Setup uv
-        uses: astral-sh/setup-uv@v3
-      - name: Install dependencies (uv)
-        run: uv sync
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Set up Python 3.12
+        run: uv python install 3.12
+
+      - name: Install dependencies
+        run: uv sync --frozen
+
       - name: Complexity Gate (repo-wide)
-        run: |
-          uv run python scripts/complexity_gate.py --paths src scripts
+        run: uv run python scripts/complexity_gate.py --paths src scripts
+
       - name: Complexity (observe app)
         continue-on-error: true
-        run: |
-          uv run python scripts/complexity_gate.py --paths app | tee complexity-app.txt || true
+        run: uv run python scripts/complexity_gate.py --paths app | tee complexity-app.txt || true
+
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: complexity-app-report
           path: complexity-app.txt
+
+  traceability:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Set up Python 3.12
+        run: uv python install 3.12
+
+      - name: Install dependencies
+        run: uv sync --frozen
+
       - name: Spec Lint & Traceability
         run: |
           uv run python scripts/spec_lint.py
           uv run python scripts/traceability.py
-      - name: Test (se presenti)
-        run: |
-          if [ -f "pytest.ini" ] || [ -d "tests" ]; then
-            # Use the project environment created by `uv sync`.
-            uv run pytest -q || true
-          fi
+
       - uses: actions/upload-artifact@v4
         with:
           name: traceability-matrix

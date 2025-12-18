@@ -14,7 +14,7 @@ import httpx
 from sqlalchemy.orm import Session
 from sqlalchemy import select, func, asc
 
-from .logging_utils import log_event, log_exception
+from .logging_utils import log_exception
 
 from .adapters.csv_adapter import parse_offers_csv, parse_products_csv
 from .adapters.pdf_adapter import extract_from_pdf
@@ -256,7 +256,13 @@ def _build_norm_mpn_index(db: Session) -> dict[str, int]:
         try:
             key = normalize_pn(str(mpn))
         except Exception as exc:
-            log_exception("cli", "pn-normalize", "failed to normalize mpn", exc, extra={"mpn": mpn})
+            log_exception(
+                "cli",
+                "pn-normalize",
+                "failed to normalize mpn",
+                exc,
+                extra={"mpn": mpn},
+            )
             continue
         if key:
             norm_to_product[key] = int(pid)
@@ -636,7 +642,9 @@ def _fetch_single_sitemap_url(
             products.append(p)
             offers.append(o)
     except Exception as exc:
-        log_exception("cli", "web-ingest", "failed to fetch sitemap url", exc, extra={"url": url})
+        log_exception(
+            "cli", "web-ingest", "failed to fetch sitemap url", exc, extra={"url": url}
+        )
         return
     finally:
         sleep(max(0.0, delay))
@@ -670,7 +678,13 @@ def reset_db() -> None:
                 if os.path.exists(p):
                     os.remove(p)
             except OSError as exc:
-                log_exception("cli", "reset-db", "failed to remove sqlite file", exc, extra={"path": p})
+                log_exception(
+                    "cli",
+                    "reset-db",
+                    "failed to remove sqlite file",
+                    exc,
+                    extra={"path": p},
+                )
     # Recreate
     create_all()
     rich.print({"db": "reset", "url": url})
@@ -685,7 +699,9 @@ def fetch_rendered_cmd(
     password: str | None = typer.Option(None, help="Login password"),
     user_selector: str = typer.Option("#username", help="CSS selector for username"),
     pass_selector: str = typer.Option("#password", help="CSS selector for password"),
-    submit_selector: str = typer.Option("button[type=submit]", help="Submit button selector"),
+    submit_selector: str = typer.Option(
+        "button[type=submit]", help="Submit button selector"
+    ),
 ) -> None:
     """Fetch a JS-heavy page; optional simple form login."""
     try:
@@ -701,7 +717,13 @@ def fetch_rendered_cmd(
         )
         rich.print(html)
     except Exception as exc:
-        log_exception("cli", "fetch-rendered", "failed to fetch rendered page", exc, extra={"url": url})
+        log_exception(
+            "cli",
+            "fetch-rendered",
+            "failed to fetch rendered page",
+            exc,
+            extra={"url": url},
+        )
         raise typer.Exit(code=1)
 
 
@@ -958,9 +980,6 @@ def quote_cli(
             pdf_path=pdf_path,
         )
         rich.print(out.model_dump())
-
-
-from sqlalchemy.orm import Session
 
 
 def _require_offer(db: Session, offer_id: int) -> SupplierOffer:

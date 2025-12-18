@@ -40,6 +40,32 @@ Q ?= copertone sella casco catena
 web-crawl: crawl-montanini crawl-ciclodiffusione
 	@echo "Web crawl completed with queries: $(Q)"
 
+# Alias per retrocompatibilità con README (dealer synchronization)
+crawl: web-crawl
+
+# Optional crawls for authenticated dealers (require env creds; otherwise skip)
+.PHONY: crawl-rms crawl-ciclopromo all-dealers-crawl ingest-all
+
+crawl-rms:
+	@if [ -z "$$DEALER_RMS_AUTH_MODE" ]; then \
+		echo "Skipping RMS: set DEALER_RMS_* env vars (see providers/dealers.yaml)"; \
+	else \
+		UV_CACHE_DIR=.uv-cache XDG_CACHE_HOME=.uv-cache PYTHONPATH=. uv run python -m app.cli search-web --query "$(Q)" --mapping providers/web-rms.yaml --max-pages 2 --delay 1.0; \
+	fi
+
+crawl-ciclopromo:
+	@if [ -z "$$DEALER_CICLOPROMO_AUTH_MODE" ]; then \
+		echo "Skipping CicloPromo: set DEALER_CICLOPROMO_* env vars (see providers/dealers.yaml)"; \
+	else \
+		UV_CACHE_DIR=.uv-cache XDG_CACHE_HOME=.uv-cache PYTHONPATH=. uv run python -m app.cli search-web --query "$(Q)" --mapping providers/web-ciclopromo.yaml --max-pages 2 --delay 1.0; \
+	fi
+
+all-dealers-crawl: crawl-montanini crawl-ciclodiffusione crawl-rms crawl-ciclopromo
+	@echo "All dealer crawls completed with queries: $(Q)"
+
+# Full ingest: seed CSV demo + crawls (auth dealers skipped if env assente)
+ingest-all: seed all-dealers-crawl
+	@echo "Ingest-all completed."
 # Fetch a JS/login page rendered via Playwright (requires playwright installed)
 WAIT_MS ?= 1500
 fetch-rendered:

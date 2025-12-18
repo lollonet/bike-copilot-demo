@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone, timedelta
+from pathlib import Path
 from shutil import which
 
 import os
@@ -12,6 +13,7 @@ from fastapi.responses import FileResponse, Response
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from sqlalchemy import select, func
 from sqlalchemy.orm import Session
+import yaml
 
 from .config import settings
 from .deps import SessionDep
@@ -173,10 +175,27 @@ def api_dealers(db: SessionDep) -> DealersResponse:
             func.max(SupplierOffer.updated_at),
         ).group_by(SupplierOffer.supplier)
     ).all()
-    dealers = [
-        DealerInfo(name=str(name), offers=int(cnt), last_updated=upd)
+    db_dealers: dict[str, DealerInfo] = {
+        str(name): DealerInfo(name=str(name), offers=int(cnt), last_updated=upd)
         for (name, cnt, upd) in rows
-    ]
+    }
+
+    # Fallback: include dealers defined in providers/dealers.yaml even if DB is empty
+    providers_path = Path("providers/dealers.yaml")
+    file_dealers: dict[str, DealerInfo] = {}
+    try:
+        if providers_path.exists():
+            data = yaml.safe_load(providers_path.read_text(encoding="utf-8")) or {}
+            for d in data.get("dealers", []):
+                name = str(d.get("name") or d.get("key") or "").strip()
+                if not name:
+                    continue
+                file_dealers[name] = DealerInfo(name=name, offers=0, last_updated=None)
+    except Exception as exc:  # pragma: no cover - fallback only
+        log_exception("api", "dealers", "failed to load providers/dealers.yaml", exc)
+
+    merged: dict[str, DealerInfo] = {**file_dealers, **db_dealers}
+    dealers = sorted(merged.values(), key=lambda d: d.name.lower())
     return DealersResponse(dealers=dealers)
 
 
@@ -513,7 +532,9 @@ def _count_unmapped_pn(db: Session) -> int:
             if not exists:
                 unmapped += 1
         except Exception as exc:
-            log_exception("kpi", "pn-mapping", "failed to compute unmapped dealer PN", exc)
+            log_exception(
+                "kpi", "pn-mapping", "failed to compute unmapped dealer PN", exc
+            )
             continue
     return unmapped
 
