@@ -164,13 +164,6 @@ def test_kpi_summary_endpoint_requires_auth(client_with_auth: TestClient) -> Non
     # With correct credentials, should get 200
     r = client_with_auth.get("/kpi/summary", auth=("demo", "demo123"))
     assert r.status_code == 200
-
-
-def test_kpi_summary_endpoint_shape_without_auth(client: TestClient) -> None:
-    """Exercise /kpi/summary without auth for response shape (auth disabled)."""
-    # Since client fixture doesn't set auth env vars, the endpoint should work without auth
-    r = client.get("/kpi/summary")
-    assert r.status_code == 200
     data = r.json()
     # Required top-level fields
     for key in [
@@ -185,3 +178,9 @@ def test_kpi_summary_endpoint_shape_without_auth(client: TestClient) -> None:
     ]:
         assert key in data
     assert isinstance(data["per_dealer"], list)
+
+
+def test_kpi_summary_endpoint_blocks_when_auth_env_missing(client: TestClient) -> None:
+    """Even without env credentials configured, endpoint must remain protected."""
+    r = client.get("/kpi/summary")
+    assert r.status_code == 401
