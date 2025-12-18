@@ -317,7 +317,7 @@ def _update_offer_and_history(
     stats: IngestStats,
 ) -> IngestStats:
     if not is_new_offer:
-        if offer_existing.price != offer_input.price and not is_from_current_batch:
+        if offer_existing.price != offer_input.price:
             if offer_existing.id is not None:
                 db.add(
                     PriceHistory(

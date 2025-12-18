@@ -47,7 +47,12 @@ from .types import (  # noqa: E402
     KPISummaryResponse,
     KPIDealerEntry,
 )
-from .logging_utils import log_event, log_exception  # noqa: E402
+from .logging_utils import (  # noqa: E402
+    log_event,
+    log_exception,
+    set_trace_id,
+    reset_trace_id,
+)
 from .pn import search_pn, search_pn_batch, normalize_pn  # noqa: E402
 
 
@@ -86,9 +91,13 @@ async def attach_trace_id(request: Request, call_next):
 
     trace_id = request.headers.get("x-trace-id") or uuid.uuid4().hex
     request.state.trace_id = trace_id
-    response = await call_next(request)
-    response.headers["X-Trace-Id"] = trace_id
-    return response
+    token = set_trace_id(trace_id)
+    try:
+        response = await call_next(request)
+        response.headers["X-Trace-Id"] = trace_id
+        return response
+    finally:
+        reset_trace_id(token)
 
 
 @app.get("/health")

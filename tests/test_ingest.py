@@ -244,4 +244,5 @@ def test_upsert_deduplicates_offers_in_single_batch():
         assert offers_db[0].price == 23.5
         assert offers_db[0].in_stock is False
         assert offers_db[0].lead_time_days == 2
-        assert history == []
+        assert len(history) == 1
+        assert history[0].price == 23.5
