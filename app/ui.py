@@ -10,9 +10,8 @@ from .logging_utils import log_exception
 from .search import search
 from .types import Brake, Freehub, Rotor, SearchRequest
 from sqlalchemy.orm import Session
-from typing import Any, cast
+from typing import cast
 
-from sqlalchemy.orm import Session
 
 from .models import EventLog, SessionLocal, SupplierOffer
 from .quote import render_quote

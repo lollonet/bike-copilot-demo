@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from typing import Final, cast
+from typing import Final
 
 
 EUR_RE: Final[re.Pattern[str]] = re.compile(r"€\s*([0-9]+(?:[\.,][0-9]{1,2})?)")

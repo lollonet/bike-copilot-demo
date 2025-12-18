@@ -14,7 +14,7 @@ import httpx
 from sqlalchemy.orm import Session
 from sqlalchemy import select, func, asc
 
-from .logging_utils import log_event, log_exception
+from .logging_utils import log_exception
 
 from .adapters.csv_adapter import parse_offers_csv, parse_products_csv
 from .adapters.pdf_adapter import extract_from_pdf
@@ -960,7 +960,6 @@ def quote_cli(
         rich.print(out.model_dump())
 
 
-from sqlalchemy.orm import Session
 
 
 def _require_offer(db: Session, offer_id: int) -> SupplierOffer:
