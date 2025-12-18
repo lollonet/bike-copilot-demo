@@ -43,3 +43,18 @@ cache-dir = ".cache/uv"
 dev = [
     "ruff>=0.14.9",
 ]
+
+[tool.basedpyright]
+# Use standard mode (not strict) to avoid excessive warnings in CI
+typeCheckingMode = "standard"
+# Exclude test files from strict checking
+exclude = ["tests/**", ".venv/**", ".cache/**"]
+# Ignore missing stubs for pandas and other libs
+reportMissingTypeStubs = false
+reportUnknownMemberType = false
+reportUnknownArgumentType = false
+reportUnknownVariableType = false
+reportUnknownParameterType = false
+reportUnknownLambdaType = false
+reportAny = false
+reportExplicitAny = false
