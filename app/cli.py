@@ -394,6 +394,7 @@ def fetch_policy(
         timeout=15.0,
         headers=hdrs or {"User-Agent": "BikeCopilotBot/0.1"},
         follow_redirects=True,
+        verify=True,
     ) as client:
         r = client.get(url)
         r.raise_for_status()
@@ -1468,7 +1469,9 @@ def _build_dealer_session(cfg: DealerConfig) -> DealerSession:
 
 def _build_http_client() -> httpx.Client:
     headers = {"User-Agent": "BikeCopilotBot/0.1"}
-    return httpx.Client(timeout=15.0, headers=headers, follow_redirects=True)
+    return httpx.Client(
+        timeout=15.0, headers=headers, follow_redirects=True, verify=True
+    )
 
 
 def _apply_cookie_auth(

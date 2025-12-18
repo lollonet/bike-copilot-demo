@@ -472,6 +472,7 @@ def fetch_and_parse_urls(
     headers: dict[str, str] | None = None,
     session: "httpx.Client | None" = None,
     progress_cb: ProgressCallback | None = None,
+    max_total_seconds: float | None = 600.0,
 ) -> tuple[list[ProductInput], list[OfferInput]]:
     """Fetch one or more URLs and parse them using the provided mapping.
 
@@ -491,6 +492,7 @@ def fetch_and_parse_urls(
         progress_cb,
         fetch_fn,
         time,
+        max_total_seconds,
     )
 
 
@@ -510,6 +512,7 @@ def _build_fetch_fn(
             timeout=10.0,
             headers=headers or {"User-Agent": "BikeCopilotBot/0.1"},
             follow_redirects=True,
+            verify=True,
         ) as client:
             r = client.get(u)
             r.raise_for_status()
@@ -527,14 +530,26 @@ def _fetch_and_parse_urls_impl(
     progress_cb: ProgressCallback | None,
     fetch_fn: Callable[[str], str],
     time_mod,
+    max_total_seconds: float | None,
 ) -> tuple[list[ProductInput], list[OfferInput]]:
+    start_ts = time_mod.monotonic()
+
+    def _guarded_fetch(url: str) -> str:
+        if max_total_seconds is not None:
+            elapsed = time_mod.monotonic() - start_ts
+            if elapsed > max_total_seconds:
+                raise TimeoutError(
+                    f"crawl exceeded max_total_seconds={max_total_seconds}"
+                )
+        return fetch_fn(url)
+
     ctx = FetchContext(
         mapping=mapping,
         follow_next=follow_next,
         max_pages=max_pages,
         delay_sec=delay_sec,
         progress_cb=progress_cb,
-        fetch_fn=fetch_fn,
+        fetch_fn=_guarded_fetch,
         seen_pages=set(),
         all_products=[],
         all_offers=[],
@@ -795,6 +810,9 @@ def _sleep_with_delay(time_mod, delay_sec: float) -> None:
 def _safe_fetch(fetch_fn: Callable[[str], str], url: str) -> str | None:
     try:
         return fetch_fn(url)
+    except TimeoutError:
+        # Propagate timeouts to abort crawl deterministically
+        raise
     except Exception as exc:
         log_exception(
             "web-adapter", "fetch", "failed to fetch url", exc, extra={"url": url}

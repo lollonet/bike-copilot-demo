@@ -138,3 +138,20 @@ def test_kpi_today_counts_events(client: TestClient) -> None:
     data = r2.json()
     # At least one quote_created must be recorded for today
     assert data.get("quote_created", 0) >= 1
+
+
+def test_auth_fails_when_credentials_missing(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """If APP_BASIC_USER/PASS are empty, protected endpoints must reject requests."""
+    monkeypatch.setenv("APP_BASIC_USER", "")
+    monkeypatch.setenv("APP_BASIC_PASS", "")
+    r = client.post(
+        "/quote",
+        json={
+            "items": [{"offer_id": 1, "qty": 1}],
+            "customer_name": "A",
+            "customer_contact": "B",
+        },
+    )
+    assert r.status_code in (401, 403)

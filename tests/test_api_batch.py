@@ -167,21 +167,6 @@ def test_kpi_summary_endpoint_requires_auth(client_with_auth: TestClient) -> Non
 
 
 def test_kpi_summary_endpoint_shape_without_auth(client: TestClient) -> None:
-    """Exercise /kpi/summary without auth for response shape (auth disabled)."""
-    # Since client fixture doesn't set auth env vars, the endpoint should work without auth
+    """Protected /kpi/summary must reject requests without auth when creds are required."""
     r = client.get("/kpi/summary")
-    assert r.status_code == 200
-    data = r.json()
-    # Required top-level fields
-    for key in [
-        "products_total",
-        "products_with_offers",
-        "coverage_pn_pct",
-        "offers_total",
-        "offers_updated_24h",
-        "updated_24h_pct",
-        "pn_unmapped",
-        "per_dealer",
-    ]:
-        assert key in data
-    assert isinstance(data["per_dealer"], list)
+    assert r.status_code in (401, 403)

@@ -68,15 +68,16 @@ async def block_files_traversal(request: Request, call_next):
 
 
 def require_auth(creds: HTTPBasicCredentials | None = Depends(_basic)) -> None:
-    # If creds configured, enforce; otherwise allow (demo default)
+    # Enforce auth; fail fast if credentials are not configured.
     basic_user = os.environ.get("APP_BASIC_USER", settings.basic_user)
     basic_pass = os.environ.get("APP_BASIC_PASS", settings.basic_pass)
-    if basic_user and basic_pass:
-        if not creds or not (
-            secrets.compare_digest(creds.username, basic_user)
-            and secrets.compare_digest(creds.password, basic_pass)
-        ):
-            raise HTTPException(status_code=401, detail="Unauthorized")
+    if not basic_user or not basic_pass:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    if not creds or not (
+        secrets.compare_digest(creds.username, basic_user)
+        and secrets.compare_digest(creds.password, basic_pass)
+    ):
+        raise HTTPException(status_code=401, detail="Unauthorized")
 
 
 @app.middleware("http")
@@ -85,6 +86,9 @@ async def attach_trace_id(request: Request, call_next):
 
     trace_id = request.headers.get("x-trace-id") or uuid.uuid4().hex
     request.state.trace_id = trace_id
+    from .logging_utils import set_trace_id
+
+    set_trace_id(trace_id)
     response = await call_next(request)
     response.headers["X-Trace-Id"] = trace_id
     return response
@@ -260,9 +264,7 @@ def serve_file(
 
 
 @app.head("/files/{name:path}")
-def head_file(
-    name: str, request: Request, _: None = Depends(require_auth)
-) -> Response:
+def head_file(name: str, request: Request, _: None = Depends(require_auth)) -> Response:
     allowed = {".html", ".pdf"}
     if name.startswith("."):
         raise HTTPException(status_code=403, detail="Access denied")
