@@ -38,4 +38,6 @@ def log_exception(
     merged = {"err": repr(exc)}
     if extra:
         merged.update(extra)
-    log_event("error", op=op, kind=kind, message=message, trace_id=trace_id, extra=merged)
+    log_event(
+        "error", op=op, kind=kind, message=message, trace_id=trace_id, extra=merged
+    )

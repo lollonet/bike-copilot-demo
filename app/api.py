@@ -532,7 +532,9 @@ def _count_unmapped_pn(db: Session) -> int:
             if not exists:
                 unmapped += 1
         except Exception as exc:
-            log_exception("kpi", "pn-mapping", "failed to compute unmapped dealer PN", exc)
+            log_exception(
+                "kpi", "pn-mapping", "failed to compute unmapped dealer PN", exc
+            )
             continue
     return unmapped
 
