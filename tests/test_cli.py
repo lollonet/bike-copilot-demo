@@ -194,11 +194,7 @@ def test_fetch_policy_cli(
 
     class DummyClient:
         def __init__(
-            self,
-            timeout: float,
-            headers: dict[str, str],
-            follow_redirects: bool,
-            verify: bool | str = True,
+            self, timeout: float, headers: dict[str, str], follow_redirects: bool
         ):
             self._timeout = timeout
             self._headers = headers
