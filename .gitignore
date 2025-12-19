@@ -21,3 +21,13 @@ out/
 db-*.md
 providers/html/
 *.har
+
+# Gemini/Claude temporary files
+node_modules/
+.claude/
+.codex/
+.gemini/
+.mcp.json
+assessment/
+data/dump/nohup.out
+
