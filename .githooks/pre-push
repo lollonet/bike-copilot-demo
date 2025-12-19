@@ -29,13 +29,13 @@ while read -r local_ref local_sha remote_ref remote_sha; do
 done
 
 if [[ $block -eq 1 ]]; then
-  echo "✋ Push su 'origin/main' bloccato dalla policy del repository." >&2
-  echo "Usa un branch e apri una PR (REQ-### obbligatorio nei commit)." >&2
-  echo "Suggerimenti:" >&2
-  echo "  git checkout -b feat/nome-feature" >&2
+  echo "✋ Push to 'origin/main' blocked by repository policy." >&2
+  echo "Use a branch and open a PR (REQ-### mandatory in commits)." >&2
+  echo "Suggestions:" >&2
+  echo "  git checkout -b feat/feature-name" >&2
   echo "  git push -u origin HEAD" >&2
-  echo "  gh pr create -t 'REQ-###: Titolo' -b 'Descrizione'" >&2
-  echo "(Bypass temporaneo solo se necessario: ALLOW_MAIN_PUSH=1 git push origin main)" >&2
+  echo "  gh pr create -t 'REQ-###: Title' -b 'Description'" >&2
+  echo "(Temporary bypass only if critical: ALLOW_MAIN_PUSH=1 git push origin main)" >&2
   exit 1
 fi
 

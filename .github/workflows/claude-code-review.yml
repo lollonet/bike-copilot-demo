@@ -43,7 +43,7 @@ jobs:
           trigger_phrase: "/claude-review"
           track_progress: true
           use_sticky_comment: true
-          # Aggiunto uv run make ai tool permessi
+          # Added make ci-fast to allowed tools
           claude_args: '--allowed-tools "Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh pr comment:*),Bash(gh issue view:*),Bash(git log:*),Bash(git diff:*),Bash(git show:*),Bash(uv run ruff check:*),Bash(uv run pytest:*),Bash(make ci-fast)"'
           prompt: |
             You are a senior Python/FastAPI code reviewer for 'Bike Copilot'.
