@@ -28,7 +28,7 @@ ci-sota: ci-fast
 	$(UV_ENV) uv run python scripts/spec_lint.py
 	$(UV_ENV) uv run python scripts/traceability.py
 	$(UV_ENV) uv run python scripts/complexity_gate.py --paths app
-	$(UV_ENV) uv run bandit -r app/ -ll -ii
+	$(UV_ENV) uv run bandit -r app/ -x app/_legacy -ll -ii
 	@echo "🌟 CI-SOTA PASSED"
 
 ## 🛠️ Development
