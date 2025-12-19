@@ -18,7 +18,7 @@ jobs:
     # Run on PR open/sync (unless skipped) OR when comment triggers it
     if: |
       (github.event_name == 'pull_request' && !github.event.pull_request.draft && !contains(github.event.pull_request.labels.*.name, 'skip-claude-review')) ||
-      (github.event_name == 'issue_comment' && github.event.issue.pull_request && contains(github.event.comment.body, '/claude-review'))
+      (github.event_name == 'issue_comment' && github.event.issue.pull_request && contains(github.event.comment.body, '@claude review'))
 
     steps:
       - name: Checkout code
@@ -40,7 +40,7 @@ jobs:
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          trigger_phrase: "/claude-review"
+          trigger_phrase: "@claude review"
           track_progress: true
           use_sticky_comment: true
           # Added make ci-fast to allowed tools
