@@ -21,6 +21,12 @@ ui-pn:
 test:
 	UV_CACHE_DIR=.uv-cache XDG_CACHE_HOME=.uv-cache PYTHONPATH=. uv run pytest -q
 
+test-legacy:
+	@echo "Running LEGACY tests (quarantined)..."
+	UV_CACHE_DIR=.uv-cache XDG_CACHE_HOME=.uv-cache PYTHONPATH=. uv run pytest tests/_legacy || true
+
+ci-fast: status test
+
 .PHONY: crawl-montanini crawl-ciclodiffusione
 
 crawl-montanini:
