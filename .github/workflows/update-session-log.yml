@@ -1,0 +1,35 @@
+name: Auto-Update Session Log
+
+on:
+  pull_request:
+    types: [closed]
+    branches: [gemini-integration]
+
+jobs:
+  update-log:
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: gemini-integration
+
+      - name: Append PR to Session Log
+        run: |
+          LOG_FILE="docs/sessions/$(date +%Y-%m)-session-log.md"
+          if [ ! -f "$LOG_FILE" ]; then
+            echo "# Session Log $(date +%Y-%m)" > "$LOG_FILE"
+            echo "" >> "$LOG_FILE"
+          fi
+          echo "- **$(date +%Y-%m-%d)**: PR #${{ github.event.pull_request.number }} merged - ${{ github.event.pull_request.title }} (@${{ github.event.pull_request.user.login }})" >> "$LOG_FILE"
+          echo "  [View PR](${{ github.event.pull_request.html_url }})" >> "$LOG_FILE"
+
+      - name: Commit changes
+        run: |
+          git config local user.email "action@github.com"
+          git config local user.name "GitHub Action"
+          git add docs/sessions/
+          git commit -m "AUTO: Update session log for PR #${{ github.event.pull_request.number }}"
+          git push

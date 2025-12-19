@@ -1,35 +1,8 @@
-#!/usr/bin/env bash
-set -euo pipefail
-
-# Block pushes directly to origin/main to enforce PR workflow.
-# Allow override with ALLOW_MAIN_PUSH=1 or GIT_ALLOW_MAIN_PUSH=1.
-
-remote_name="${1:-}"
-remote_url="${2:-}"
-
-if [[ "${ALLOW_MAIN_PUSH:-}" == "1" || "${GIT_ALLOW_MAIN_PUSH:-}" == "1" ]]; then
-  exit 0
+#!/bin/bash
+echo "🚀 Running Pre-push CI Check..."
+make ci-fast
+if [ $? -ne 0 ]; then
+    echo "❌ Local CI failed. Push aborted. Run 'make ci-fast' to debug."
+    exit 1
 fi
-
-block=0
-while read -r local_ref local_sha remote_ref remote_sha; do
-  # Skip empty lines
-  [[ -z "${remote_ref:-}" ]] && continue
-  if [[ "${remote_name}" == "origin" && "${remote_ref}" == "refs/heads/main" ]]; then
-    block=1
-  fi
-done
-
-if [[ $block -eq 1 ]]; then
-  echo "✋ Push su 'origin/main' bloccato dalla policy del repository." >&2
-  echo "Usa un branch e apri una PR (REQ-### obbligatorio nei commit)." >&2
-  echo "Suggerimenti:" >&2
-  echo "  git checkout -b feat/nome-feature" >&2
-  echo "  git push -u origin HEAD" >&2
-  echo "  gh pr create -t 'REQ-###: Titolo' -b 'Descrizione'" >&2
-  echo "(Bypass temporaneo solo se necessario: ALLOW_MAIN_PUSH=1 git push origin main)" >&2
-  exit 1
-fi
-
-exit 0
-
+echo "✅ Local CI passed. Proceeding with push."

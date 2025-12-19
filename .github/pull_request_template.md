@@ -1,17 +1,18 @@
-## Scope
-REQ: REQ-###  | ADR: ADR-###
+## 🎯 Summary
+[Describe the changes and the rationale behind them]
 
-## Diff → Spec Mapping
-| REQ | File | Test |
-|-----|------|------|
-|     |      |      |
+## 🔗 Related Requirements / WBS
+- Implements: [e.g. REQ-101]
+- WBS Task: [e.g. WBS-P1-100]
 
-- [ ] PLAN approved and attached
-- [ ] Atomic PATCHes that match the PLAN
-- [ ] Tests updated/passing
-- [ ] CI is green
-- [ ] Session log attached: .codepilot/sessions/<id>.md
-- [ ] `bash scripts/status.sh` run locally (or `--fix`)
-- [ ] Docs synced to codebase (Runbook 05); spec_lint and traceability pass
-- [ ] Commento post‑push con `@codex review` (obbligatorio se il PR cambia codice)
- - [ ] Se vuoi disabilitare l’autocommento, aggiungi label `skip-codex-review`
+## ✅ Quality Checklist
+- [ ] `make ci-fast` passed locally
+- [ ] `make ci-sota` passed locally (if applicable)
+- [ ] New tests added/updated
+- [ ] Documentation updated (SSOT)
+
+## 🤖 AI Review Trigger
+/cc @chatgpt-codex-connector @claude-code
+
+---
+*By submitting this PR, I confirm that I have followed the project's SOTA standards.*
