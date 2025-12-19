@@ -2,12 +2,16 @@
 
 ## 🎯 Project SSOT (Single Source of Truth)
 The project documentation has been refactored for AI-driven development. Please refer to these core files:
-- **[VISION.md](./VISION.md)**: Project goals, target users, and scope.
-- **[REQ.md](./REQ.md)**: Functional requirements and user stories.
-- **[ARCH.md](./ARCH.md)**: Data model, software components, and system architecture.
-- **[TECH.md](./TECH.md)**: Technology stack, coding standards, and AI constraints.
+- **[VISION.md](./docs/core/VISION.md)**: Project goals, target users, and scope.
+- **[REQ.md](./docs/core/REQ.md)**: Functional requirements and user stories.
+- **[ARCH.md](./docs/core/ARCH.md)**: Data model, software components, and system architecture.
+- **[TECH.md](./docs/core/TECH.md)**: Technology stack, coding standards, and AI constraints.
 
 ---
+
+## 🗺️ Project Governance
+- **[WBS MASTER](./docs/wbs/MASTER.md)**: Roadmap and task status.
+- **[Sessions Log](./docs/sessions/)**: History of development sessions.
 
 ## 🚀 Quick Start
 
