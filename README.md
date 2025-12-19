@@ -1,35 +1,13 @@
-# 🚴 Bike Copilot — Enterprise B2B Bicycle Parts Platform
+# 🚴 Bike Copilot — Unified B2B Bicycle Parts Platform
 
-## 🎯 Vision & Architecture
+## 🎯 Project SSOT (Single Source of Truth)
+The project documentation has been refactored for AI-driven development. Please refer to these core files:
+- **[VISION.md](./VISION.md)**: Project goals, target users, and scope.
+- **[REQ.md](./REQ.md)**: Functional requirements and user stories.
+- **[ARCH.md](./ARCH.md)**: Data model, software components, and system architecture.
+- **[TECH.md](./TECH.md)**: Technology stack, coding standards, and AI constraints.
 
-**Bike Copilot** is a state-of-the-art B2B platform for bicycle parts dealers, implementing enterprise-grade patterns for catalog aggregation, intelligent search, and automated order optimization.
-
-### Core Principles (SOTA)
-- **PN-First Architecture**: Manufacturer part numbers as primary key for cross-dealer normalization
-- **Multi-Dealer Aggregation**: Unified interface for heterogeneous suppliers (Web, CSV, PDF)
-- **Intelligent Optimization**: Multi-objective solver for price, shipping, and lead time
-- **Enterprise Security**: Multi-layer authentication with cookie, form, and basic auth support
-- **Type-Safe Boundaries**: Full Pydantic validation, zero raw dicts across API boundaries
-- **Automated Ingestion**: Self-healing scrapers with pagination and session management
-
-## 📚 Documentation Structure
-
-```
-docs/
-├── architecture/          # System design and patterns
-│   ├── ARC-001-ci-cd.md  # CI/CD pipeline with quality gates
-│   ├── ARC-010-overview.md # High-level architecture
-│   └── ARC-020-ux-wireframes.md # PN-first UX design
-├── requirements/          # Feature specifications
-│   ├── REQ-001.standards-adoption.md
-│   ├── REQ-003.provider-storeden.md
-│   ├── REQ-007.dealer-management.md # Dealer registry system
-│   └── REQ-008.kpi-freshness.md
-├── standards/
-│   └── RUNBOOKS/          # Operational procedures
-└── technology/
-    └── TECH-010-runtime.md # Stack decisions
-```
+---
 
 ## 🚀 Quick Start
 

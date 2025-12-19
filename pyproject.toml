@@ -1,9 +1,9 @@
 ## Created by Codex Agent to migrate from requirements.txt to uv-managed dependencies.
 
 [project]
-name = "basscodebase"
+name = "bike-copilot"
 version = "0.1.0"
-description = "BassCodeBase: uv-managed Python project"
+description = "Bike Copilot: Unified B2B catalog aggregator and order automation for bike shops"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
