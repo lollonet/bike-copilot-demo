@@ -1,3 +1,13 @@
+---
+id: REQ-MAIN
+domain: requirements
+status: approved
+version: 1.0
+acceptance:
+  - "REQ-100: Verified by Ingestion Integration Tests"
+  - "REQ-200: Verified by Matching Logic Unit Tests"
+  - "REQ-300: Verified by End-to-End Cart Automation Tests"
+---
 # REQUISITI FUNZIONALI (REQ)
 
 ## REQ-100: Ingestion & Normalization

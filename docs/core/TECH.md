@@ -1,3 +1,9 @@
+---
+id: TECH-MAIN
+domain: technology
+status: approved
+version: 1.0
+---
 # TECH STACK & CODING STANDARDS
 
 ## Core Stack

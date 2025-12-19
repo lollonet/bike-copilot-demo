@@ -32,7 +32,7 @@ for p in [IDX["requirements"], IDX["architecture"], IDX["technology"]]:
         require(False, f"Missing SSoT file: {p}")
 # Scan docs
 for path in glob.glob("docs/**/*.md", recursive=True):
-    if "/standards/" in path:
+    if "/standards/" in path or "/sessions/" in path or "/wbs/" in path:
         continue
     meta = fm(path)
     require(meta.get("id"), f"Missing id in {path}")

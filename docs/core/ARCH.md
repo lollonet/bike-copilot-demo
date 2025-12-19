@@ -1,3 +1,9 @@
+---
+id: ARC-MAIN
+domain: architecture
+status: approved
+version: 1.0
+---
 # ARCHITETTURA DEL SISTEMA
 
 ## 1. Modello Dati (ER)
