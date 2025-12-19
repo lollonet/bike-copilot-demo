@@ -1,12 +1,20 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Block pushes directly to origin/main to enforce PR workflow.
-# Allow override with ALLOW_MAIN_PUSH=1 or GIT_ALLOW_MAIN_PUSH=1.
-
+# 1. Capture Git Args
 remote_name="${1:-}"
 remote_url="${2:-}"
 
+# 2. Run Local CI (from PR #67 SOTA Workflow)
+echo "🚀 Running Pre-push CI Check..."
+if ! make ci-fast; then
+    echo "❌ Local CI failed. Push aborted. Run 'make ci-fast' to debug."
+    exit 1
+fi
+echo "✅ Local CI passed."
+
+# 3. Governance: Block direct pushes to 'main'
+# Allow override with ALLOW_MAIN_PUSH=1 or GIT_ALLOW_MAIN_PUSH=1.
 if [[ "${ALLOW_MAIN_PUSH:-}" == "1" || "${GIT_ALLOW_MAIN_PUSH:-}" == "1" ]]; then
   exit 0
 fi
