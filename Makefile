@@ -33,22 +33,22 @@ ci-sota: ci-fast
 
 ## 🛠️ Development
 api:
-	uv run uvicorn app.api:app --host 0.0.0.0 --port 8000
+	$(UV_ENV) uv run uvicorn app.api:app --host 0.0.0.0 --port 8000
 
 seed:
 	$(UV_ENV) uv run python -m app.cli ingest-csv-mapped --csv data/dump/catalogo_real_mtb.csv --mapping providers/csv-catalogo-mtb.yaml
 
 ui:
-	uv run python -m app.ui
+	$(UV_ENV) uv run python -m app.ui
 
 ui-pn:
-	uv run python -m app.ui_pn
+	$(UV_ENV) uv run python -m app.ui_pn
 
 test:
 	$(UV_ENV) uv run pytest -v
 
 ## 🕷️ Crawling
-.PHONY: crawl-montanini crawl-ciclodiffusione web-crawl crawl all-dealers-crawl
+.PHONY: crawl-montanini crawl-ciclodiffusione crawl-rms crawl-ciclopromo web-crawl crawl all-dealers-crawl
 
 crawl-montanini:
 	@echo "Crawl Cicli Montanini..."
@@ -59,6 +59,13 @@ crawl-ciclodiffusione:
 	@for q in $(Q); do \
 		$(UV_ENV) uv run python -m app.cli search-web --query "$$q" --mapping providers/web-ciclodiffusione.yaml --max-pages 5 --delay 0.8; \
 	done
+
+# Stub targets for removed providers (to fix all-dealers-crawl)
+crawl-rms:
+	@echo "Skipping RMS (legacy provider logic moved)"
+
+crawl-ciclopromo:
+	@echo "Skipping CicloPromo (legacy provider logic moved)"
 
 Q ?= copertone sella casco catena
 web-crawl: crawl-montanini crawl-ciclodiffusione

@@ -1,7 +1,8 @@
 #!/bin/bash
+set -euo pipefail
+
 echo "🚀 Running Pre-push CI Check..."
-make ci-fast
-if [ $? -ne 0 ]; then
+if ! make ci-fast; then
     echo "❌ Local CI failed. Push aborted. Run 'make ci-fast' to debug."
     exit 1
 fi

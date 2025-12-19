@@ -18,6 +18,7 @@ jobs:
 
       - name: Append PR to Session Log
         run: |
+          mkdir -p docs/sessions/
           LOG_FILE="docs/sessions/$(date +%Y-%m)-session-log.md"
           if [ ! -f "$LOG_FILE" ]; then
             echo "# Session Log $(date +%Y-%m)" > "$LOG_FILE"
@@ -28,8 +29,8 @@ jobs:
 
       - name: Commit changes
         run: |
-          git config local user.email "action@github.com"
-          git config local user.name "GitHub Action"
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
           git add docs/sessions/
           git commit -m "AUTO: Update session log for PR #${{ github.event.pull_request.number }}"
           git push

@@ -80,6 +80,7 @@ REQ-100:
 REQ-101:
   commits: []
   files:
+  - .github/pull_request_template.md
   - docs/requirements/REQ-INDEX.md
   prs: []
   tests: []
