@@ -155,7 +155,9 @@ def _upsert_offers_and_mappings(
         )
         if offer_existing is None:
             continue
-        stats = _update_offer_and_history(db, offer_existing, o, is_new_offer, stats)
+        stats = _update_offer_and_history(
+            db, offer_existing, o, is_new_offer, is_from_current_batch, stats
+        )
         _upsert_pn_mapping(db, product, o)
 
     for supplier, ids in seen.items():
@@ -311,6 +313,7 @@ def _update_offer_and_history(
     offer_existing: SupplierOffer,
     offer_input: OfferInput,
     is_new_offer: bool,
+    is_from_current_batch: bool,
     stats: IngestStats,
 ) -> IngestStats:
     if not is_new_offer:

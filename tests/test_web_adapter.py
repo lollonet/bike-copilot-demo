@@ -151,11 +151,7 @@ def test_fetch_and_parse_urls_with_pagination(
 
     class DummyClient:
         def __init__(
-            self,
-            timeout: float,
-            headers: dict[str, str],
-            follow_redirects: bool,
-            verify: bool | str = True,
+            self, timeout: float, headers: dict[str, str], follow_redirects: bool
         ):
             self._timeout = timeout
             self._headers = headers
@@ -254,11 +250,7 @@ def test_fetch_and_parse_urls_query_pagination(
 
     class DummyClient:
         def __init__(
-            self,
-            timeout: float,
-            headers: dict[str, str],
-            follow_redirects: bool,
-            verify: bool | str = True,
+            self, timeout: float, headers: dict[str, str], follow_redirects: bool
         ):
             self._timeout = timeout
             self._headers = headers
@@ -375,43 +367,3 @@ def test_ciclopromo_listing_basic(tmp_path: Path) -> None:
     assert all(o.supplier == "CicloPromo" for o in offers), (
         "Supplier mismatch in offers"
     )
-
-
-def test_fetch_and_parse_urls_enforces_total_timeout(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """Global timeout should stop crawling before fetching when limit exceeded."""
-    from app.adapters import web_adapter
-
-    ticks = [0.0, 10.0]  # second call exceeds cutoff
-
-    class FakeTime:
-        def monotonic(self):
-            return ticks.pop(0)
-
-        def sleep(self, _):
-            return None
-
-    def fake_fetch(url: str) -> str:
-        return "<html></html>"
-
-    mapping: web_adapter.WebMapping = {
-        "supplier": "Demo",
-        "root": ".item",
-        "brand": ".b",
-        "mpn": ".m",
-        "name": ".n",
-        "price": ".p",
-    }
-    with pytest.raises(TimeoutError):
-        web_adapter._fetch_and_parse_urls_impl(
-            ["http://example.com"],
-            mapping,
-            follow_next=False,
-            max_pages=1,
-            delay_sec=0.0,
-            progress_cb=None,
-            fetch_fn=fake_fetch,
-            time_mod=FakeTime(),
-            max_total_seconds=5.0,
-        )

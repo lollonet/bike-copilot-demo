@@ -1,6 +1,7 @@
 REQ-001:
   commits: []
   files:
+  - .codepilot/sessions/2025-12-18-auth-fix.md
   - README.md
   - docs/architecture/ARC-001-ci-cd.md
   - docs/requirements/REQ-001.standards-adoption.md
@@ -57,6 +58,7 @@ REQ-007:
   commits: []
   files:
   - .codepilot/sessions/2025-12-17-parallel-ingest.md
+  - .codepilot/sessions/2025-12-18-auth-fix.md
   - README.md
   - docs/requirements/REQ-007.dealer-management.md
   - docs/requirements/REQ-INDEX.md

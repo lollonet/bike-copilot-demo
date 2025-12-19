@@ -164,9 +164,23 @@ def test_kpi_summary_endpoint_requires_auth(client_with_auth: TestClient) -> Non
     # With correct credentials, should get 200
     r = client_with_auth.get("/kpi/summary", auth=("demo", "demo123"))
     assert r.status_code == 200
+    data = r.json()
+    # Required top-level fields
+    for key in [
+        "products_total",
+        "products_with_offers",
+        "coverage_pn_pct",
+        "offers_total",
+        "offers_updated_24h",
+        "updated_24h_pct",
+        "pn_unmapped",
+        "per_dealer",
+    ]:
+        assert key in data
+    assert isinstance(data["per_dealer"], list)
 
 
-def test_kpi_summary_endpoint_shape_without_auth(client: TestClient) -> None:
-    """Protected /kpi/summary must reject requests without auth when creds are required."""
+def test_kpi_summary_endpoint_blocks_when_auth_env_missing(client: TestClient) -> None:
+    """Even without env credentials configured, endpoint must remain protected."""
     r = client.get("/kpi/summary")
-    assert r.status_code in (401, 403)
+    assert r.status_code == 401
