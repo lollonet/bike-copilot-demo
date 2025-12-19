@@ -31,7 +31,7 @@ REQ-004:
   files:
   - .codepilot/sessions/2025-12-17-parallel-ingest.md
   - CLAUDE_DESKTOP_INSTRUCTIONS.md
-  - MOCKUP-README.md
+  - data/dump/MOCKUP-README.md
   - docs/architecture/ARC-020-ux-wireframes.md
   - docs/requirements/REQ-004.ui-pn-first.md
   - docs/requirements/REQ-005.order-optimizer.md
@@ -43,7 +43,7 @@ REQ-005:
   files:
   - .codepilot/sessions/2025-12-17-parallel-ingest.md
   - CLAUDE_DESKTOP_INSTRUCTIONS.md
-  - MOCKUP-README.md
+  - data/dump/MOCKUP-README.md
   - docs/architecture/ARC-020-ux-wireframes.md
   - docs/requirements/REQ-005.order-optimizer.md
   - docs/requirements/REQ-INDEX.md
@@ -53,7 +53,7 @@ REQ-006:
   commits: []
   files:
   - CLAUDE_DESKTOP_INSTRUCTIONS.md
-  - MOCKUP-README.md
+  - data/dump/MOCKUP-README.md
   - docs/architecture/ARC-020-ux-wireframes.md
   - docs/requirements/REQ-006.quote-branding.md
   - docs/requirements/REQ-INDEX.md
@@ -82,72 +82,72 @@ REQ-008:
 REQ-100:
   commits: []
   files:
-  - REQ.md
+  - docs/core/REQ.md
   prs: []
   tests: []
 REQ-101:
   commits: []
   files:
-  - REQ.md
+  - docs/core/REQ.md
   prs: []
   tests: []
 REQ-102:
   commits: []
   files:
-  - REQ.md
+  - docs/core/REQ.md
   prs: []
   tests: []
 REQ-103:
   commits: []
   files:
-  - REQ.md
+  - docs/core/REQ.md
   prs: []
   tests: []
 REQ-200:
   commits: []
   files:
-  - REQ.md
+  - docs/core/REQ.md
   prs: []
   tests: []
 REQ-201:
   commits: []
   files:
-  - REQ.md
+  - docs/core/REQ.md
   prs: []
   tests: []
 REQ-202:
   commits: []
   files:
-  - REQ.md
+  - docs/core/REQ.md
   prs: []
   tests: []
 REQ-203:
   commits: []
   files:
-  - REQ.md
+  - docs/core/REQ.md
   prs: []
   tests: []
 REQ-300:
   commits: []
   files:
-  - REQ.md
+  - docs/core/REQ.md
   prs: []
   tests: []
 REQ-301:
   commits: []
   files:
-  - REQ.md
+  - docs/core/REQ.md
   prs: []
   tests: []
 REQ-302:
   commits: []
   files:
-  - REQ.md
+  - docs/core/REQ.md
   prs: []
   tests: []
 REQ-303:
   commits: []
   files:
-  - REQ.md
+  - docs/core/REQ.md
   prs: []
   tests: []

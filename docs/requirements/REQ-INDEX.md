@@ -1,20 +1,26 @@
 ---
-id: REQ-INDEX
+id: REQ-MAIN
 domain: requirements
 status: approved
-source_of_truth: true
-related: []
+version: 1.0
 acceptance:
-  - "The file defines the index and REQ-### naming."
-  - "Front matter is valid per spec_lint (required fields present)."
+  - "REQ-100: Verified by Ingestion Integration Tests"
+  - "REQ-200: Verified by Matching Logic Unit Tests"
+  - "REQ-300: Verified by End-to-End Cart Automation Tests"
 ---
-Index dei requisiti e convenzioni: REQ-###
+# REQUISITI FUNZIONALI (REQ)
 
-- REQ-001 — Adozione standard repository (docs, hook, CI)
-- REQ-002 — UI: layout con ricerca full‑width e filtri dinamici
-- REQ-003 — Provider: Ciclodiffusione (Storeden) mapping
-- REQ-004 — Interfaccia PN‑first e flusso preventivo
-- REQ-005 — Ottimizzatore d’ordine multi‑dealer
-- REQ-006 — Branding preventivi
-- REQ-007 — Gestione dealer e policy spedizioni
-- REQ-008 — KPI freschezza e qualità dati
+## REQ-100: Ingestion & Normalization
+- **REQ-101 (Daily Sync):** Il sistema deve eseguire un'ingestion programmata (morning) dei cataloghi via Playwright o CSV Adapter.
+- **REQ-102 (Image Archiving):** Le immagini devono essere scaricate localmente e associate al `SupplierProduct`.
+- **REQ-103 (Data Integrity):** I prezzi devono essere salvati come `Decimal` (non float) per precisione finanziaria.
+
+## REQ-200: Smart Matching
+- **REQ-201 (Auto-Match):** Prodotti con stesso EAN devono essere fusi sotto un unico `MasterProduct`.
+- **REQ-202 (Fuzzy Match):** Se l'EAN manca, suggerire l'unione basata su Brand + Levenshtein Distance (>85%) sul nome.
+- **REQ-203 (Manual Persistence):** Un match confermato o creato manualmente dall'utente deve essere ricordato permanentemente.
+
+## REQ-300: UI & Business Logic
+- **REQ-301 (Unified Search):** Ricerca full-text su `MasterProduct` e `SupplierProduct`.
+- **REQ-302 (Interactive Quote):** Permettere l'inserimento manuale del prezzo di vendita finale per ogni riga del preventivo.
+- **REQ-303 (Headless Cart):** Automatizzare il login e l'aggiunta a carrello sul fornitore selezionato senza confermare l'acquisto.

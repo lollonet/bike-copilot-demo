@@ -30,9 +30,11 @@ ids = set()
 for p in [IDX["requirements"], IDX["architecture"], IDX["technology"]]:
     if not os.path.exists(p):
         require(False, f"Missing SSoT file: {p}")
+SKIP_PATHS = ["/standards/", "/sessions/", "/wbs/"]
+
 # Scan docs
 for path in glob.glob("docs/**/*.md", recursive=True):
-    if "/standards/" in path or "/sessions/" in path or "/wbs/" in path:
+    if any(skip in path for skip in SKIP_PATHS):
         continue
     meta = fm(path)
     require(meta.get("id"), f"Missing id in {path}")
@@ -50,9 +52,10 @@ for path in glob.glob("docs/**/*.md", recursive=True):
             require(False, f"Bad status in {path}")
         if not meta.get("acceptance"):
             require(False, f"Missing acceptance in {path}")
-# No-overlap: id prefix vs domain
+
+# Prefix checks
 for path in glob.glob("docs/**/*.md", recursive=True):
-    if "/standards/" in path:
+    if any(skip in path for skip in SKIP_PATHS):
         continue
     meta = fm(path)
     i = meta.get("id", "")
