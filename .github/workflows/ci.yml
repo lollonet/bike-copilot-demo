@@ -2,9 +2,10 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, gemini-integration]
   pull_request:
-    branches: [main]
+    branches: [main, gemini-integration]
+  workflow_dispatch:
 
 env:
   UV_CACHE_DIR: /tmp/.uv-cache
