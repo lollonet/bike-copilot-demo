@@ -6,12 +6,23 @@ on:
   pull_request:
     branches: [main]
 
+env:
+  UV_CACHE_DIR: /tmp/.uv-cache
+
 jobs:
   lint-typecheck-test:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+
+      - name: Restore uv cache
+        uses: actions/cache@v4
+        with:
+          path: /tmp/.uv-cache
+          key: uv-${{ runner.os }}-${{ hashFiles('uv.lock') }}
+          restore-keys: |
+            uv-${{ runner.os }}-
 
       - name: Install uv
         uses: astral-sh/setup-uv@v4
@@ -36,10 +47,22 @@ jobs:
       - name: Run tests with pytest
         run: uv run pytest -v --tb=short tests/
 
+      - name: Minimize uv cache
+        if: always()
+        run: uv cache prune --ci
+
   complexity:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      - name: Restore uv cache
+        uses: actions/cache@v4
+        with:
+          path: /tmp/.uv-cache
+          key: uv-${{ runner.os }}-${{ hashFiles('uv.lock') }}
+          restore-keys: |
+            uv-${{ runner.os }}-
 
       - name: Install uv
         uses: astral-sh/setup-uv@v4
@@ -63,10 +86,62 @@ jobs:
           name: complexity-app-report
           path: complexity-app.txt
 
+  security:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Restore uv cache
+        uses: actions/cache@v4
+        with:
+          path: /tmp/.uv-cache
+          key: uv-${{ runner.os }}-${{ hashFiles('uv.lock') }}
+          restore-keys: |
+            uv-${{ runner.os }}-
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Set up Python 3.12
+        run: uv python install 3.12
+
+      - name: Install dependencies
+        run: uv sync --frozen
+
+      - name: Security scan with bandit
+        id: bandit
+        continue-on-error: true
+        run: |
+          uv run bandit -r app/ -ll -ii --format json --output bandit-report.json
+          uv run bandit -r app/ -ll -ii --format txt | tee bandit-report.txt
+
+      - name: Upload security reports
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: security-report
+          path: |
+            bandit-report.json
+            bandit-report.txt
+
+      - name: Fail if critical security issues
+        if: steps.bandit.outcome == 'failure'
+        run: |
+          echo "::warning::Security scan found issues. Review bandit-report.txt artifact."
+          echo "To enforce blocking, change 'continue-on-error: true' to 'false' in security job."
+
   traceability:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      - name: Restore uv cache
+        uses: actions/cache@v4
+        with:
+          path: /tmp/.uv-cache
+          key: uv-${{ runner.os }}-${{ hashFiles('uv.lock') }}
+          restore-keys: |
+            uv-${{ runner.os }}-
 
       - name: Install uv
         uses: astral-sh/setup-uv@v4
