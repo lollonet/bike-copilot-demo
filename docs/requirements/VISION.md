@@ -1,3 +1,12 @@
+---
+id: REQ-VISION
+domain: requirements
+status: approved
+version: 1.0
+acceptance:
+  - "Mission alignment with stakeholders"
+  - "Defined system boundaries"
+---
 # VISION: Bike Copilot
 
 ## Missione

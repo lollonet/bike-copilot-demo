@@ -6,7 +6,6 @@ REQ-001:
   - README.md
   - docs/architecture/ARC-001-ci-cd.md
   - docs/requirements/REQ-001.standards-adoption.md
-  - docs/requirements/REQ-INDEX.md
   - scripts/complexity_gate.py
   prs: []
   tests: []
@@ -15,7 +14,6 @@ REQ-002:
   files:
   - CLAUDE_DESKTOP_INSTRUCTIONS.md
   - docs/requirements/REQ-002.ui-facets.md
-  - docs/requirements/REQ-INDEX.md
   prs: []
   tests: []
 REQ-003:
@@ -23,7 +21,6 @@ REQ-003:
   files:
   - CLAUDE_DESKTOP_INSTRUCTIONS.md
   - docs/requirements/REQ-003.provider-storeden.md
-  - docs/requirements/REQ-INDEX.md
   prs: []
   tests: []
 REQ-004:
@@ -31,11 +28,10 @@ REQ-004:
   files:
   - .codepilot/sessions/2025-12-17-parallel-ingest.md
   - CLAUDE_DESKTOP_INSTRUCTIONS.md
-  - MOCKUP-README.md
+  - data/dump/MOCKUP-README.md
   - docs/architecture/ARC-020-ux-wireframes.md
   - docs/requirements/REQ-004.ui-pn-first.md
   - docs/requirements/REQ-005.order-optimizer.md
-  - docs/requirements/REQ-INDEX.md
   prs: []
   tests: []
 REQ-005:
@@ -43,20 +39,18 @@ REQ-005:
   files:
   - .codepilot/sessions/2025-12-17-parallel-ingest.md
   - CLAUDE_DESKTOP_INSTRUCTIONS.md
-  - MOCKUP-README.md
+  - data/dump/MOCKUP-README.md
   - docs/architecture/ARC-020-ux-wireframes.md
   - docs/requirements/REQ-005.order-optimizer.md
-  - docs/requirements/REQ-INDEX.md
   prs: []
   tests: []
 REQ-006:
   commits: []
   files:
   - CLAUDE_DESKTOP_INSTRUCTIONS.md
-  - MOCKUP-README.md
+  - data/dump/MOCKUP-README.md
   - docs/architecture/ARC-020-ux-wireframes.md
   - docs/requirements/REQ-006.quote-branding.md
-  - docs/requirements/REQ-INDEX.md
   prs: []
   tests: []
 REQ-007:
@@ -67,7 +61,6 @@ REQ-007:
   - CLAUDE_DESKTOP_INSTRUCTIONS.md
   - README.md
   - docs/requirements/REQ-007.dealer-management.md
-  - docs/requirements/REQ-INDEX.md
   prs: []
   tests: []
 REQ-008:
@@ -76,78 +69,77 @@ REQ-008:
   - CLAUDE_DESKTOP_INSTRUCTIONS.md
   - SESSION_SUMMARY.md
   - docs/requirements/REQ-008.kpi-freshness.md
-  - docs/requirements/REQ-INDEX.md
   prs: []
   tests: []
 REQ-100:
   commits: []
   files:
-  - REQ.md
+  - docs/requirements/REQ-INDEX.md
   prs: []
   tests: []
 REQ-101:
   commits: []
   files:
-  - REQ.md
+  - docs/requirements/REQ-INDEX.md
   prs: []
   tests: []
 REQ-102:
   commits: []
   files:
-  - REQ.md
+  - docs/requirements/REQ-INDEX.md
   prs: []
   tests: []
 REQ-103:
   commits: []
   files:
-  - REQ.md
+  - docs/requirements/REQ-INDEX.md
   prs: []
   tests: []
 REQ-200:
   commits: []
   files:
-  - REQ.md
+  - docs/requirements/REQ-INDEX.md
   prs: []
   tests: []
 REQ-201:
   commits: []
   files:
-  - REQ.md
+  - docs/requirements/REQ-INDEX.md
   prs: []
   tests: []
 REQ-202:
   commits: []
   files:
-  - REQ.md
+  - docs/requirements/REQ-INDEX.md
   prs: []
   tests: []
 REQ-203:
   commits: []
   files:
-  - REQ.md
+  - docs/requirements/REQ-INDEX.md
   prs: []
   tests: []
 REQ-300:
   commits: []
   files:
-  - REQ.md
+  - docs/requirements/REQ-INDEX.md
   prs: []
   tests: []
 REQ-301:
   commits: []
   files:
-  - REQ.md
+  - docs/requirements/REQ-INDEX.md
   prs: []
   tests: []
 REQ-302:
   commits: []
   files:
-  - REQ.md
+  - docs/requirements/REQ-INDEX.md
   prs: []
   tests: []
 REQ-303:
   commits: []
   files:
-  - REQ.md
+  - docs/requirements/REQ-INDEX.md
   prs: []
   tests: []
