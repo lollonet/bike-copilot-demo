@@ -3,6 +3,8 @@ name: Claude PR Code Review
 on:
   pull_request:
     types: [opened, synchronize]
+  issue_comment:
+    types: [created]
 
 jobs:
   claude-review:
@@ -13,16 +15,16 @@ jobs:
       issues: write
       id-token: write
 
-    # Skip draft PRs and PRs with skip label
+    # Run on PR open/sync OR when trigger phrase is used in comment
     if: |
-      !github.event.pull_request.draft &&
-      !contains(github.event.pull_request.labels.*.name, 'skip-claude-review')
+      (github.event_name == 'pull_request' && !github.event.pull_request.draft && !contains(github.event.pull_request.labels.*.name, 'skip-claude-review')) ||
+      (github.event_name == 'issue_comment' && github.event.issue.pull_request && contains(github.event.comment.body, '/claude-review'))
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          fetch-depth: 1
+          fetch-depth: 0
 
       - name: Ensure Claude OAuth secret present
         env:
@@ -38,52 +40,64 @@ jobs:
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          claude_args: '--allowed-tools "Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh pr comment:*),Bash(gh issue view:*),Bash(git log:*),Bash(git diff:*),Bash(git show:*)"'
+          trigger_phrase: "/claude-review"
+          track_progress: true
           use_sticky_comment: true
+          claude_args: '--allowed-tools "Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh pr comment:*),Bash(gh issue view:*),Bash(git log:*),Bash(git diff:*),Bash(git show:*),Bash(uv run ruff check:*),Bash(uv run pytest:*)"'
           prompt: |
-            You are a senior code reviewer. Analyze this pull request and provide a thorough review.
+            You are a senior Python/FastAPI code reviewer for a bike parts dealer aggregation platform.
+
+            IMPORTANT: First read .claude/CLAUDE.md for project-specific guidelines and coding standards.
 
             ## Review Checklist
 
-            1. **Code Quality**
+            1. **Python/FastAPI Specifics**
+               - Proper async/await usage (no blocking calls in async functions)
+               - FastAPI dependency injection patterns
+               - Pydantic model validation and serialization
+               - SQLAlchemy 2.0 patterns (avoid legacy .query() API)
+               - Session management (proper commit/rollback/close)
+
+            2. **Code Quality**
                - Clean code principles (readability, maintainability)
                - DRY violations
-               - Proper error handling
-               - Appropriate logging
+               - Proper error handling with custom exceptions
+               - Structured logging with context
 
-            2. **Bugs & Logic Errors**
+            3. **Bugs & Logic Errors**
                - Off-by-one errors
-               - Null/None handling
+               - None handling (use Optional types correctly)
                - Edge cases not covered
-               - Race conditions
+               - Race conditions in concurrent operations
 
-            3. **Security**
-               - Input validation
-               - SQL injection risks
+            4. **Security**
+               - Input validation (especially path parameters)
+               - SQL injection risks (use parameterized queries)
                - Path traversal vulnerabilities
-               - Credential exposure
-               - SSRF risks
+               - Credential exposure in logs/responses
+               - SSRF risks in URL handling
 
-            4. **Performance**
-               - N+1 queries
-               - Memory leaks
+            5. **Performance**
+               - N+1 queries (use joinedload/selectinload)
+               - Memory leaks (especially in long-running crawlers)
                - Unbounded loops/queries
-               - Missing pagination
+               - Missing pagination in list endpoints
 
-            5. **Test Coverage**
+            6. **Test Coverage**
                - Are new features tested?
                - Are edge cases covered?
                - Are error paths tested?
 
             ## Instructions
 
-            1. First, run `gh pr diff ${{ github.event.pull_request.number }}` to see the changes
+            1. Run `gh pr diff ${{ github.event.pull_request.number }}` to see the changes
             2. Read the changed files to understand context
-            3. Identify issues by severity: CRITICAL, HIGH, MEDIUM, LOW
-            4. For each issue, provide:
+            3. Optionally run `uv run ruff check app/` for lint issues
+            4. Identify issues by severity: CRITICAL, HIGH, MEDIUM, LOW
+            5. For each issue, provide:
                - File and line number
                - Description of the problem
-               - Suggested fix
+               - Suggested fix with code example
 
             ## Output Format
 

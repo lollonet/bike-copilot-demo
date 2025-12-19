@@ -31,7 +31,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          fetch-depth: 1
+          fetch-depth: 0
 
       - name: Ensure Claude OAuth secret present
         env:
@@ -45,24 +45,39 @@ jobs:
       - name: Run Claude
         uses: anthropics/claude-code-action@v1
         with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          trigger_phrase: "@claude"
+          track_progress: true
           additional_permissions: |
             actions: read
+          claude_args: '--allowed-tools "Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh issue view:*),Bash(git log:*),Bash(git diff:*),Bash(uv run ruff check:*),Bash(uv run pytest:*)"'
           prompt: |
-            You are Claude, an AI assistant helping with this GitHub repository.
+            You are Claude, an AI assistant helping with this Python/FastAPI bike parts aggregation platform.
+
+            IMPORTANT: First read .claude/CLAUDE.md for project-specific guidelines and coding standards.
 
             ## Context
 
             A user has mentioned you with @claude. Respond helpfully to their request.
+
+            ## Project Stack
+            - Python 3.12 with FastAPI
+            - SQLAlchemy 2.0 (async support)
+            - Pydantic for validation
+            - uv for package management
+            - ruff for linting, basedpyright for type checking
+            - pytest for testing
 
             ## Available Actions
 
             You can:
             - Read and analyze code files
             - Search the codebase with Glob and Grep
-            - View PR diffs and details
+            - View PR diffs and details with gh commands
             - View issue details
-            - Run linting (ruff check) and tests (pytest) in read-only mode
+            - Run linting: `uv run ruff check app/`
+            - Run tests: `uv run pytest -v tests/`
             - Explain code, suggest improvements, answer questions
 
             You cannot:
@@ -82,4 +97,4 @@ jobs:
 
             ## User Request
 
-            ${{ github.event.comment.body || github.event.issue.body }}
+            ${{ github.event.comment.body || github.event.review.body || github.event.issue.body }}
