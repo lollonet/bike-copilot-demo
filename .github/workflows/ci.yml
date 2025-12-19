@@ -48,6 +48,7 @@ jobs:
         run: uv run pytest -v --tb=short tests/
 
       - name: Minimize uv cache
+        if: always()
         run: uv cache prune --ci
 
   complexity:
@@ -108,20 +109,26 @@ jobs:
         run: uv sync --frozen
 
       - name: Security scan with bandit
-        run: uv run bandit -r app/ -ll -ii --format json --output bandit-report.json || true
-
-      - name: Show bandit results
-        if: always()
+        id: bandit
+        continue-on-error: true
         run: |
-          if [ -f bandit-report.json ]; then
-            uv run bandit -r app/ -ll -ii --format txt || true
-          fi
+          uv run bandit -r app/ -ll -ii --format json --output bandit-report.json
+          uv run bandit -r app/ -ll -ii --format txt | tee bandit-report.txt
 
-      - uses: actions/upload-artifact@v4
+      - name: Upload security reports
+        uses: actions/upload-artifact@v4
         if: always()
         with:
           name: security-report
-          path: bandit-report.json
+          path: |
+            bandit-report.json
+            bandit-report.txt
+
+      - name: Fail if critical security issues
+        if: steps.bandit.outcome == 'failure'
+        run: |
+          echo "::warning::Security scan found issues. Review bandit-report.txt artifact."
+          echo "To enforce blocking, change 'continue-on-error: true' to 'false' in security job."
 
   traceability:
     runs-on: ubuntu-latest

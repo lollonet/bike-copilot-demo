@@ -59,3 +59,9 @@ reportUnknownParameterType = false
 reportUnknownLambdaType = false
 reportAny = false
 reportExplicitAny = false
+
+[tool.bandit]
+exclude_dirs = ["tests", ".venv", ".cache", "node_modules"]
+# -ll = only MEDIUM and HIGH severity, -ii = only MEDIUM and HIGH confidence
+# Skips: B101 (assert), B104 (bind all interfaces - dev server)
+skips = ["B101", "B104"]

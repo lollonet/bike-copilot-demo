@@ -90,7 +90,7 @@ jobs:
 
             ## Instructions
 
-            1. Run `gh pr diff ${{ github.event.pull_request.number }}` to see the changes
+            1. Run `gh pr diff ${{ github.event.pull_request.number || github.event.issue.number }}` to see the changes
             2. Read the changed files to understand context
             3. Optionally run `uv run ruff check app/` for lint issues
             4. Identify issues by severity: CRITICAL, HIGH, MEDIUM, LOW
