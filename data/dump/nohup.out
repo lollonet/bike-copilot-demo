@@ -1,0 +1,2 @@
+nohup: APP_DB_URL=sqlite:///./app.db: No such file or directory
+nohup: APP_DB_URL=sqlite:///./app.db: No such file or directory

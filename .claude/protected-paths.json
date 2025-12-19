@@ -1,0 +1,26 @@
+{
+  "secrets": {
+    "never_read": [
+      "**/.env*",
+      "**/auth.json",
+      "**/credentials*",
+      "**/*secret*",
+      "**/*.pem",
+      "**/*.key"
+    ],
+    "never_commit": [
+      "**/.env*",
+      "**/secrets/**"
+    ]
+  },
+  "state_files": {
+    "never_modify": [
+      "~/.claude.json",
+      "~/.codex/auth.json",
+      "~/.codex/sessions/*",
+      "~/.codex/log/*",
+      "**/OAuth/**",
+      "**/.cache/**"
+    ]
+  }
+}

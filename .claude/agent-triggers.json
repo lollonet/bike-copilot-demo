@@ -1,0 +1,52 @@
+{
+  "type-safety-enforcer": {
+    "patterns": [
+      "type",
+      "typing",
+      "Any",
+      "cast",
+      "hasattr",
+      "getattr",
+      "# type: ignore"
+    ],
+    "auto_in_modes": [
+      "SOTA"
+    ]
+  },
+  "skeptic-reviewer": {
+    "patterns": [
+      "review",
+      "audit",
+      "security",
+      "vulnerability",
+      "risk"
+    ],
+    "auto_in_modes": [
+      "SOTA"
+    ]
+  },
+  "system-architect": {
+    "patterns": [
+      "design",
+      "architect",
+      "structure",
+      "refactor"
+    ],
+    "auto_in_modes": [
+      "SOTA"
+    ]
+  },
+  "venv-truth-inspector": {
+    "patterns": [
+      "library",
+      "dependency",
+      "package",
+      "api",
+      ".venv"
+    ],
+    "auto_in_modes": [
+      "FAST",
+      "SOTA"
+    ]
+  }
+}

@@ -1,0 +1,1 @@
+/Users/claudio/.artintel/CORE.md

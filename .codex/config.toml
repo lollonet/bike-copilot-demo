@@ -1,0 +1,52 @@
+model = "gpt-5.1-codex-max"
+approval_policy = "on-request"
+sandbox_mode = "workspace-write"
+model_reasoning_effort = "xhigh"
+file_opener = "vscode"
+
+[tui]
+notifications = true
+
+[projects]
+
+[mcp_servers.context7]
+startup_timeout_sec = 20
+url = "https://mcp.context7.com/mcp"
+enabled = true
+
+[mcp_servers.context7.env_http_headers]
+CONTEXT7_API_KEY = "CONTEXT7_API_KEY"
+
+[shell_environment_policy]
+inherit = "core"
+include_only = [
+    "PATH",
+    "HOME",
+    "LANG",
+    "LC_ALL",
+    "VIRTUAL_ENV",
+]
+
+[shell_environment_policy.set]
+EDITOR = "vim"
+
+[sandbox_workspace_write]
+network_access = true
+
+[tools]
+web_search = true
+
+[profiles.safe-readonly]
+sandbox_mode = "read-only"
+approval_policy = "on-request"
+
+[profiles.fast-local]
+sandbox_mode = "workspace-write"
+approval_policy = "on-failure"
+
+[profiles.yolo]
+sandbox_mode = "danger-full-access"
+approval_policy = "never"
+
+[history]
+persistence = "save-all"

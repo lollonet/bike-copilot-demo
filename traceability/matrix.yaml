@@ -2,6 +2,7 @@ REQ-001:
   commits: []
   files:
   - .codepilot/sessions/2025-12-18-auth-fix.md
+  - CLAUDE_DESKTOP_INSTRUCTIONS.md
   - README.md
   - docs/architecture/ARC-001-ci-cd.md
   - docs/requirements/REQ-001.standards-adoption.md
@@ -12,6 +13,7 @@ REQ-001:
 REQ-002:
   commits: []
   files:
+  - CLAUDE_DESKTOP_INSTRUCTIONS.md
   - docs/requirements/REQ-002.ui-facets.md
   - docs/requirements/REQ-INDEX.md
   prs: []
@@ -19,7 +21,7 @@ REQ-002:
 REQ-003:
   commits: []
   files:
-  - README.md
+  - CLAUDE_DESKTOP_INSTRUCTIONS.md
   - docs/requirements/REQ-003.provider-storeden.md
   - docs/requirements/REQ-INDEX.md
   prs: []
@@ -28,6 +30,7 @@ REQ-004:
   commits: []
   files:
   - .codepilot/sessions/2025-12-17-parallel-ingest.md
+  - CLAUDE_DESKTOP_INSTRUCTIONS.md
   - MOCKUP-README.md
   - docs/architecture/ARC-020-ux-wireframes.md
   - docs/requirements/REQ-004.ui-pn-first.md
@@ -39,6 +42,7 @@ REQ-005:
   commits: []
   files:
   - .codepilot/sessions/2025-12-17-parallel-ingest.md
+  - CLAUDE_DESKTOP_INSTRUCTIONS.md
   - MOCKUP-README.md
   - docs/architecture/ARC-020-ux-wireframes.md
   - docs/requirements/REQ-005.order-optimizer.md
@@ -48,6 +52,7 @@ REQ-005:
 REQ-006:
   commits: []
   files:
+  - CLAUDE_DESKTOP_INSTRUCTIONS.md
   - MOCKUP-README.md
   - docs/architecture/ARC-020-ux-wireframes.md
   - docs/requirements/REQ-006.quote-branding.md
@@ -59,6 +64,7 @@ REQ-007:
   files:
   - .codepilot/sessions/2025-12-17-parallel-ingest.md
   - .codepilot/sessions/2025-12-18-auth-fix.md
+  - CLAUDE_DESKTOP_INSTRUCTIONS.md
   - README.md
   - docs/requirements/REQ-007.dealer-management.md
   - docs/requirements/REQ-INDEX.md
@@ -67,9 +73,81 @@ REQ-007:
 REQ-008:
   commits: []
   files:
-  - README.md
+  - CLAUDE_DESKTOP_INSTRUCTIONS.md
   - SESSION_SUMMARY.md
   - docs/requirements/REQ-008.kpi-freshness.md
   - docs/requirements/REQ-INDEX.md
+  prs: []
+  tests: []
+REQ-100:
+  commits: []
+  files:
+  - REQ.md
+  prs: []
+  tests: []
+REQ-101:
+  commits: []
+  files:
+  - REQ.md
+  prs: []
+  tests: []
+REQ-102:
+  commits: []
+  files:
+  - REQ.md
+  prs: []
+  tests: []
+REQ-103:
+  commits: []
+  files:
+  - REQ.md
+  prs: []
+  tests: []
+REQ-200:
+  commits: []
+  files:
+  - REQ.md
+  prs: []
+  tests: []
+REQ-201:
+  commits: []
+  files:
+  - REQ.md
+  prs: []
+  tests: []
+REQ-202:
+  commits: []
+  files:
+  - REQ.md
+  prs: []
+  tests: []
+REQ-203:
+  commits: []
+  files:
+  - REQ.md
+  prs: []
+  tests: []
+REQ-300:
+  commits: []
+  files:
+  - REQ.md
+  prs: []
+  tests: []
+REQ-301:
+  commits: []
+  files:
+  - REQ.md
+  prs: []
+  tests: []
+REQ-302:
+  commits: []
+  files:
+  - REQ.md
+  prs: []
+  tests: []
+REQ-303:
+  commits: []
+  files:
+  - REQ.md
   prs: []
   tests: []
