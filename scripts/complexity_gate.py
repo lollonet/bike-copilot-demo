@@ -34,6 +34,8 @@ EXCLUDE_DIRS = [
     "build",
     ".ruff_cache",
     "node_modules",
+    "_legacy",
+    "app/_legacy",
 ]
 
 

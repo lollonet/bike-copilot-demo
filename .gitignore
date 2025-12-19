@@ -24,9 +24,18 @@ providers/html/
 
 # Gemini/Claude temporary files
 node_modules/
-.claude/
-.codex/
-.gemini/
+.claude/*
+!.claude/settings.json
+!.claude/agent-triggers.json
+!.claude/protected-paths.json
+
+.codex/*
+!.codex/config.toml
+!.codex/prompts/
+
+.gemini/*
+!.gemini/settings.json
+
 .mcp.json
 assessment/
 data/dump/nohup.out
