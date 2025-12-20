@@ -11,9 +11,9 @@
 - [ ] New tests added/updated
 - [ ] Documentation updated (SSOT)
 
-## 🤖 AI Reviews
+## 🤖 Bot Reviews
 Reviews start automatically on PR open/sync.
-- To re-trigger Codex: comment `@codex review`
+- To re-trigger CI Feedback: comment `@ci review`
 - To re-trigger Claude: comment `@claude review`
 
 ---
