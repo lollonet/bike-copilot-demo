@@ -26,4 +26,5 @@ Mese di trasformazione radicale (**"Gemini Integration"**). Il progetto è passa
 Il branch è ora il nuovo standard di riferimento:
 - ✅ CI Verde (Pipeline SOTA attiva).
 - ✅ Governance garantita da hooks e Complexity Gate.
-- ✅ Struttura pronta per la migrazione del dominio.
+- ✅ Struttura pronta per la migrazione del dominio.- **2025-12-20**: PR #69 merged - CI: Fix Claude review checkout on comment trigger (@lollonet)
+  [View PR](https://github.com/lollonet/bike-copilot-demo/pull/69)
