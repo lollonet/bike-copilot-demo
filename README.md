@@ -34,8 +34,10 @@ cp .env.example .env
 
 ### Essential Commands
 ```bash
-make status     # Run all quality checks (lint, format, type)
-make test       # Execute test suite with coverage
+make status     # Run basic quality checks (lint, format, type)
+make test       # Execute test suite (standard tests only)
+make ci-fast    # Local Gatekeeper: Lint + Type + Fast Test (Pre-push check)
+make ci-sota    # Full Verification: Security + Complexity + Traceability
 make api        # Start FastAPI server (port 8000)
 make ui-pn      # Launch PN-first UI (port 7861)
 make crawl      # Dealer sync (alias web-crawl: Montanini + Ciclodiffusione)
