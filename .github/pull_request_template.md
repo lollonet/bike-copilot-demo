@@ -11,8 +11,11 @@
 - [ ] New tests added/updated
 - [ ] Documentation updated (SSOT)
 
-## 🤖 AI Review Trigger
-/cc @chatgpt-codex-connector @claude-code
+## 🤖 AI Reviews
+Reviews start automatically on PR open/sync.
+- To re-trigger Codex: comment `@codex review`
+- To re-trigger Claude: comment `@claude review`
 
 ---
 *By submitting this PR, I confirm that I have followed the project's SOTA standards.*
+<!-- /cc @chatgpt-codex-connector @claude-code -->

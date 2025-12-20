@@ -65,3 +65,8 @@ exclude_dirs = ["tests", ".venv", ".cache", "node_modules"]
 # -ll = only MEDIUM and HIGH severity, -ii = only MEDIUM and HIGH confidence
 # Skips: B101 (assert), B104 (bind all interfaces - dev server)
 skips = ["B101", "B104"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+norecursedirs = ["tests/_legacy", "app/_legacy", ".venv", ".cache", "node_modules"]
+addopts = "--ignore=tests/_legacy"

@@ -5,7 +5,7 @@ UV_ENV := UV_CACHE_DIR=.uv-cache XDG_CACHE_HOME=.uv-cache PYTHONPATH=.
 CI_FOLDERS := app tests scripts
 
 ## 🚀 Quality & CI
-.PHONY: status ci-fast ci-sota lint typecheck test-fast
+.PHONY: status ci-fast ci-sota lint typecheck test-fast test
 
 status: lint typecheck
 
@@ -18,6 +18,9 @@ typecheck:
 
 test-fast:
 	$(UV_ENV) uv run pytest -q -m "not slow"
+
+test:
+	$(UV_ENV) uv run pytest -v
 
 # FAST CI: Pre-commit/Pre-push (Local)
 ci-fast: lint typecheck test-fast
@@ -43,9 +46,6 @@ ui:
 
 ui-pn:
 	$(UV_ENV) uv run python -m app.ui_pn
-
-test:
-	$(UV_ENV) uv run pytest -v
 
 ## 🕷️ Crawling
 .PHONY: crawl-montanini crawl-ciclodiffusione crawl-rms crawl-ciclopromo web-crawl crawl all-dealers-crawl
