@@ -66,7 +66,6 @@ REQ-007:
 REQ-008:
   commits: []
   files:
-  - .codepilot/sessions/SESSION_SUMMARY.md
   - CLAUDE_DESKTOP_INSTRUCTIONS.md
   - docs/requirements/REQ-008.kpi-freshness.md
   prs: []
