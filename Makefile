@@ -5,7 +5,7 @@ UV_ENV := UV_CACHE_DIR=.uv-cache XDG_CACHE_HOME=.uv-cache PYTHONPATH=.
 CI_FOLDERS := app tests scripts
 
 ## 🚀 Quality & CI
-.PHONY: status ci-fast ci-sota lint typecheck test-fast test-legacy test
+.PHONY: status ci-fast ci-sota lint typecheck test-fast test
 
 status: lint typecheck
 
@@ -21,10 +21,6 @@ test-fast:
 
 test:
 	$(UV_ENV) uv run pytest -v
-
-test-legacy:
-	@echo "Running LEGACY tests (quarantined)..."
-	$(UV_ENV) uv run pytest tests/_legacy || true
 
 # FAST CI: Pre-commit/Pre-push (Local)
 ci-fast: lint typecheck test-fast

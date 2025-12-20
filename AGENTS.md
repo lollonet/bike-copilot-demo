@@ -33,12 +33,12 @@ Docs System (authoritative)
 Tools and Gates
 - Hooks: enable once per clone: `git config core.hooksPath .githooks`.
   - Commit messages must include `REQ-###` (or `INIT-000` for bootstrap).
-- Lint/spec: `uv run python scripts/spec_lint.py`.
+- Lint/spec: `make status` (or `uv run python scripts/spec_lint.py`).
 - Traceability matrix: `uv run python scripts/traceability.py`.
   - The script skips `traceability/matrix.yaml` and common generated dirs; output is `traceability/matrix.yaml`.
-- Status (local gate): `bash scripts/status.sh` (use `--fix` to apply ruff fixes/format).
-- Tests: `uv run pytest -q` (CI uses this; do not use `uvx pytest`).
-- CI shape: checkout → setup‑python → setup‑uv → `uv sync` → spec‑lint + traceability → tests → upload matrix artifact.
+- Fast Local Check (Gate): `make ci-fast` (runs lint, typecheck, and fast tests).
+- Tests: `make test` (runs standard tests; legacy tests are quarantined in `tests/_legacy` and ignored by default).
+- CI shape: checkout → setup‑python → setup‑uv → `uv sync` → ci‑sota (spec-lint, traceability, complexity, security, tests).
 - Releases: tag (`git tag -a vX.Y.Z … && git push origin vX.Y.Z`) and publish (`gh release create … && gh release edit … --latest`).
 
 Command Cheatsheet
@@ -46,8 +46,10 @@ Command Cheatsheet
 - Hooks: `git config core.hooksPath .githooks`
 - Spec lint: `uv run python scripts/spec_lint.py`
 - Trace matrix: `uv run python scripts/traceability.py`
-- Status: `bash scripts/status.sh [--fix]`
-- Tests: `uv run pytest -q`
+- Status: `make status` (ruff check + format)
+- Fast CI Check: `make ci-fast`
+- SOTA CI Check: `make ci-sota`
+- Standard Tests: `make test`
 - Tag: `git tag -a vX.Y.Z -m "REQ-###: …" && git push origin vX.Y.Z`
 - Release: `gh release create vX.Y.Z -t "vX.Y.Z" -F notes.md && gh release edit vX.Y.Z --latest`
 
