@@ -1,5 +1,16 @@
 {
   "general": {
     "previewFeatures": true
+  },
+  "mcpServers": {
+    "sqlite": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-sqlite",
+        "--db",
+        "app.db"
+      ]
+    }
   }
 }

@@ -5,7 +5,7 @@ Mese di trasformazione radicale (**"Gemini Integration"**). Il progetto è passa
 ## Cronologia Attività
 
 ### 2025-12-20: Stabilizzazione e Final Polish (PR #68)
-- **Stato**: Ready for Merge.
+- **Stato**: Merged.
 - **Obiettivo**: Risolvere il blocco della CI e uniformare l'interfaccia AI.
 - **Highlights**:
   - Strategia **Legacy Quarantine**: Isolamento di test e codice deprecato in `_legacy/`.
