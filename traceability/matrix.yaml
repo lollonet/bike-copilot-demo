@@ -3,8 +3,11 @@ REQ-001:
   files:
   - .codepilot/sessions/2025-12-18-auth-fix.md
   - README.md
-  - docs/architecture/ARC-001-ci-cd.md
-  - docs/requirements/REQ-001.standards-adoption.md
+  - docs/TRACEABILITY.md
+  - docs/api/examples.md
+  - docs/requirements/REQ-001.search.md
+  - docs/requirements/REQ-002.offers-display.md
+  - docs/requirements/REQ-004.cart.md
   - docs/requirements/REQ-INDEX.md
   - scripts/complexity_gate.py
   prs: []
@@ -12,7 +15,11 @@ REQ-001:
 REQ-002:
   commits: []
   files:
-  - docs/requirements/REQ-002.ui-facets.md
+  - docs/TRACEABILITY.md
+  - docs/decisions/ADR-002-htmx.md
+  - docs/requirements/REQ-001.search.md
+  - docs/requirements/REQ-002.offers-display.md
+  - docs/requirements/REQ-004.cart.md
   - docs/requirements/REQ-INDEX.md
   prs: []
   tests: []
@@ -20,7 +27,12 @@ REQ-003:
   commits: []
   files:
   - README.md
-  - docs/requirements/REQ-003.provider-storeden.md
+  - docs/TRACEABILITY.md
+  - docs/api/examples.md
+  - docs/requirements/REQ-002.offers-display.md
+  - docs/requirements/REQ-003.optimizer.md
+  - docs/requirements/REQ-004.cart.md
+  - docs/requirements/REQ-006.dealer-config.md
   - docs/requirements/REQ-INDEX.md
   prs: []
   tests: []
@@ -29,9 +41,11 @@ REQ-004:
   files:
   - .codepilot/sessions/2025-12-17-parallel-ingest.md
   - MOCKUP-README.md
-  - docs/architecture/ARC-020-ux-wireframes.md
-  - docs/requirements/REQ-004.ui-pn-first.md
-  - docs/requirements/REQ-005.order-optimizer.md
+  - docs/TRACEABILITY.md
+  - docs/requirements/REQ-002.offers-display.md
+  - docs/requirements/REQ-003.optimizer.md
+  - docs/requirements/REQ-004.cart.md
+  - docs/requirements/REQ-005.quotes.md
   - docs/requirements/REQ-INDEX.md
   prs: []
   tests: []
@@ -40,8 +54,10 @@ REQ-005:
   files:
   - .codepilot/sessions/2025-12-17-parallel-ingest.md
   - MOCKUP-README.md
-  - docs/architecture/ARC-020-ux-wireframes.md
-  - docs/requirements/REQ-005.order-optimizer.md
+  - docs/TRACEABILITY.md
+  - docs/api/examples.md
+  - docs/requirements/REQ-004.cart.md
+  - docs/requirements/REQ-005.quotes.md
   - docs/requirements/REQ-INDEX.md
   prs: []
   tests: []
@@ -49,8 +65,12 @@ REQ-006:
   commits: []
   files:
   - MOCKUP-README.md
-  - docs/architecture/ARC-020-ux-wireframes.md
-  - docs/requirements/REQ-006.quote-branding.md
+  - docs/TRACEABILITY.md
+  - docs/api/examples.md
+  - docs/requirements/REQ-003.optimizer.md
+  - docs/requirements/REQ-005.quotes.md
+  - docs/requirements/REQ-006.dealer-config.md
+  - docs/requirements/REQ-007.crawling.md
   - docs/requirements/REQ-INDEX.md
   prs: []
   tests: []
@@ -60,7 +80,11 @@ REQ-007:
   - .codepilot/sessions/2025-12-17-parallel-ingest.md
   - .codepilot/sessions/2025-12-18-auth-fix.md
   - README.md
-  - docs/requirements/REQ-007.dealer-management.md
+  - docs/TRACEABILITY.md
+  - docs/decisions/ADR-003-playwright.md
+  - docs/requirements/REQ-006.dealer-config.md
+  - docs/requirements/REQ-007.crawling.md
+  - docs/requirements/REQ-008.kpi.md
   - docs/requirements/REQ-INDEX.md
   prs: []
   tests: []
@@ -69,7 +93,40 @@ REQ-008:
   files:
   - README.md
   - SESSION_SUMMARY.md
-  - docs/requirements/REQ-008.kpi-freshness.md
+  - docs/TRACEABILITY.md
+  - docs/api/examples.md
+  - docs/requirements/REQ-007.crawling.md
+  - docs/requirements/REQ-008.kpi.md
+  - docs/requirements/REQ-INDEX.md
+  prs: []
+  tests: []
+REQ-099:
+  commits: []
+  files:
+  - docs/requirements/REQ-INDEX.md
+  prs: []
+  tests: []
+REQ-100:
+  commits: []
+  files:
+  - docs/requirements/REQ-INDEX.md
+  prs: []
+  tests: []
+REQ-199:
+  commits: []
+  files:
+  - docs/requirements/REQ-INDEX.md
+  prs: []
+  tests: []
+REQ-200:
+  commits: []
+  files:
+  - docs/requirements/REQ-INDEX.md
+  prs: []
+  tests: []
+REQ-299:
+  commits: []
+  files:
   - docs/requirements/REQ-INDEX.md
   prs: []
   tests: []

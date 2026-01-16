@@ -32,7 +32,7 @@ for p in [IDX["requirements"], IDX["architecture"], IDX["technology"]]:
         require(False, f"Missing SSoT file: {p}")
 # Scan docs
 for path in glob.glob("docs/**/*.md", recursive=True):
-    if "/standards/" in path:
+    if "/standards/" in path or "/api/" in path:
         continue
     meta = fm(path)
     require(meta.get("id"), f"Missing id in {path}")
@@ -41,8 +41,15 @@ for path in glob.glob("docs/**/*.md", recursive=True):
             require(False, f"Duplicate id {meta['id']} in {path}")
         ids.add(meta["id"])
     dom = meta.get("domain")
+    # Allowed domains:
+    #   requirements - REQ-### files (product/feature requirements)
+    #   architecture - ARC-### files (system design, diagrams)
+    #   technology   - TECH-### files (stack, dependencies, schema)
+    #   decisions    - ADR-### files (architecture decision records)
+    #   api          - API documentation (examples, contracts)
+    #   docs         - General documentation (traceability, guides)
     require(
-        dom in {"requirements", "architecture", "technology", "adr"},
+        dom in {"requirements", "architecture", "technology", "decisions", "api", "docs"},
         f"Bad domain in {path}",
     )
     if dom == "requirements":
@@ -52,7 +59,7 @@ for path in glob.glob("docs/**/*.md", recursive=True):
             require(False, f"Missing acceptance in {path}")
 # No-overlap: id prefix vs domain
 for path in glob.glob("docs/**/*.md", recursive=True):
-    if "/standards/" in path:
+    if "/standards/" in path or "/api/" in path:
         continue
     meta = fm(path)
     i = meta.get("id", "")
@@ -67,6 +74,6 @@ for path in glob.glob("docs/**/*.md", recursive=True):
         require(
             i.startswith("TECH-") or i == "TECH-INDEX", f"ID {i} must start with TECH-"
         )
-    if d == "adr":
+    if d == "decisions":
         require(i.startswith("ADR-"), f"ID {i} must start with ADR-")
 sys.exit(err)
