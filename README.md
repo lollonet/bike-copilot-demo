@@ -16,19 +16,33 @@
 
 ```
 docs/
-├── architecture/          # System design and patterns
-│   ├── ARC-001-ci-cd.md  # CI/CD pipeline with quality gates
-│   ├── ARC-010-overview.md # High-level architecture
-│   └── ARC-020-ux-wireframes.md # PN-first UX design
-├── requirements/          # Feature specifications
-│   ├── REQ-001.standards-adoption.md
-│   ├── REQ-003.provider-storeden.md
-│   ├── REQ-007.dealer-management.md # Dealer registry system
-│   └── REQ-008.kpi-freshness.md
+├── requirements/           # Feature specifications (REQ-001 to REQ-008)
+│   ├── REQ-INDEX.md        # Requirements index (source of truth)
+│   ├── REQ-001.search.md   # Product search
+│   ├── REQ-002.offers-display.md
+│   ├── REQ-003.optimizer.md # Order optimization
+│   ├── REQ-004.cart.md
+│   ├── REQ-005.quotes.md
+│   ├── REQ-006.dealer-config.md
+│   ├── REQ-007.crawling.md
+│   └── REQ-008.kpi.md      # Quality KPIs
+├── architecture/           # System design
+│   ├── ARC-INDEX.md        # Architecture index
+│   └── ARC-010.overview.md # High-level architecture
+├── technology/             # Stack decisions
+│   ├── TECH-INDEX.md       # Technology index
+│   └── TECH-010.stack.md   # Runtime stack
+├── decisions/              # Architecture Decision Records
+│   ├── ADR-001-sqlite.md
+│   ├── ADR-002-htmx.md
+│   └── ADR-003-playwright.md
+├── api/
+│   └── examples.md         # API curl examples
 ├── standards/
-│   └── RUNBOOKS/          # Operational procedures
-└── technology/
-    └── TECH-010-runtime.md # Stack decisions
+│   ├── CODE-STYLE.md
+│   ├── AGENTS.md           # Engineering charter
+│   └── RUNBOOKS/           # Operational procedures
+└── TRACEABILITY.md         # Requirements traceability matrix
 ```
 
 ## 🚀 Quick Start
