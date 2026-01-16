@@ -42,6 +42,7 @@ cache-dir = ".cache/uv"
 [dependency-groups]
 dev = [
     "bandit>=1.9.2",
+    "pytest-cov>=7.0.0",
     "ruff>=0.14.9",
 ]
 

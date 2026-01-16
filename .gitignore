@@ -21,3 +21,4 @@ out/
 db-*.md
 providers/html/
 *.har
+.coverage
