@@ -55,9 +55,8 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 # Clone and setup
 git clone https://github.com/yourusername/bike-copilot-demo
 cd bike-copilot-demo
-uv venv
+uv sync  # Creates venv and installs all dependencies from pyproject.toml
 source .venv/bin/activate  # On Windows: .venv\Scripts\activate
-uv pip install -r requirements.txt
 
 # Configure environment
 cp .env.example .env
