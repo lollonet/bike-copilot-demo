@@ -59,27 +59,24 @@ curl -X POST http://localhost:8000/search \
   }'
 ```
 
-**Response:**
+**Response (SearchResponse):**
 ```json
 {
   "items": [
     {
-      "id": 123,
+      "id": 456,
       "brand": "Shimano",
       "mpn": "IM8100JLFPRA100",
-      "name": "Shimano XT BR-M8100 Disc Brake",
-      "ean": "4524667890123",
-      "offers": [
-        {
-          "id": 456,
-          "supplier": "rms",
-          "price": 89.90,
-          "in_stock": true,
-          "lead_time_days": 3
-        }
-      ]
+      "supplier": "rms",
+      "price": 89.90,
+      "in_stock": true,
+      "lead_time_days": 3,
+      "score": 0.95,
+      "pros": ["in stock", "fast shipping"],
+      "cons": []
     }
-  ]
+  ],
+  "ts": "2024-12-19T14:30:00Z"
 }
 ```
 
@@ -277,9 +274,8 @@ curl -u "admin:password" http://localhost:8000/kpi/summary
     {
       "dealer": "rms",
       "offers": 12500,
-      "updated_24h": 11200,
       "updated_24h_pct": 89.6,
-      "oldest_ts": "2024-12-18T03:15:00Z"
+      "lag_days": 0.5
     }
   ],
   "ts": "2024-12-19T14:30:00Z"
