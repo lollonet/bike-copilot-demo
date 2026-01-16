@@ -144,7 +144,7 @@ curl -X POST http://localhost:8000/optimize \
       {"maker_pn": "RT86", "qty": 2}
     ],
     "params": {
-      "scenario": "best-price"
+      "scenario": "miglior-prezzo"
     }
   }'
 ```
@@ -160,7 +160,7 @@ curl -X POST http://localhost:8000/optimize \
       {"maker_pn": "RT86", "qty": 2}
     ],
     "params": {
-      "scenario": "single-dealer"
+      "scenario": "un-solo-dealer"
     }
   }'
 ```
@@ -235,53 +235,54 @@ curl -u "admin:password" \
 
 ## KPI Endpoints (REQ-008)
 
+**Note:** Both KPI endpoints require Basic Auth.
+
 ### Today's KPIs
 
+Returns event counts for the current day (since midnight UTC).
+
 ```bash
-curl http://localhost:8000/kpi/today
+curl -u "admin:password" http://localhost:8000/kpi/today
 ```
 
 **Response:**
 ```json
 {
-  "timestamp": "2024-12-19T14:30:00Z",
-  "freshness": {
-    "value": 87.5,
-    "target": 85.0,
-    "status": "green"
-  },
-  "crawl_success": {
-    "value": 98.0,
-    "target": 95.0,
-    "status": "green"
-  },
-  "stale_offers": {
-    "count": 234,
-    "total": 1875,
-    "pct": 12.5
-  }
+  "ingest_complete": 5,
+  "search": 127,
+  "optimize": 23,
+  "quote": 8
 }
 ```
 
-### KPI Summary by Dealer
+### KPI Summary
+
+Returns comprehensive KPI metrics across all dealers.
 
 ```bash
-curl http://localhost:8000/kpi/summary
+curl -u "admin:password" http://localhost:8000/kpi/summary
 ```
 
-**Response:**
+**Response (KPISummaryResponse):**
 ```json
 {
-  "dealers": [
+  "products_total": 15234,
+  "products_with_offers": 12500,
+  "coverage_pn_pct": 82.05,
+  "offers_total": 45000,
+  "offers_updated_24h": 38250,
+  "updated_24h_pct": 85.0,
+  "pn_unmapped": 234,
+  "per_dealer": [
     {
-      "name": "rms",
+      "dealer": "rms",
       "offers": 12500,
-      "fresh_offers": 11200,
-      "freshness_pct": 89.6,
-      "last_crawl": "2024-12-19T03:15:00Z",
-      "status": "green"
+      "updated_24h": 11200,
+      "updated_24h_pct": 89.6,
+      "oldest_ts": "2024-12-18T03:15:00Z"
     }
-  ]
+  ],
+  "ts": "2024-12-19T14:30:00Z"
 }
 ```
 

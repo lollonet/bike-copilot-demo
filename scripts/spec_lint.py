@@ -41,6 +41,13 @@ for path in glob.glob("docs/**/*.md", recursive=True):
             require(False, f"Duplicate id {meta['id']} in {path}")
         ids.add(meta["id"])
     dom = meta.get("domain")
+    # Allowed domains:
+    #   requirements - REQ-### files (product/feature requirements)
+    #   architecture - ARC-### files (system design, diagrams)
+    #   technology   - TECH-### files (stack, dependencies, schema)
+    #   decisions    - ADR-### files (architecture decision records)
+    #   api          - API documentation (examples, contracts)
+    #   docs         - General documentation (traceability, guides)
     require(
         dom in {"requirements", "architecture", "technology", "decisions", "api", "docs"},
         f"Bad domain in {path}",
