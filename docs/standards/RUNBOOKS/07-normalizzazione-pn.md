@@ -13,4 +13,4 @@ Esempi
 - `CN-HG601` e `CNHG601` → alias allo stesso PN normalizzato.
 
 Esiti
-- Documenta le regole nel TECH.md; aggiorna alias quando emergono nuovi pattern.
+- Documenta le regole in `docs/technology/TECH-010.stack.md`; aggiorna alias quando emergono nuovi pattern.

@@ -6,9 +6,9 @@ if ! command -v uv >/dev/null 2>&1; then
   exit 1
 fi
 
-uv run python -c "print('Python via uv is ready')"
+uv sync  # Install dependencies from pyproject.toml
 
-uv pip install -r requirements.txt
+uv run python -c "print('Python via uv is ready')"
 
 chmod +x scripts/seed_demo.sh
 uv run bash scripts/seed_demo.sh

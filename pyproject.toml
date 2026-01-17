@@ -1,9 +1,7 @@
-## Created by Codex Agent to migrate from requirements.txt to uv-managed dependencies.
-
 [project]
-name = "basscodebase"
+name = "bike-copilot"
 version = "0.1.0"
-description = "BassCodeBase: uv-managed Python project"
+description = "Enterprise B2B platform for bicycle parts dealers"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
@@ -42,7 +40,13 @@ cache-dir = ".cache/uv"
 [dependency-groups]
 dev = [
     "bandit>=1.9.2",
+    "pytest-cov>=7.0.0",
     "ruff>=0.14.9",
+]
+
+[project.optional-dependencies]
+integration = [
+    "playwright>=1.40.0",
 ]
 
 [tool.basedpyright]
@@ -65,3 +69,9 @@ exclude_dirs = ["tests", ".venv", ".cache", "node_modules"]
 # -ll = only MEDIUM and HIGH severity, -ii = only MEDIUM and HIGH confidence
 # Skips: B101 (assert), B104 (bind all interfaces - dev server)
 skips = ["B101", "B104"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "integration: marks tests as integration tests (require network/credentials)",
+]

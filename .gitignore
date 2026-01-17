@@ -21,3 +21,11 @@ out/
 db-*.md
 providers/html/
 *.har
+.coverage
+
+# session and temporary docs
+.codepilot/
+SESSION_SUMMARY*.md
+
+# test artifacts (may contain sensitive B2B data)
+out/test-screenshots/
