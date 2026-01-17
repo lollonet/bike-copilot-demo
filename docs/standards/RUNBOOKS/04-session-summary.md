@@ -6,8 +6,8 @@ Purpose
 - Keep a concise, instruction-only summary per work session to reduce onboarding time after context switches.
 
 Template
-- File: `SESSION_SUMMARY.md` (generic; no project-specific content).
-- Use it as a base and create per-session copies under `.codepilot/sessions/`.
+- Session summaries are created under `.codepilot/sessions/`.
+- Use the helper script to generate prefilled templates.
 
 Helper script
 - Generate a prefilled summary with current metadata:

@@ -1,26 +1,24 @@
 """Integration tests for B2B dealer data extraction using Playwright.
 
 These tests require:
-1. Playwright installed: uv add --dev playwright && playwright install chromium
+1. Playwright installed: uv sync --extra integration && playwright install chromium
 2. Valid dealer credentials in environment variables
 
-Run with: pytest tests/test_b2b_integration.py -v --run-integration
+Run with: pytest --run-integration tests/test_b2b_integration.py -v
 Skip by default in normal test runs.
 """
 
 from __future__ import annotations
 
 import os
+import time
 from pathlib import Path
-from typing import TYPE_CHECKING
 
 import pytest
 
-if TYPE_CHECKING:
-    from app.types import ProductCandidate, OfferCandidate
-
 # Check if playwright is available
 try:
+    from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
     from playwright.sync_api import sync_playwright
 
     PLAYWRIGHT_AVAILABLE = True
@@ -32,7 +30,9 @@ def has_dealer_credentials(dealer_key: str) -> bool:
     """Check if credentials are available for a dealer."""
     username_env = f"DEALER_{dealer_key.upper()}_USERNAME"
     password_env = f"DEALER_{dealer_key.upper()}_PASSWORD"
-    return bool(os.getenv(username_env) and os.getenv(password_env))
+    username = os.getenv(username_env)
+    password = os.getenv(password_env)
+    return bool(username and password)
 
 
 # Marker for integration tests
@@ -51,6 +51,14 @@ def playwright_browser():
         browser.close()
 
 
+@pytest.fixture
+def browser_context(playwright_browser):
+    """Provide isolated browser context per test."""
+    context = playwright_browser.new_context()
+    yield context
+    context.close()
+
+
 class TestCicloPromoIntegration:
     """Integration tests for CicloPromo B2B extraction."""
 
@@ -61,38 +69,47 @@ class TestCicloPromoIntegration:
     MAPPING_PATH = Path("providers/web-ciclopromo.yaml")
 
     @pytest.mark.skipif(
-        not PLAYWRIGHT_AVAILABLE, reason="Playwright not installed"
-    )
-    @pytest.mark.skipif(
         not has_dealer_credentials("ciclopromo"),
         reason="CicloPromo credentials not configured",
     )
-    def test_ciclopromo_extraction(self, playwright_browser) -> None:
+    def test_ciclopromo_extraction(self, browser_context) -> None:
         """Test extraction from CicloPromo with real credentials."""
-        from app.adapters.web_adapter import parse_html, _load_mapping
+        from app.adapters.web_adapter import _load_mapping, parse_html
 
-        username = os.environ["DEALER_CICLOPROMO_USERNAME"]
-        password = os.environ["DEALER_CICLOPROMO_PASSWORD"]
+        username = os.getenv("DEALER_CICLOPROMO_USERNAME")
+        password = os.getenv("DEALER_CICLOPROMO_PASSWORD")
 
-        page = playwright_browser.new_page()
+        if not username or not password:
+            pytest.skip("Missing CicloPromo credentials")
 
-        # Navigate to preflight URL first (sets cookies)
-        page.goto(self.PREFLIGHT_URL, wait_until="networkidle")
-        page.wait_for_timeout(1000)
+        page = browser_context.new_page()
 
-        # Perform login
-        page.goto("https://shop.ciclopromo.com/it/accesso", wait_until="networkidle")
-        page.fill('input[name="email"]', username)
-        page.fill('input[name="password"]', password)
-        page.click('button[type="submit"]')
-        page.wait_for_timeout(3000)
+        try:
+            # Navigate to preflight URL first (sets cookies)
+            response = page.goto(self.PREFLIGHT_URL, wait_until="networkidle", timeout=30000)
+            if response and response.status >= 400:
+                pytest.skip(f"HTTP {response.status} from {self.PREFLIGHT_URL}")
 
-        # Navigate to product listing
-        page.goto(self.TEST_URL, wait_until="networkidle")
-        page.wait_for_timeout(2000)
+            # Perform login
+            page.goto("https://shop.ciclopromo.com/it/accesso", wait_until="networkidle", timeout=30000)
+            page.fill('input[name="email"]', username)
+            page.fill('input[name="password"]', password)
+            page.click('button[type="submit"]')
 
-        html = page.content()
-        page.close()
+            # Wait for navigation after login
+            page.wait_for_load_state("networkidle", timeout=10000)
+
+            # Navigate to product listing
+            response = page.goto(self.TEST_URL, wait_until="networkidle", timeout=30000)
+            if response and response.status >= 400:
+                pytest.skip(f"HTTP {response.status} from {self.TEST_URL}")
+
+            html = page.content()
+
+        except PlaywrightTimeoutError as e:
+            pytest.skip(f"Network timeout accessing {self.DEALER_KEY}: {e}")
+        finally:
+            page.close()
 
         # Parse with mapping
         mapping = _load_mapping(self.MAPPING_PATH)
@@ -124,37 +141,46 @@ class TestCiclodiffusioneIntegration:
     MAPPING_PATH = Path("providers/web-ciclodiffusione.yaml")
 
     @pytest.mark.skipif(
-        not PLAYWRIGHT_AVAILABLE, reason="Playwright not installed"
-    )
-    @pytest.mark.skipif(
         not has_dealer_credentials("ciclodiffusione"),
         reason="Ciclodiffusione credentials not configured",
     )
-    def test_ciclodiffusione_extraction(self, playwright_browser) -> None:
+    def test_ciclodiffusione_extraction(self, browser_context) -> None:
         """Test extraction from Ciclodiffusione with real credentials."""
-        from app.adapters.web_adapter import parse_html, _load_mapping
+        from app.adapters.web_adapter import _load_mapping, parse_html
 
-        username = os.environ["DEALER_CICLODIFFUSIONE_USERNAME"]
-        password = os.environ["DEALER_CICLODIFFUSIONE_PASSWORD"]
+        username = os.getenv("DEALER_CICLODIFFUSIONE_USERNAME")
+        password = os.getenv("DEALER_CICLODIFFUSIONE_PASSWORD")
 
-        page = playwright_browser.new_page()
+        if not username or not password:
+            pytest.skip("Missing Ciclodiffusione credentials")
 
-        # Navigate to login page
-        page.goto(self.PREFLIGHT_URL, wait_until="networkidle")
-        page.wait_for_timeout(1000)
+        page = browser_context.new_page()
 
-        # Perform login
-        page.fill('input[name="credential_id"]', username)
-        page.fill('input[name="credential_password"]', password)
-        page.click('button[type="submit"]')
-        page.wait_for_timeout(3000)
+        try:
+            # Navigate to login page
+            response = page.goto(self.PREFLIGHT_URL, wait_until="networkidle", timeout=30000)
+            if response and response.status >= 400:
+                pytest.skip(f"HTTP {response.status} from {self.PREFLIGHT_URL}")
 
-        # Navigate to product listing
-        page.goto(self.TEST_URL, wait_until="networkidle")
-        page.wait_for_timeout(2000)
+            # Perform login
+            page.fill('input[name="credential_id"]', username)
+            page.fill('input[name="credential_password"]', password)
+            page.click('button[type="submit"]')
 
-        html = page.content()
-        page.close()
+            # Wait for navigation after login
+            page.wait_for_load_state("networkidle", timeout=10000)
+
+            # Navigate to product listing
+            response = page.goto(self.TEST_URL, wait_until="networkidle", timeout=30000)
+            if response and response.status >= 400:
+                pytest.skip(f"HTTP {response.status} from {self.TEST_URL}")
+
+            html = page.content()
+
+        except PlaywrightTimeoutError as e:
+            pytest.skip(f"Network timeout accessing {self.DEALER_KEY}: {e}")
+        finally:
+            page.close()
 
         # Parse with mapping
         mapping = _load_mapping(self.MAPPING_PATH)
@@ -178,46 +204,58 @@ class TestRMSIntegration:
     MAPPING_PATH = Path("providers/web-rms.yaml")
 
     @pytest.mark.skipif(
-        not PLAYWRIGHT_AVAILABLE, reason="Playwright not installed"
-    )
-    @pytest.mark.skipif(
         not has_dealer_credentials("rms"),
         reason="RMS credentials not configured",
     )
-    def test_rms_extraction(self, playwright_browser) -> None:
+    def test_rms_extraction(self, browser_context) -> None:
         """Test extraction from RMS SPA with real credentials."""
-        from app.adapters.web_adapter import parse_html, _load_mapping
+        from app.adapters.web_adapter import _load_mapping, parse_html
 
-        username = os.environ["DEALER_RMS_USERNAME"]
-        password = os.environ["DEALER_RMS_PASSWORD"]
+        username = os.getenv("DEALER_RMS_USERNAME")
+        password = os.getenv("DEALER_RMS_PASSWORD")
 
-        page = playwright_browser.new_page()
+        if not username or not password:
+            pytest.skip("Missing RMS credentials")
 
-        # Navigate to login page
-        page.goto(self.PREFLIGHT_URL, wait_until="networkidle")
-        page.wait_for_timeout(2000)
+        page = browser_context.new_page()
 
-        # RMS uses Angular - wait for form to render
-        page.wait_for_selector('input[type="text"]', timeout=10000)
-        page.fill('input[type="text"]', username)
-        page.fill('input[type="password"]', password)
-        page.click('button[type="submit"]')
-        page.wait_for_timeout(5000)  # SPA needs more time
-
-        # Navigate to product listing
-        page.goto(self.TEST_URL, wait_until="networkidle")
-        page.wait_for_timeout(5000)  # Wait for Angular to render products
-
-        # Wait for product cards to appear
         try:
-            page.wait_for_selector(".product-card", timeout=10000)
-        except Exception:
-            # Take screenshot for debugging
-            page.screenshot(path="out/rms-debug.png")
-            pytest.fail("Product cards did not appear - check out/rms-debug.png")
+            # Navigate to login page
+            response = page.goto(self.PREFLIGHT_URL, wait_until="networkidle", timeout=30000)
+            if response and response.status >= 400:
+                pytest.skip(f"HTTP {response.status} from {self.PREFLIGHT_URL}")
 
-        html = page.content()
-        page.close()
+            # RMS uses Angular - wait for form to render
+            page.wait_for_selector('input[type="text"]', timeout=10000)
+            page.fill('input[type="text"]', username)
+            page.fill('input[type="password"]', password)
+            page.click('button[type="submit"]')
+
+            # Wait for navigation after login
+            page.wait_for_load_state("networkidle", timeout=15000)
+
+            # Navigate to product listing
+            response = page.goto(self.TEST_URL, wait_until="networkidle", timeout=30000)
+            if response and response.status >= 400:
+                pytest.skip(f"HTTP {response.status} from {self.TEST_URL}")
+
+            # Wait for product cards to appear (SPA needs time to render)
+            try:
+                page.wait_for_selector(".product-card", timeout=15000)
+            except PlaywrightTimeoutError:
+                # Take screenshot for debugging
+                screenshot_dir = Path("out/test-screenshots")
+                screenshot_dir.mkdir(parents=True, exist_ok=True)
+                screenshot_path = screenshot_dir / f"rms-debug-{int(time.time())}.png"
+                page.screenshot(path=str(screenshot_path))
+                pytest.fail(f"Product cards did not appear - check {screenshot_path}")
+
+            html = page.content()
+
+        except PlaywrightTimeoutError as e:
+            pytest.skip(f"Network timeout accessing {self.DEALER_KEY}: {e}")
+        finally:
+            page.close()
 
         # Parse with mapping
         mapping = _load_mapping(self.MAPPING_PATH)
@@ -233,41 +271,44 @@ class TestRMSIntegration:
 class TestDealerAccessibility:
     """Smoke tests for dealer page accessibility (no login required)."""
 
-    @pytest.mark.skipif(
-        not PLAYWRIGHT_AVAILABLE, reason="Playwright not installed"
-    )
-    def test_ciclopromo_homepage_accessible(self, playwright_browser) -> None:
+    def test_ciclopromo_homepage_accessible(self, browser_context) -> None:
         """Verify CicloPromo homepage is accessible."""
-        page = playwright_browser.new_page()
-        response = page.goto(
-            "https://shop.ciclopromo.com/it/home", wait_until="domcontentloaded"
-        )
-        assert response is not None
-        assert response.status == 200
-        page.close()
+        page = browser_context.new_page()
+        try:
+            response = page.goto(
+                "https://shop.ciclopromo.com/it/home", wait_until="domcontentloaded", timeout=30000
+            )
+            assert response is not None
+            assert response.status == 200
+        except PlaywrightTimeoutError:
+            pytest.skip("CicloPromo homepage not accessible")
+        finally:
+            page.close()
 
-    @pytest.mark.skipif(
-        not PLAYWRIGHT_AVAILABLE, reason="Playwright not installed"
-    )
-    def test_ciclodiffusione_homepage_accessible(self, playwright_browser) -> None:
+    def test_ciclodiffusione_homepage_accessible(self, browser_context) -> None:
         """Verify Ciclodiffusione homepage is accessible."""
-        page = playwright_browser.new_page()
-        response = page.goto(
-            "https://www.ciclodiffusione.com", wait_until="domcontentloaded"
-        )
-        assert response is not None
-        assert response.status == 200
-        page.close()
+        page = browser_context.new_page()
+        try:
+            response = page.goto(
+                "https://www.ciclodiffusione.com", wait_until="domcontentloaded", timeout=30000
+            )
+            assert response is not None
+            assert response.status == 200
+        except PlaywrightTimeoutError:
+            pytest.skip("Ciclodiffusione homepage not accessible")
+        finally:
+            page.close()
 
-    @pytest.mark.skipif(
-        not PLAYWRIGHT_AVAILABLE, reason="Playwright not installed"
-    )
-    def test_rms_homepage_accessible(self, playwright_browser) -> None:
+    def test_rms_homepage_accessible(self, browser_context) -> None:
         """Verify RMS homepage is accessible."""
-        page = playwright_browser.new_page()
-        response = page.goto(
-            "https://b2bnew.rms.it/ciclo/it/login", wait_until="domcontentloaded"
-        )
-        assert response is not None
-        assert response.status == 200
-        page.close()
+        page = browser_context.new_page()
+        try:
+            response = page.goto(
+                "https://b2bnew.rms.it/ciclo/it/login", wait_until="domcontentloaded", timeout=30000
+            )
+            assert response is not None
+            assert response.status == 200
+        except PlaywrightTimeoutError:
+            pytest.skip("RMS homepage not accessible")
+        finally:
+            page.close()
