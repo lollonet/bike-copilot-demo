@@ -21,9 +21,7 @@ def pytest_addoption(parser: pytest.Parser) -> None:
 
 def pytest_configure(config: pytest.Config) -> None:
     """Configure pytest markers."""
-    config.addinivalue_line(
-        "markers", "integration: marks tests as integration tests"
-    )
+    config.addinivalue_line("markers", "integration: marks tests as integration tests")
 
 
 def pytest_collection_modifyitems(
@@ -34,9 +32,7 @@ def pytest_collection_modifyitems(
         # Run all tests including integration
         return
 
-    skip_integration = pytest.mark.skip(
-        reason="Need --run-integration option to run"
-    )
+    skip_integration = pytest.mark.skip(reason="Need --run-integration option to run")
     for item in items:
         if "integration" in item.keywords:
             item.add_marker(skip_integration)

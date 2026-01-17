@@ -86,12 +86,18 @@ class TestCicloPromoIntegration:
 
         try:
             # Navigate to preflight URL first (sets cookies)
-            response = page.goto(self.PREFLIGHT_URL, wait_until="networkidle", timeout=30000)
+            response = page.goto(
+                self.PREFLIGHT_URL, wait_until="networkidle", timeout=30000
+            )
             if response and response.status >= 400:
                 pytest.skip(f"HTTP {response.status} from {self.PREFLIGHT_URL}")
 
             # Perform login
-            page.goto("https://shop.ciclopromo.com/it/accesso", wait_until="networkidle", timeout=30000)
+            page.goto(
+                "https://shop.ciclopromo.com/it/accesso",
+                wait_until="networkidle",
+                timeout=30000,
+            )
             page.fill('input[name="email"]', username)
             page.fill('input[name="password"]', password)
             page.click('button[type="submit"]')
@@ -118,9 +124,7 @@ class TestCicloPromoIntegration:
         # Assertions
         assert len(products) > 0, "No products extracted from CicloPromo"
         assert len(offers) > 0, "No offers extracted from CicloPromo"
-        assert all(
-            o.supplier == "CicloPromo" for o in offers
-        ), "Supplier mismatch"
+        assert all(o.supplier == "CicloPromo" for o in offers), "Supplier mismatch"
 
         # Validate data quality
         for product in products[:5]:
@@ -128,7 +132,9 @@ class TestCicloPromoIntegration:
             assert product.mpn or product.brand, f"Product missing mpn/brand: {product}"
 
         for offer in offers[:5]:
-            assert offer.price is not None and offer.price > 0, f"Invalid price: {offer}"
+            assert offer.price is not None and offer.price > 0, (
+                f"Invalid price: {offer}"
+            )
 
 
 class TestCiclodiffusioneIntegration:
@@ -158,7 +164,9 @@ class TestCiclodiffusioneIntegration:
 
         try:
             # Navigate to login page
-            response = page.goto(self.PREFLIGHT_URL, wait_until="networkidle", timeout=30000)
+            response = page.goto(
+                self.PREFLIGHT_URL, wait_until="networkidle", timeout=30000
+            )
             if response and response.status >= 400:
                 pytest.skip(f"HTTP {response.status} from {self.PREFLIGHT_URL}")
 
@@ -189,9 +197,7 @@ class TestCiclodiffusioneIntegration:
         # Assertions
         assert len(products) > 0, "No products extracted from Ciclodiffusione"
         assert len(offers) > 0, "No offers extracted from Ciclodiffusione"
-        assert all(
-            o.supplier == "Ciclodiffusione" for o in offers
-        ), "Supplier mismatch"
+        assert all(o.supplier == "Ciclodiffusione" for o in offers), "Supplier mismatch"
 
 
 class TestRMSIntegration:
@@ -221,7 +227,9 @@ class TestRMSIntegration:
 
         try:
             # Navigate to login page
-            response = page.goto(self.PREFLIGHT_URL, wait_until="networkidle", timeout=30000)
+            response = page.goto(
+                self.PREFLIGHT_URL, wait_until="networkidle", timeout=30000
+            )
             if response and response.status >= 400:
                 pytest.skip(f"HTTP {response.status} from {self.PREFLIGHT_URL}")
 
@@ -276,7 +284,9 @@ class TestDealerAccessibility:
         page = browser_context.new_page()
         try:
             response = page.goto(
-                "https://shop.ciclopromo.com/it/home", wait_until="domcontentloaded", timeout=30000
+                "https://shop.ciclopromo.com/it/home",
+                wait_until="domcontentloaded",
+                timeout=30000,
             )
             assert response is not None
             assert response.status == 200
@@ -290,7 +300,9 @@ class TestDealerAccessibility:
         page = browser_context.new_page()
         try:
             response = page.goto(
-                "https://www.ciclodiffusione.com", wait_until="domcontentloaded", timeout=30000
+                "https://www.ciclodiffusione.com",
+                wait_until="domcontentloaded",
+                timeout=30000,
             )
             assert response is not None
             assert response.status == 200
@@ -304,7 +316,9 @@ class TestDealerAccessibility:
         page = browser_context.new_page()
         try:
             response = page.goto(
-                "https://b2bnew.rms.it/ciclo/it/login", wait_until="domcontentloaded", timeout=30000
+                "https://b2bnew.rms.it/ciclo/it/login",
+                wait_until="domcontentloaded",
+                timeout=30000,
             )
             assert response is not None
             assert response.status == 200
