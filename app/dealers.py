@@ -39,6 +39,7 @@ class DealerLoginConfig:
     )  # Preserve YAML types (bool, int, str, etc.)
     preflight_url: str | None = None
     encoding: str = "form"  # form | multipart
+    encode_base64: bool = False  # Base64-encode username and password
 
 
 @dataclass(frozen=True)

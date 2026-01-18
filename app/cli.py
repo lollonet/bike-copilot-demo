@@ -1607,7 +1607,15 @@ def _build_spa_payload(
     username: str,
     password: str,
 ) -> dict[str, Any]:
+    import base64
+
     payload: dict[str, Any] = dict(login_cfg.extra_fields or {})
+
+    # Encode credentials if configured
+    if login_cfg.encode_base64:
+        username = base64.b64encode(username.encode()).decode()
+        password = base64.b64encode(password.encode()).decode()
+
     if login_cfg.username_field:
         payload[login_cfg.username_field] = username
     if login_cfg.password_field:

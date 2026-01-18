@@ -14,10 +14,11 @@ dealers:
     login:
       mode: "spa"
       preflight_url: "https://b2bnew.rms.it/ciclo/it/login"
-      url: "https://b2bnew.rms.it/api/auth/login"
+      url: "https://apib2b.rms.it/users/authenticate"
       method: "POST"
       username_field: "username"
       password_field: "password"
+      encode_base64: true
       extra_fields:
         remember_me: true
     seeds:
