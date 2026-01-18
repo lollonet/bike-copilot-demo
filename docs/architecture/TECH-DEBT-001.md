@@ -1,0 +1,195 @@
+---
+id: TECH-DEBT-001
+domain: architecture
+---
+
+# TECH-DEBT-001: Architecture Improvements Backlog
+
+**Status**: Open
+**Priority**: Medium
+**Identified**: 2026-01-18
+**Audit By**: code-architecture-auditor agent
+
+## Summary
+
+Architecture audit identified technical debt requiring attention. No critical bugs, but maintainability and testability improvements needed.
+
+## Issues Identified
+
+### 🔴 Critical Priority
+
+#### 1. Massive UI Functions
+**Impact**: Maintainability, testability, onboarding difficulty
+
+| File | Function | Lines | Recommendation |
+|------|----------|-------|----------------|
+| `app/ui.py:256` | `build_interface()` | 1,183 | Split into components |
+| `app/ui.py:460` | `_on_search()` | 248 | Extract search handler |
+| `app/ui_pn.py:429` | `_wire_pn_callbacks()` | 150 | Modularize callbacks |
+| `app/cli.py:900` | `ingest_all_parallel()` | 189 | Extract orchestration logic |
+
+**Estimated effort**: 2-3 days
+**Risk**: Medium (requires thorough testing)
+
+#### 2. Boundary Violations
+**Impact**: Testing, modularity, coupling
+
+| Issue | Location | Fix |
+|-------|----------|-----|
+| CLI imports UI | `app/cli.py:1414` | Remove UI dependency from CLI |
+| UI imports business logic | `ui.py`, `ui_pn.py` | Use API layer consistently |
+
+**Estimated effort**: 1 day
+**Risk**: Low-Medium
+
+### 🟡 Medium Priority
+
+#### 3. Code Duplication (4 instances)
+
+**API Configuration** (95% similarity)
+- `app/ui.py:20-22` vs `app/ui_pn.py:11-16`
+- **Fix**: Extract to `app/api_client.py`
+- **Savings**: ~50 lines
+- **Effort**: 2-3 hours
+- **Risk**: Low
+
+**Argument Parsing** (80% similarity)
+- `app/ingest.py:435-456` vs `app/ingest_pdf.py:12-21`
+- **Fix**: Extract to `app/cli_utils.py`
+- **Savings**: ~40 lines
+- **Effort**: 1-2 hours
+- **Risk**: Low
+
+**Exception Handling Pattern** (26 occurrences)
+- Broad `except Exception as exc:` across UI files
+- **Fix**: Create specific exception types
+- **Effort**: 4-6 hours
+- **Risk**: Medium
+
+**Search Request Building**
+- Similar patterns in `ui.py` and `ui_pn.py`
+- **Fix**: Extract to shared function
+- **Effort**: 1 hour
+- **Risk**: Low
+
+### 🟢 Low Priority
+
+#### 4. Dead Code (2 instances)
+
+| File | Line | Function | Usage |
+|------|------|----------|-------|
+| `app/ingest.py` | 434 | `main()` | Only when run directly |
+| `app/ingest_pdf.py` | 11 | `main()` | Standalone script |
+
+**Estimated effort**: 30 minutes
+**Risk**: Very Low
+
+## Proposed Refactoring Plan
+
+### Phase 1: Quick Wins (1-2 days)
+**Goal**: Reduce duplication, no functional changes
+
+1. ✅ Extract `app/api_client.py` (API configuration)
+2. ✅ Extract `app/cli_utils.py` (argument parsing)
+3. ✅ Remove dead `main()` functions
+4. ✅ Add architectural tests to prevent regressions
+
+**Testing**: Unit tests + integration tests
+**Risk**: Low
+
+### Phase 2: Boundary Cleanup (2-3 days)
+**Goal**: Fix layer violations, improve testability
+
+1. ✅ Remove UI imports from CLI
+2. ✅ Create proper API layer for UI components
+3. ✅ Add dependency injection for database sessions
+4. ✅ Document architecture boundaries
+
+**Testing**: Full regression suite
+**Risk**: Medium
+
+### Phase 3: UI Decomposition (3-5 days)
+**Goal**: Break down massive functions, improve maintainability
+
+1. ✅ Split `ui.py` into component modules:
+   - `ui/search.py` - Search interface
+   - `ui/quote.py` - Quote generation
+   - `ui/components.py` - Shared UI components
+   - `ui/layout.py` - Layout management
+
+2. ✅ Extract handlers from `build_interface()`:
+   - `_on_search()` → `ui/handlers/search.py`
+   - `_on_quote()` → `ui/handlers/quote.py`
+
+3. ✅ Similar decomposition for `ui_pn.py`
+
+**Testing**: Manual UI testing + automated tests
+**Risk**: High (requires extensive testing)
+
+### Phase 4: Exception Handling (1-2 days)
+**Goal**: Replace broad exceptions with specific types
+
+1. ✅ Create custom exception hierarchy
+2. ✅ Replace generic catches with specific handlers
+3. ✅ Add proper error logging
+
+**Testing**: Error path testing
+**Risk**: Medium
+
+## Success Criteria
+
+- [ ] All functions < 100 lines (target: < 50 for new code)
+- [ ] Zero circular dependencies
+- [ ] Clear separation: CLI → Business Logic → Data Layer
+- [ ] UI layer only communicates via API
+- [ ] Test coverage maintained or improved
+- [ ] All existing functionality works
+- [ ] No performance regressions
+
+## Risks and Mitigations
+
+| Risk | Impact | Probability | Mitigation |
+|------|--------|-------------|------------|
+| Breaking existing functionality | High | Medium | Comprehensive test suite first |
+| UI regressions | High | Medium | Manual testing checklist |
+| Performance degradation | Medium | Low | Benchmark before/after |
+| Team disruption | Medium | Low | Incremental PRs with documentation |
+
+## Dependencies
+
+**Before starting**:
+- [ ] Comprehensive test coverage for affected modules
+- [ ] Architecture documentation updated
+- [ ] Team alignment on approach
+
+**External dependencies**: None
+
+## Notes
+
+**Current State** (2026-01-18):
+- ✅ System is stable and tested
+- ✅ 3,832 products ingested successfully
+- ✅ All critical features working
+- ⚠️ Technical debt documented but not blocking
+
+**Recommendation**:
+- Plan dedicated refactoring sprint
+- Start with Phase 1 (quick wins)
+- Use feature flags for risky changes
+- Incremental rollout with monitoring
+
+## References
+
+- Architecture Audit: code-architecture-auditor (2026-01-18)
+- Related: TECH-010 (Stack documentation)
+- Related: TECH-011 (Web ingestion testing)
+
+## Timeline
+
+**Target Start**: Next development sprint
+**Estimated Duration**: 2-3 weeks (spread across phases)
+**Review Cadence**: After each phase
+
+---
+
+*Last updated: 2026-01-18*
