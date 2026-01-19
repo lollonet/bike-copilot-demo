@@ -36,13 +36,13 @@ jobs:
         run: uv sync --frozen
 
       - name: Lint with ruff
-        run: uv run ruff check app/ tests/
+        run: uv run ruff check app/ tests/ bin/
 
       - name: Check formatting with ruff
-        run: uv run ruff format --check app/ tests/
+        run: uv run ruff format --check app/ tests/ bin/
 
       - name: Type check with basedpyright
-        run: uv run basedpyright app/
+        run: uv run basedpyright app/ bin/
 
       - name: Run tests with pytest
         run: uv run pytest -v --tb=short tests/
