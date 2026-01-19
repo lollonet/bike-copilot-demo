@@ -33,27 +33,37 @@ def fetch_policy(
     header: list[str] = typer.Option(None, help="extra HTTP headers (key:value)"),
 ) -> None:
     """Fetch a shipping policy page and upsert DealerPolicy using deterministic rules."""
-    hdrs = build_headers_from_cli(header)
-    create_all()
-    with httpx.Client(
-        timeout=15.0,
-        headers=hdrs or {"User-Agent": "BikeCopilotBot/0.1"},
-        follow_redirects=True,
-    ) as client:
-        r = client.get(url)
-        r.raise_for_status()
-        ext = parse_policy_html(r.text)
-    with SessionLocal() as db:
-        upsert_dealer_policy(db, dealer, ext)
-    rich.print(
-        {
-            "dealer": dealer,
-            "base_cost": ext.base_cost,
-            "free_threshold": ext.free_threshold,
-            "lead_days_std": ext.lead_days_std,
-            "confidence": ext.confidence,
-        }
-    )
+    try:
+        hdrs = build_headers_from_cli(header)
+        create_all()
+        with httpx.Client(
+            timeout=15.0,
+            headers=hdrs or {"User-Agent": "BikeCopilotBot/0.1"},
+            follow_redirects=True,
+        ) as client:
+            r = client.get(url)
+            r.raise_for_status()
+            ext = parse_policy_html(r.text)
+        with SessionLocal() as db:
+            upsert_dealer_policy(db, dealer, ext)
+        rich.print(
+            {
+                "dealer": dealer,
+                "base_cost": ext.base_cost,
+                "free_threshold": ext.free_threshold,
+                "lead_days_std": ext.lead_days_std,
+                "confidence": ext.confidence,
+            }
+        )
+    except Exception as exc:
+        log_exception(
+            "cli",
+            "fetch-policy",
+            "failed to fetch dealer policy",
+            exc,
+            extra={"dealer": dealer, "url": url},
+        )
+        raise typer.Exit(code=1)
 
 
 @app.command("web")
@@ -66,9 +76,19 @@ def fetch_web(
     ),
 ) -> None:
     """Parse a local HTML file with a mapping YAML and upsert results."""
-    products, offers = parse_web_file(html, mapping)
-    stats: IngestStats = upsert(products, offers)
-    rich.print(stats)
+    try:
+        products, offers = parse_web_file(html, mapping)
+        stats: IngestStats = upsert(products, offers)
+        rich.print(stats)
+    except Exception as exc:
+        log_exception(
+            "cli",
+            "fetch-web",
+            "failed to parse HTML file",
+            exc,
+            extra={"html": str(html), "mapping": str(mapping)},
+        )
+        raise typer.Exit(code=1)
 
 
 @app.command("web-url")
@@ -90,9 +110,19 @@ def fetch_web_url(
     ),
 ) -> None:
     """Fetch remote pages and upsert parsed products/offers using mapping YAML."""
-    hdrs = build_headers_from_cli(header)
-    stats = fetch_and_ingest_web(url, mapping, follow_next, max_pages, delay, hdrs)
-    rich.print(stats)
+    try:
+        hdrs = build_headers_from_cli(header)
+        stats = fetch_and_ingest_web(url, mapping, follow_next, max_pages, delay, hdrs)
+        rich.print(stats)
+    except Exception as exc:
+        log_exception(
+            "cli",
+            "fetch-web-url",
+            "failed to fetch remote pages",
+            exc,
+            extra={"urls": url, "mapping": str(mapping)},
+        )
+        raise typer.Exit(code=1)
 
 
 @app.command("sitemap")
@@ -113,11 +143,21 @@ def fetch_sitemap(
     ),
 ) -> None:
     """Fetch all product detail pages listed in a sitemap and ingest offers."""
-    hdrs = build_headers_from_cli(header)
-    urls = sitemap_target_urls(sitemap, hdrs, contains, limit)
-    products, offers = fetch_sitemap_details(urls, mapping, hdrs, delay)
-    stats: IngestStats = upsert(products, offers)
-    rich.print({"visited": len(urls), **stats.__dict__})
+    try:
+        hdrs = build_headers_from_cli(header)
+        urls = sitemap_target_urls(sitemap, hdrs, contains, limit)
+        products, offers, failures = fetch_sitemap_details(urls, mapping, hdrs, delay)
+        stats: IngestStats = upsert(products, offers)
+        rich.print({"visited": len(urls), "failures": failures, **stats.__dict__})
+    except Exception as exc:
+        log_exception(
+            "cli",
+            "fetch-sitemap",
+            "failed to fetch sitemap",
+            exc,
+            extra={"sitemap": sitemap, "mapping": str(mapping)},
+        )
+        raise typer.Exit(code=1)
 
 
 @app.command("rendered")

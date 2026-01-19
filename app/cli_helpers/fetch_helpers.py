@@ -3,16 +3,18 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Callable, Any
 
 from ..adapters.web_adapter import fetch_and_parse_urls, parse_sitemap_urls
 from ..ingest import IngestStats, upsert
 from ..logging_utils import log_exception
 from ..models import DealerPolicy
-from ..types import OfferInput
+from ..types import OfferInput, ProductInput
+from ..policy import PolicyExtract
 
 if TYPE_CHECKING:
     from sqlalchemy.orm import Session
+    import httpx
 
 
 def build_headers_from_cli(header: list[str] | None) -> dict[str, str]:
@@ -35,7 +37,7 @@ def build_headers_from_cli(header: list[str] | None) -> dict[str, str]:
 def upsert_dealer_policy(
     db: Session,
     dealer: str,
-    ext,
+    ext: PolicyExtract,
 ) -> None:
     """Upsert dealer policy extracted from HTML.
 
@@ -125,7 +127,7 @@ def fetch_sitemap_details(
     mapping: Path,
     headers: dict[str, str],
     delay: float,
-):
+) -> tuple[list[ProductInput], list[OfferInput], int]:
     """Fetch and parse product detail pages from sitemap URLs.
 
     Args:
@@ -135,40 +137,42 @@ def fetch_sitemap_details(
         delay: Delay in seconds between requests
 
     Returns:
-        Tuple of (products, offers) lists
+        Tuple of (products, offers, failures) where failures is the count of failed fetches
     """
     from time import sleep
 
     from ..adapters.web_adapter import _load_mapping  # type: ignore
-    from ..types import ProductInput
     import httpx
 
     mapping_obj = _load_mapping(mapping)
     products: list[ProductInput] = []
     offers: list[OfferInput] = []
     seen: set[tuple[str, str, str]] = set()
+    failures = 0
     with httpx.Client(
         timeout=10.0,
         headers=headers or {"User-Agent": "BikeCopilotBot/0.1"},
         follow_redirects=True,
     ) as client:
         for u in urls:
-            fetch_single_sitemap_url(
+            success = fetch_single_sitemap_url(
                 client, u, mapping_obj, seen, products, offers, delay, sleep
             )
-    return products, offers
+            if not success:
+                failures += 1
+    return products, offers, failures
 
 
 def fetch_single_sitemap_url(
-    client,
+    client: httpx.Client,
     url: str,
-    mapping_obj,
+    mapping_obj: Any,
     seen: set[tuple[str, str, str]],
-    products,
-    offers,
+    products: list[ProductInput],
+    offers: list[OfferInput],
     delay: float,
-    sleep,
-) -> None:
+    sleep: Callable[[float], None],
+) -> bool:
     """Fetch and parse a single sitemap URL, avoiding duplicates.
 
     Args:
@@ -180,6 +184,9 @@ def fetch_single_sitemap_url(
         offers: List to append offers to
         delay: Delay in seconds after request
         sleep: Sleep function
+
+    Returns:
+        True if successful, False if failed
     """
     try:
         r = client.get(url)
@@ -190,14 +197,15 @@ def fetch_single_sitemap_url(
         if p and o:
             key = (p.brand, p.mpn, o.supplier)
             if key in seen:
-                return
+                return True  # Duplicate, but not an error
             seen.add(key)
             products.append(p)
             offers.append(o)
+        return True
     except Exception as exc:
         log_exception(
             "cli", "web-ingest", "failed to fetch sitemap url", exc, extra={"url": url}
         )
-        return
+        return False
     finally:
         sleep(max(0.0, delay))
