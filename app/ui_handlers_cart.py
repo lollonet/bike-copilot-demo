@@ -76,7 +76,11 @@ def calculate_cart_totals(
         price = float(info.get("price", 0.0))
         subtotal += price * qty
 
-    vat_rate = float(os.environ.get("APP_VAT", "0") or 0)
+    try:
+        vat_rate = float(os.environ.get("APP_VAT", "0") or 0)
+    except (ValueError, TypeError):
+        vat_rate = 0.0
+
     vat = subtotal * vat_rate
     total = subtotal + vat
 
@@ -147,7 +151,8 @@ def handle_cart_add(
         Tuple of (rows, updated_cart, labels, selected_label, totals_md)
     """
     if not offer_label:
-        return [], cart, [], None, format_totals_markdown(cart)
+        rows, labels = build_cart_rows(cart)
+        return rows, cart, labels, None, format_totals_markdown(cart)
 
     offer_id = parse_offer_id_from_label(offer_label)
     if offer_id is None:
@@ -158,11 +163,13 @@ def handle_cart_add(
             ValueError("Invalid label format"),
             extra={"label": offer_label},
         )
-        return [], cart, [], None, format_totals_markdown(cart)
+        rows, labels = build_cart_rows(cart)
+        return rows, cart, labels, None, format_totals_markdown(cart)
 
     info = mapping.get(offer_id)
     if not info:
-        return [], cart, [], None, format_totals_markdown(cart)
+        rows, labels = build_cart_rows(cart)
+        return rows, cart, labels, None, format_totals_markdown(cart)
 
     # Get or create cart entry
     prev = cart.get(offer_id, {**info, "qty": 0})
@@ -190,7 +197,8 @@ def handle_cart_remove(
         Tuple of (rows, updated_cart, labels, totals_md)
     """
     if not cart_label:
-        return [], cart, [], format_totals_markdown(cart)
+        rows, labels = build_cart_rows(cart)
+        return rows, cart, labels, format_totals_markdown(cart)
 
     offer_id = parse_offer_id_from_label(cart_label)
     if offer_id is None:
@@ -201,7 +209,8 @@ def handle_cart_remove(
             ValueError("Invalid label format"),
             extra={"label": cart_label},
         )
-        return [], cart, [], format_totals_markdown(cart)
+        rows, labels = build_cart_rows(cart)
+        return rows, cart, labels, format_totals_markdown(cart)
 
     # Remove from cart
     cart.pop(offer_id, None)
@@ -237,7 +246,8 @@ def handle_cart_adjust(
         Tuple of (rows, updated_cart, labels, selected_label, totals_md)
     """
     if not cart_label:
-        return [], cart, [], None, format_totals_markdown(cart)
+        rows, labels = build_cart_rows(cart)
+        return rows, cart, labels, None, format_totals_markdown(cart)
 
     offer_id = parse_offer_id_from_label(cart_label)
     if offer_id is None:
@@ -248,10 +258,12 @@ def handle_cart_adjust(
             ValueError("Invalid label format"),
             extra={"label": cart_label},
         )
-        return [], cart, [], None, format_totals_markdown(cart)
+        rows, labels = build_cart_rows(cart)
+        return rows, cart, labels, None, format_totals_markdown(cart)
 
     if offer_id not in cart:
-        return [], cart, [], None, format_totals_markdown(cart)
+        rows, labels = build_cart_rows(cart)
+        return rows, cart, labels, None, format_totals_markdown(cart)
 
     # Adjust quantity
     cur = cart[offer_id]

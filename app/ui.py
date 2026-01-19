@@ -4,7 +4,6 @@ from typing import Any
 
 import gradio as gr
 
-from .api_client import api_post_silent
 from .logging_utils import log_exception
 from .ui_handlers_cart import (
     handle_cart_add,
@@ -15,119 +14,10 @@ from .ui_handlers_cart import (
 )
 from .ui_handlers_quote import handle_quote_request
 from .ui_handlers_search import handle_search_request
-from sqlalchemy.orm import Session
 from typing import cast
 
 
-from .models import EventLog, SessionLocal, SupplierOffer
-from .quote import render_quote
-
 __all__ = ["build_interface"]
-
-
-def _create_quote(
-    offer_id: int, customer: str, contact: str, validity: int, notes: str
-):
-    payload = _quote_payload(offer_id, customer, contact, validity, notes)
-    via_api = _try_create_quote_via_api(payload)
-    if via_api is not None:
-        return via_api
-    return _create_local_quote(offer_id, customer, contact, validity, notes)
-
-
-def _quote_payload(
-    offer_id: int, customer: str, contact: str, validity: int, notes: str
-) -> dict[str, object]:
-    return {
-        "offer_id": int(offer_id),
-        "customer_name": customer,
-        "customer_contact": contact,
-        "validity_days": int(validity),
-        "notes": notes or None,
-    }
-
-
-def _try_create_quote_via_api(
-    payload: dict[str, object],
-) -> tuple[str, str, str] | None:
-    try:
-        r = api_post_silent("/quote", payload, timeout=10)
-        if r.status_code != 200:
-            return None
-        data = r.json()
-        return (
-            data.get("html_path", ""),
-            data.get("pdf_path") or "",
-            data.get("file_url") or "",
-        )
-    except Exception as exc:
-        log_exception("ui", "quote-api", "failed to create quote via api", exc)
-        return None
-
-
-def _create_local_quote(
-    offer_id: int, customer: str, contact: str, validity: int, notes: str
-) -> tuple[str, str, str]:
-    with SessionLocal() as db:
-        offer = db.get(SupplierOffer, int(offer_id))
-        if offer is None:
-            return "OFFERTA NON TROVATA", "", ""
-        context = _single_line_quote_context(offer, customer, contact, validity, notes)
-        try:
-            html_path, pdf_path = render_quote(context)
-        except Exception as exc:
-            log_exception(
-                "ui",
-                "quote-local",
-                "failed to render quote",
-                exc,
-                extra={"offer_id": offer_id},
-            )
-            return "ERRORE RENDERING", "", ""
-        _log_ui_quote_created(db, offer.id, pdf_path)
-        return html_path, (pdf_path or ""), ""
-
-
-def _single_line_quote_context(
-    offer: SupplierOffer,
-    customer: str,
-    contact: str,
-    validity: int,
-    notes: str,
-) -> dict[str, object]:
-    product = offer.product
-    return {
-        "customer_name": customer,
-        "customer_contact": contact,
-        "validity_days": validity,
-        "notes": notes,
-        "items": [
-            {
-                "brand": product.brand,
-                "mpn": product.mpn,
-                "name": product.name,
-                "supplier": offer.supplier,
-                "price": offer.price,
-                "qty": 1,
-                "in_stock": offer.in_stock,
-                "lead_time_days": offer.lead_time_days,
-            }
-        ],
-    }
-
-
-def _log_ui_quote_created(
-    db: Session,
-    offer_id: int,
-    pdf_path: str | None,
-) -> None:
-    db.add(
-        EventLog(
-            type="quote_created",
-            payload={"offer_id": offer_id, "ui": True, "pdf": bool(pdf_path)},
-        )
-    )
-    db.commit()
 
 
 def build_interface() -> gr.Blocks:
