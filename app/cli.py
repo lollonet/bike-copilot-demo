@@ -25,13 +25,11 @@ from .logging_utils import log_exception
 from .adapters.csv_adapter import parse_offers_csv, parse_products_csv
 from .adapters.pdf_adapter import extract_from_pdf
 from .adapters.web_adapter import (
-    parse_file as parse_web_file,
     fetch_and_parse_urls,
     build_search_urls,
     parse_sitemap_urls,
 )
 from .adapters.csv_mapped_adapter import parse_unified_csv
-from .adapters.playwright_fetcher import fetch_rendered
 from .ingest import IngestStats, upsert
 from .models import (
     EventLog,
@@ -45,12 +43,16 @@ from .quote import render_quote
 from .search import search
 from .types import Brake, Freehub, OfferInput, QuoteResponse, Rotor, SearchRequest
 from .policy import parse_policy_html
-from .models import DealerPolicy
 from .dealers import DealerConfig, DealerLoginConfig, find_dealer
+from .commands import fetch_commands
+from .cli_helpers.fetch_helpers import upsert_dealer_policy
 
 
 app = typer.Typer(add_completion=True, no_args_is_help=True, help="Bike Copilot CLI")
 load_dotenv()
+
+# Register fetch commands
+fetch_commands.register_to_main_app(app)
 
 
 def _offer_id_completions(incomplete: str) -> list[str]:
@@ -115,15 +117,6 @@ class AliasEntry(TypedDict, total=False):
 class AliasBlock(TypedDict, total=False):
     dealer: str | None
     aliases: list[AliasEntry]
-
-
-def _build_headers_from_cli(header: list[str] | None) -> dict[str, str]:
-    hdrs: dict[str, str] = {}
-    for h in header or []:
-        if ":" in h:
-            k, v = h.split(":", 1)
-            hdrs[k.strip()] = v.strip()
-    return hdrs
 
 
 @app.command("dump-md")
@@ -379,64 +372,6 @@ def _insert_alias_row(
     )
 
 
-@app.command("fetch-policy")
-def fetch_policy(
-    dealer: str = typer.Option(..., help="Dealer name"),
-    url: str = typer.Option(..., help="URL pagina Spedizioni/Condizioni"),
-    header: list[str] = typer.Option(None, help="extra HTTP headers (key:value)"),
-) -> None:
-    """Fetch a shipping policy page and upsert DealerPolicy using deterministic rules."""
-    import httpx
-
-    hdrs = _build_headers_from_cli(header)
-    create_all()
-    with httpx.Client(
-        timeout=15.0,
-        headers=hdrs or {"User-Agent": "BikeCopilotBot/0.1"},
-        follow_redirects=True,
-    ) as client:
-        r = client.get(url)
-        r.raise_for_status()
-        ext = parse_policy_html(r.text)
-    with SessionLocal() as db:
-        _upsert_dealer_policy(db, dealer, ext)
-    rich.print(
-        {
-            "dealer": dealer,
-            "base_cost": ext.base_cost,
-            "free_threshold": ext.free_threshold,
-            "lead_days_std": ext.lead_days_std,
-            "confidence": ext.confidence,
-        }
-    )
-
-
-def _upsert_dealer_policy(
-    db: Session,
-    dealer: str,
-    ext,
-) -> None:
-    row = db.scalar(select(DealerPolicy).where(DealerPolicy.dealer == dealer))
-    if row is None:
-        db.add(
-            DealerPolicy(
-                dealer=dealer,
-                base_cost=ext.base_cost,
-                free_threshold=ext.free_threshold,
-                lead_days_std=ext.lead_days_std,
-                source="rules",
-                confidence=ext.confidence,
-            )
-        )
-    else:
-        row.base_cost = ext.base_cost
-        row.free_threshold = ext.free_threshold
-        row.lead_days_std = ext.lead_days_std
-        row.source = "rules"
-        row.confidence = ext.confidence
-    db.commit()
-
-
 @app.command("ingest-csv")
 def ingest_csv(
     products: Path = typer.Option(
@@ -479,64 +414,6 @@ def ingest_pdf(
     rich.print(stats)
 
 
-@app.command("fetch-web")
-def fetch_web(
-    html: Path = typer.Option(
-        ..., exists=True, file_okay=True, dir_okay=False, readable=True
-    ),
-    mapping: Path = typer.Option(
-        ..., exists=True, file_okay=True, dir_okay=False, readable=True
-    ),
-) -> None:
-    """Parse a local HTML file with a mapping YAML and upsert results."""
-    products, offers = parse_web_file(html, mapping)
-    stats: IngestStats = upsert(products, offers)
-    rich.print(stats)
-
-
-@app.command("fetch-web-url")
-def fetch_web_url(
-    url: list[str] = typer.Option(
-        ..., help="one or more URLs to fetch", rich_help_panel="Web"
-    ),
-    mapping: Path = typer.Option(
-        ..., exists=True, file_okay=True, dir_okay=False, readable=True
-    ),
-    follow_next: bool = typer.Option(False, help="follow pagination.next links"),
-    max_pages: int = typer.Option(3, min=1, help="max pages to fetch per seed"),
-    delay: float = typer.Option(
-        0.5, min=0.0, help="delay (seconds) between page fetches"
-    ),
-    header: list[str] = typer.Option(
-        None,
-        help='extra HTTP headers (key:value), e.g. "Cookie: a=b"',
-    ),
-) -> None:
-    """Fetch remote pages and upsert parsed products/offers using mapping YAML."""
-    hdrs = _build_headers_from_cli(header)
-    stats = _fetch_and_ingest_web(url, mapping, follow_next, max_pages, delay, hdrs)
-    rich.print(stats)
-
-
-def _fetch_and_ingest_web(
-    urls: list[str],
-    mapping: Path,
-    follow_next: bool,
-    max_pages: int,
-    delay: float,
-    headers: dict[str, str],
-) -> IngestStats:
-    products, offers = fetch_and_parse_urls(
-        urls=urls,
-        mapping_yaml=mapping,
-        follow_next=follow_next,
-        max_pages=max_pages,
-        delay_sec=delay,
-        headers=headers,
-    )
-    return upsert(products, offers)
-
-
 @app.command("search-web")
 def search_web(
     query: str = typer.Option(..., help="search query to embed in url_template"),
@@ -561,100 +438,6 @@ def search_web(
     )
     stats: IngestStats = upsert(products, offers)
     rich.print({"urls": urls, **stats.__dict__})
-
-
-@app.command("fetch-sitemap")
-def fetch_sitemap(
-    sitemap: str = typer.Option(..., help="sitemap or sitemap index URL"),
-    mapping: Path = typer.Option(
-        ..., exists=True, file_okay=True, dir_okay=False, readable=True
-    ),
-    contains: str = typer.Option(
-        "/prodotto/",
-        help="only visit URLs containing this substring (e.g., '/prodotto/')",
-    ),
-    limit: int = typer.Option(0, help="max URLs to visit (0 = no limit)"),
-    delay: float = typer.Option(0.5, min=0.0, help="delay between requests"),
-    header: list[str] = typer.Option(
-        None,
-        help='extra HTTP headers (key:value), e.g. "Cookie: a=b"',
-    ),
-) -> None:
-    """Fetch all product detail pages listed in a sitemap and ingest offers."""
-    hdrs = _build_headers_from_cli(header)
-    urls = _sitemap_target_urls(sitemap, hdrs, contains, limit)
-    products, offers = _fetch_sitemap_details(urls, mapping, hdrs, delay)
-    stats: IngestStats = upsert(products, offers)
-    rich.print({"visited": len(urls), **stats.__dict__})
-
-
-def _sitemap_target_urls(
-    sitemap: str,
-    headers: dict[str, str],
-    contains: str,
-    limit: int,
-) -> list[str]:
-    urls = parse_sitemap_urls(sitemap, headers=headers, limit=(limit or None))
-    return [u for u in urls if contains in u]
-
-
-def _fetch_sitemap_details(
-    urls: list[str],
-    mapping: Path,
-    headers: dict[str, str],
-    delay: float,
-):
-    from time import sleep
-    from .adapters.web_adapter import _load_mapping  # type: ignore
-    from .types import ProductInput
-    import httpx
-
-    mapping_obj = _load_mapping(mapping)
-    products: list[ProductInput] = []
-    offers: list[OfferInput] = []
-    seen: set[tuple[str, str, str]] = set()
-    with httpx.Client(
-        timeout=10.0,
-        headers=headers or {"User-Agent": "BikeCopilotBot/0.1"},
-        follow_redirects=True,
-    ) as client:
-        for u in urls:
-            _fetch_single_sitemap_url(
-                client, u, mapping_obj, seen, products, offers, delay, sleep
-            )
-    return products, offers
-
-
-def _fetch_single_sitemap_url(
-    client,
-    url: str,
-    mapping_obj,
-    seen: set[tuple[str, str, str]],
-    products,
-    offers,
-    delay: float,
-    sleep,
-) -> None:
-    try:
-        r = client.get(url)
-        r.raise_for_status()
-        from .adapters.web_adapter import parse_detail_html  # type: ignore
-
-        p, o = parse_detail_html(r.text, mapping_obj)
-        if p and o:
-            key = (p.brand, p.mpn, o.supplier)
-            if key in seen:
-                return
-            seen.add(key)
-            products.append(p)
-            offers.append(o)
-    except Exception as exc:
-        log_exception(
-            "cli", "web-ingest", "failed to fetch sitemap url", exc, extra={"url": url}
-        )
-        return
-    finally:
-        sleep(max(0.0, delay))
 
 
 @app.command("ingest-csv-mapped")
@@ -695,43 +478,6 @@ def reset_db() -> None:
     # Recreate
     create_all()
     rich.print({"db": "reset", "url": url})
-
-
-@app.command("fetch-rendered")
-def fetch_rendered_cmd(
-    url: str = typer.Argument(..., help="URL to fetch with Playwright Chromium"),
-    wait_ms: int = typer.Option(1500, help="Wait after load (ms)"),
-    login_url: str | None = typer.Option(None, help="Login page URL (optional)"),
-    username: str | None = typer.Option(None, help="Login username"),
-    password: str | None = typer.Option(None, help="Login password"),
-    user_selector: str = typer.Option("#username", help="CSS selector for username"),
-    pass_selector: str = typer.Option("#password", help="CSS selector for password"),
-    submit_selector: str = typer.Option(
-        "button[type=submit]", help="Submit button selector"
-    ),
-) -> None:
-    """Fetch a JS-heavy page; optional simple form login."""
-    try:
-        html = fetch_rendered(
-            url,
-            wait_ms=wait_ms,
-            login_url=login_url,
-            username=username,
-            password=password,
-            user_selector=user_selector,
-            pass_selector=pass_selector,
-            submit_selector=submit_selector,
-        )
-        rich.print(html)
-    except Exception as exc:
-        log_exception(
-            "cli",
-            "fetch-rendered",
-            "failed to fetch rendered page",
-            exc,
-            extra={"url": url},
-        )
-        raise typer.Exit(code=1)
 
 
 # --- Parallel ingest orchestrator -------------------------------------------------
@@ -1724,7 +1470,7 @@ def _sync_dealer_policy_if_needed(
     ext = parse_policy_html(r.text)
     create_all()
     with SessionLocal() as db:
-        _upsert_dealer_policy(db, cfg.name, ext)
+        upsert_dealer_policy(db, cfg.name, ext)
     rich.print(
         {
             "dealer": cfg.name,
