@@ -646,171 +646,50 @@ def build_interface() -> gr.Blocks:
 
         # Facet tree interactions: pick → set corresponding control, then the .change handler triggers search
         # Apply facet picks to internal state and re-run search
-        facet_speed.change(
-            lambda v: (v or ""), inputs=[facet_speed], outputs=[speed]
-        ).then(
-            _on_search,
-            inputs=[
-                query,
-                speed,
-                freehub,
-                brake,
-                axle,
-                rotor,
-                budget,
-                category,
-                suppliers,
-                in_stock,
-            ],
-            outputs=[
-                results,
-                offer_select,
-                results_state,
-                status,
-                suppliers,
-                category,
-                budget,
-                budget_slider,
-                facet_speed,
-                facet_freehub,
-                facet_brake,
-                facet_rotor,
-                facet_axle,
-                active_filters,
-            ],
-        )
-        facet_freehub.change(
-            lambda v: (v or ""), inputs=[facet_freehub], outputs=[freehub]
-        ).then(
-            _on_search,
-            inputs=[
-                query,
-                speed,
-                freehub,
-                brake,
-                axle,
-                rotor,
-                budget,
-                category,
-                suppliers,
-                in_stock,
-            ],
-            outputs=[
-                results,
-                offer_select,
-                results_state,
-                status,
-                suppliers,
-                category,
-                budget,
-                budget_slider,
-                facet_speed,
-                facet_freehub,
-                facet_brake,
-                facet_rotor,
-                facet_axle,
-                active_filters,
-            ],
-        )
-        facet_brake.change(
-            lambda v: (v or ""), inputs=[facet_brake], outputs=[brake]
-        ).then(
-            _on_search,
-            inputs=[
-                query,
-                speed,
-                freehub,
-                brake,
-                axle,
-                rotor,
-                budget,
-                category,
-                suppliers,
-                in_stock,
-            ],
-            outputs=[
-                results,
-                offer_select,
-                results_state,
-                status,
-                suppliers,
-                category,
-                budget,
-                budget_slider,
-                facet_speed,
-                facet_freehub,
-                facet_brake,
-                facet_rotor,
-                facet_axle,
-                active_filters,
-            ],
-        )
-        facet_rotor.change(
-            lambda v: (v or ""), inputs=[facet_rotor], outputs=[rotor]
-        ).then(
-            _on_search,
-            inputs=[
-                query,
-                speed,
-                freehub,
-                brake,
-                axle,
-                rotor,
-                budget,
-                category,
-                suppliers,
-                in_stock,
-            ],
-            outputs=[
-                results,
-                offer_select,
-                results_state,
-                status,
-                suppliers,
-                category,
-                budget,
-                budget_slider,
-                facet_speed,
-                facet_freehub,
-                facet_brake,
-                facet_rotor,
-                facet_axle,
-                active_filters,
-            ],
-        )
-        facet_axle.change(
-            lambda v: (v or ""), inputs=[facet_axle], outputs=[axle]
-        ).then(
-            _on_search,
-            inputs=[
-                query,
-                speed,
-                freehub,
-                brake,
-                axle,
-                rotor,
-                budget,
-                category,
-                suppliers,
-                in_stock,
-            ],
-            outputs=[
-                results,
-                offer_select,
-                results_state,
-                status,
-                suppliers,
-                category,
-                budget,
-                budget_slider,
-                facet_speed,
-                facet_freehub,
-                facet_brake,
-                facet_rotor,
-                facet_axle,
-                active_filters,
-            ],
-        )
+
+        # Helper function to create facet change handlers (reduces repetition)
+        def _register_facet_handler(facet_component, state_component):
+            """Register a facet radio change handler that updates state and triggers search."""
+            facet_component.change(
+                lambda v: (v or ""), inputs=[facet_component], outputs=[state_component]
+            ).then(
+                _on_search,
+                inputs=[
+                    query,
+                    speed,
+                    freehub,
+                    brake,
+                    axle,
+                    rotor,
+                    budget,
+                    category,
+                    suppliers,
+                    in_stock,
+                ],
+                outputs=[
+                    results,
+                    offer_select,
+                    results_state,
+                    status,
+                    suppliers,
+                    category,
+                    budget,
+                    budget_slider,
+                    facet_speed,
+                    facet_freehub,
+                    facet_brake,
+                    facet_rotor,
+                    facet_axle,
+                    active_filters,
+                ],
+            )
+
+        # Register all facet handlers using the factory function
+        _register_facet_handler(facet_speed, speed)
+        _register_facet_handler(facet_freehub, freehub)
+        _register_facet_handler(facet_brake, brake)
+        _register_facet_handler(facet_rotor, rotor)
+        _register_facet_handler(facet_axle, axle)
 
         # Keep slider and number in sync (0 means no budget)
         def _sync_budget_from_slider(val: float | int | None):
