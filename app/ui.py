@@ -301,70 +301,94 @@ def build_interface() -> gr.Blocks:
             Delegates business logic to handle_search_request() and
             converts SearchHandlerResult to gr.update() calls.
             """
-            # Call business logic handler
-            result = handle_search_request(
-                query=query,
-                speed=speed,
-                freehub=freehub,
-                brake=brake,
-                axle=axle,
-                rotor=rotor,
-                budget=budget,
-                category=category,
-                suppliers_sel=suppliers_sel,
-                in_stock_only=in_stock_only,
-            )
+            try:
+                # Call business logic handler
+                result = handle_search_request(
+                    query=query,
+                    speed=speed,
+                    freehub=freehub,
+                    brake=brake,
+                    axle=axle,
+                    rotor=rotor,
+                    budget=budget,
+                    category=category,
+                    suppliers_sel=suppliers_sel,
+                    in_stock_only=in_stock_only,
+                )
 
-            # Convert SearchHandlerResult to Gradio updates
-            return (
-                result.rows,
-                gr.update(choices=result.offer_labels, value=result.default_label),
-                {k: v for k, v in result.mapping.items()},
-                result.message,
-                gr.update(choices=result.suppliers_choices),
-                gr.update(
-                    choices=result.category.choices,
-                    value=result.category.value,
-                    interactive=result.category.interactive,
-                    info=result.category.info,
-                ),
-                gr.update(info=result.budget.info),
-                gr.update(
-                    minimum=result.budget.slider_min,
-                    maximum=result.budget.slider_max,
-                    value=result.budget.slider_value,
-                ),
-                gr.update(
-                    choices=result.speed.choices[1:],  # Remove empty prefix for Radio
-                    value=None,
-                    interactive=result.speed.interactive,
-                    info=result.speed.info,
-                ),
-                gr.update(
-                    choices=result.freehub.choices[1:],  # Remove empty prefix
-                    value=None,
-                    interactive=result.freehub.interactive,
-                    info=result.freehub.info,
-                ),
-                gr.update(
-                    choices=result.brake.choices[1:],  # Remove empty prefix
-                    value=None,
-                    interactive=result.brake.interactive,
-                    info=result.brake.info,
-                ),
-                gr.update(
-                    choices=result.rotor.choices[1:],  # Remove empty prefix
-                    value=None,
-                    interactive=result.rotor.interactive,
-                    info=result.rotor.info,
-                ),
-                gr.update(
-                    choices=result.axle.choices[1:],  # Remove empty prefix
-                    value=None,
-                    info=result.axle.info,
-                ),
-                gr.update(choices=result.active_filters, value=result.active_filters),
-            )
+                # Convert SearchHandlerResult to Gradio updates
+                return (
+                    result.rows,
+                    gr.update(choices=result.offer_labels, value=result.default_label),
+                    {k: v for k, v in result.mapping.items()},
+                    result.message,
+                    gr.update(choices=result.suppliers_choices),
+                    gr.update(
+                        choices=result.category.choices,
+                        value=result.category.value,
+                        interactive=result.category.interactive,
+                        info=result.category.info,
+                    ),
+                    gr.update(info=result.budget.info),
+                    gr.update(
+                        minimum=result.budget.slider_min,
+                        maximum=result.budget.slider_max,
+                        value=result.budget.slider_value,
+                    ),
+                    gr.update(
+                        choices=result.speed.choices[
+                            1:
+                        ],  # Remove empty prefix for Radio
+                        value=None,
+                        interactive=result.speed.interactive,
+                        info=result.speed.info,
+                    ),
+                    gr.update(
+                        choices=result.freehub.choices[1:],  # Remove empty prefix
+                        value=None,
+                        interactive=result.freehub.interactive,
+                        info=result.freehub.info,
+                    ),
+                    gr.update(
+                        choices=result.brake.choices[1:],  # Remove empty prefix
+                        value=None,
+                        interactive=result.brake.interactive,
+                        info=result.brake.info,
+                    ),
+                    gr.update(
+                        choices=result.rotor.choices[1:],  # Remove empty prefix
+                        value=None,
+                        interactive=result.rotor.interactive,
+                        info=result.rotor.info,
+                    ),
+                    gr.update(
+                        choices=result.axle.choices[1:],  # Remove empty prefix
+                        value=None,
+                        info=result.axle.info,
+                    ),
+                    gr.update(
+                        choices=result.active_filters, value=result.active_filters
+                    ),
+                )
+            except Exception as exc:
+                log_exception("ui", "search", "search handler failed", exc)
+                # Return safe empty state to prevent UI crash
+                return (
+                    [],  # empty rows
+                    gr.update(choices=[], value=None),  # offer_select
+                    {},  # mapping
+                    "Errore durante la ricerca. Riprova.",  # message
+                    gr.update(),  # suppliers (no change)
+                    gr.update(),  # category (no change)
+                    gr.update(),  # budget (no change)
+                    gr.update(),  # budget_slider (no change)
+                    gr.update(),  # speed facet
+                    gr.update(),  # freehub facet
+                    gr.update(),  # brake facet
+                    gr.update(),  # rotor facet
+                    gr.update(),  # axle facet
+                    gr.update(choices=[], value=[]),  # active_filters
+                )
 
         search_btn.click(
             _on_search,

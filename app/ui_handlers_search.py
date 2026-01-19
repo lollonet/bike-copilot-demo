@@ -11,6 +11,10 @@ from .types import Brake, Freehub, Rotor, SearchRequest
 from .ui_helpers import active_filters_list, annotate_low_coverage, calculate_coverage
 from .ui_models import BudgetUpdate, FacetUpdate, SearchHandlerResult
 
+# Minimum coverage ratio required to enable facet interaction
+# Facets with coverage below this threshold are disabled to prevent misleading filters
+FACET_COVERAGE_THRESHOLD = 0.15
+
 
 def _do_search(
     query: str,
@@ -48,7 +52,8 @@ def _do_search(
     mapping: dict[int, dict[str, Any]] = {}
 
     for it in res.items:
-        # Build table row
+        # Build table row with 8 columns matching Dataframe headers:
+        # ID, Brand, MPN, Fornitore, Prezzo, Stock, Lead (gg), Score
         table_row: list[object] = [
             it.id,
             it.brand,
@@ -61,11 +66,13 @@ def _do_search(
         ]
         table_rows.append(table_row)
 
-        # Build option for dropdown
+        # Build option for dropdown with format: "{id} · {brand} {mpn} · {supplier} · €{price}"
+        # This format is required by _on_select and _on_add which parse the ID from label
         label = f"{it.id} · {it.brand} {it.mpn} · {it.supplier} · €{it.price:.2f}"
         options.append((label, it.id))
 
-        # Build mapping from offer ID to details
+        # Build mapping from offer ID (int) to full details dict
+        # Required by _on_select and _on_add for cart/preview functionality
         mapping[it.id] = {
             "brand": it.brand,
             "mpn": it.mpn,
@@ -216,7 +223,7 @@ def handle_search_request(
                 choices=[""] + speed_choices,
                 value=speed_val,
                 info=annotate_low_coverage((speed_info or None), cov_speed),
-                interactive=(cov_speed >= 0.15),
+                interactive=(cov_speed >= FACET_COVERAGE_THRESHOLD),
                 coverage=cov_speed,
             )
 
@@ -224,7 +231,7 @@ def handle_search_request(
                 choices=[""] + freehub_choices,
                 value=freehub_val,
                 info=annotate_low_coverage((freehub_info or None), cov_freehub),
-                interactive=(cov_freehub >= 0.15),
+                interactive=(cov_freehub >= FACET_COVERAGE_THRESHOLD),
                 coverage=cov_freehub,
             )
 
@@ -232,7 +239,7 @@ def handle_search_request(
                 choices=[""] + brake_choices,
                 value=brake_val,
                 info=annotate_low_coverage((brake_info or None), cov_brake),
-                interactive=(cov_brake >= 0.15),
+                interactive=(cov_brake >= FACET_COVERAGE_THRESHOLD),
                 coverage=cov_brake,
             )
 
@@ -240,10 +247,12 @@ def handle_search_request(
                 choices=[""] + rotor_choices,
                 value=rotor_val,
                 info=annotate_low_coverage((rotor_info or None), cov_rotor),
-                interactive=(cov_rotor >= 0.15),
+                interactive=(cov_rotor >= FACET_COVERAGE_THRESHOLD),
                 coverage=cov_rotor,
             )
 
+            # Axle facet is always interactive (no coverage gating)
+            # Unlike other facets, axle supports free-text input and only shows tooltip info
             axle_update = FacetUpdate(
                 choices=[""] + sorted(list(f.get("axle", {}).keys())),
                 value=None,
