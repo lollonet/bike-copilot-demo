@@ -9,7 +9,7 @@ from .api_client import api_post_silent
 from .logging_utils import log_exception
 from .search import search
 from .types import Brake, Freehub, Rotor, SearchRequest
-from .ui_helpers import active_filters_list, annotate_low_coverage, calculate_coverage
+from .ui_handlers_search import handle_search_request
 from sqlalchemy.orm import Session
 from typing import cast
 
@@ -422,223 +422,77 @@ def build_interface() -> gr.Blocks:
             suppliers_sel,
             in_stock_only,
         ):
-            rows, options, mapping, msg = _do_search(
-                query,
-                speed,
-                freehub,
-                brake,
-                axle,
-                rotor,
-                budget,
-                category,
-                suppliers_sel,
-                in_stock_only,
+            """
+            Gradio wrapper for search handler.
+
+            This function delegates business logic to handle_search_request() and
+            converts the SearchHandlerResult dataclass to Gradio gr.update() calls.
+            """
+            # Call business logic handler
+            result = handle_search_request(
+                query=query,
+                speed=speed,
+                freehub=freehub,
+                brake=brake,
+                axle=axle,
+                rotor=rotor,
+                budget=budget,
+                category=category,
+                suppliers_sel=suppliers_sel,
+                in_stock_only=in_stock_only,
             )
-            labels = [opt[0] for opt in options]
-            default_label = labels[0] if labels else None
-            # Fetch facets from API to refresh filter options/info
-            try:
-                payload = {
-                    "query_text": query or None,
-                    "speed": speed or None,
-                    "freehub": (freehub or None),
-                    "brake": (brake or None),
-                    "axle": axle or None,
-                    "rotor": (rotor or None),
-                    "budget_max": (
-                        float(budget)
-                        if (budget is not None and float(budget) > 0)
-                        else None
-                    ),
-                    "category": category or None,
-                    "suppliers": suppliers_sel or [],
-                    "in_stock_only": bool(in_stock_only),
-                }
-                r = api_post_silent("/facets", payload, timeout=10)
-                if r.status_code == 200:
-                    f = r.json()
-                    # Build info strings
-                    speed_info = ", ".join(
-                        [f"{k} ({v})" for k, v in sorted(f.get("speed", {}).items())]
-                    )
-                    freehub_info = ", ".join(
-                        [f"{k} ({v})" for k, v in sorted(f.get("freehub", {}).items())]
-                    )
-                    brake_info = ", ".join(
-                        [f"{k} ({v})" for k, v in sorted(f.get("brake", {}).items())]
-                    )
-                    axle_info = ", ".join(
-                        [f"{k} ({v})" for k, v in sorted(f.get("axle", {}).items())]
-                    )
-                    rotor_info = ", ".join(
-                        [f"{k} ({v})" for k, v in sorted(f.get("rotor", {}).items())]
-                    )
-                    # Choices are only keys with count>0 to avoid dead filters
-                    speed_choices = sorted(list(f.get("speed", {}).keys()))
-                    freehub_choices = sorted(list(f.get("freehub", {}).keys()))
-                    brake_choices = sorted(list(f.get("brake", {}).keys()))
-                    # Axle choices remain free-text for now (tooltip only)
-                    rotor_choices = sorted(list(f.get("rotor", {}).keys()))
 
-                    # Coverage gating based on product totals
-                    totals = f.get("totals", {})
-                    prod_total = int(totals.get("products", 0) or 0) or 1
-
-                    # Reset value to "" if current selection disappears
-                    speed_val = speed if speed in speed_choices else ""
-                    freehub_val = freehub if freehub in freehub_choices else ""
-                    brake_val = brake if brake in brake_choices else ""
-                    rotor_val = rotor if rotor in rotor_choices else ""
-                    category_choices = sorted(list(f.get("category", {}).keys()))
-                    category_val = category if category in category_choices else ""
-
-                    cov_speed = calculate_coverage(f.get("speed", {}), prod_total)
-                    cov_freehub = calculate_coverage(f.get("freehub", {}), prod_total)
-                    cov_brake = calculate_coverage(f.get("brake", {}), prod_total)
-                    cov_rotor = calculate_coverage(f.get("rotor", {}), prod_total)
-                    _ = gr.update(
-                        choices=[""] + speed_choices,
-                        value=speed_val,
-                        info=annotate_low_coverage((speed_info or None), cov_speed),
-                        interactive=(cov_speed >= 0.15),
-                    )
-                    _ = gr.update(
-                        choices=[""] + freehub_choices,
-                        value=freehub_val,
-                        info=annotate_low_coverage((freehub_info or None), cov_freehub),
-                        interactive=(cov_freehub >= 0.15),
-                    )
-                    _ = gr.update(
-                        choices=[""] + brake_choices,
-                        value=brake_val,
-                        info=annotate_low_coverage((brake_info or None), cov_brake),
-                        interactive=(cov_brake >= 0.15),
-                    )
-                    _ = gr.update(info=(axle_info or None))
-                    _ = gr.update(
-                        choices=[""] + rotor_choices,
-                        value=rotor_val,
-                        info=annotate_low_coverage((rotor_info or None), cov_rotor),
-                        interactive=(cov_rotor >= 0.15),
-                    )
-                    suppliers_upd = gr.update(
-                        choices=sorted(list(f.get("supplier", {}).keys()))
-                    )
-                    category_upd = gr.update(
-                        choices=[""] + category_choices,
-                        value=category_val,
-                        interactive=bool(category_choices),
-                        info=(
-                            None
-                            if category_choices
-                            else "Nessuna categoria nei risultati"
-                        ),
-                    )
-                    price = f.get("price", {})
-                    price_info = None
-                    if (
-                        price
-                        and price.get("max") is not None
-                        and price.get("min") is not None
-                    ):
-                        price_info = f"Prezzo min/max: €{float(price['min']):.2f} – €{float(price['max']):.2f}"
-                    # Update number info and slider bounds; keep 0 as 'no limit'
-                    max_val = float(price.get("max") or 0.0)
-                    # If budget is None or 0, keep slider at 0; else clamp in [min,max]
-                    if budget is None or float(budget) <= 0:
-                        slider_val = 0
-                    else:
-                        slider_val = max(min(int(float(budget)), int(max_val)), 0)
-                    budget_upd = gr.update(info=price_info)
-                    budget_slider_upd = gr.update(
-                        minimum=0,
-                        maximum=max(100, int(max_val) or 100),
-                        value=slider_val,
-                    )
-                    # Facet tree radios (choices + enablement)
-                    cov_speed = calculate_coverage(f.get("speed", {}), prod_total)
-                    cov_freehub = calculate_coverage(f.get("freehub", {}), prod_total)
-                    cov_brake = calculate_coverage(f.get("brake", {}), prod_total)
-                    cov_rotor = calculate_coverage(f.get("rotor", {}), prod_total)
-                    facet_speed_upd = gr.update(
-                        choices=speed_choices,
-                        value=None,
-                        interactive=(cov_speed >= 0.15),
-                        info=annotate_low_coverage(speed_info or None, cov_speed),
-                    )
-                    facet_freehub_upd = gr.update(
-                        choices=freehub_choices,
-                        value=None,
-                        interactive=(cov_freehub >= 0.15),
-                        info=annotate_low_coverage(freehub_info or None, cov_freehub),
-                    )
-                    facet_brake_upd = gr.update(
-                        choices=brake_choices,
-                        value=None,
-                        interactive=(cov_brake >= 0.15),
-                        info=annotate_low_coverage(brake_info or None, cov_brake),
-                    )
-                    facet_rotor_upd = gr.update(
-                        choices=rotor_choices,
-                        value=None,
-                        interactive=(cov_rotor >= 0.15),
-                        info=annotate_low_coverage(rotor_info or None, cov_rotor),
-                    )
-                    facet_axle_upd = gr.update(
-                        choices=sorted(list(f.get("axle", {}).keys())),
-                        value=None,
-                        info=axle_info or None,
-                    )
-                else:
-                    suppliers_upd = gr.update()
-                    category_upd = gr.update()
-                    budget_upd = gr.update()
-                    budget_slider_upd = gr.update()
-                    facet_speed_upd = gr.update()
-                    facet_freehub_upd = gr.update()
-                    facet_brake_upd = gr.update()
-                    facet_rotor_upd = gr.update()
-                    facet_axle_upd = gr.update()
-            except Exception as exc:
-                log_exception("ui", "facets", "failed to build facets", exc)
-                suppliers_upd = gr.update()
-                category_upd = gr.update()
-                budget_upd = gr.update()
-                budget_slider_upd = gr.update()
-                facet_speed_upd = gr.update()
-                facet_freehub_upd = gr.update()
-                facet_brake_upd = gr.update()
-                facet_rotor_upd = gr.update()
-                facet_axle_upd = gr.update()
-
-            af = active_filters_list(
-                category,
-                suppliers_sel,
-                in_stock_only,
-                speed,
-                freehub,
-                brake,
-                axle,
-                rotor,
-                budget,
-            )
-            active_filters_upd = gr.update(choices=af, value=af)
-
+            # Convert SearchHandlerResult to Gradio updates
             return (
-                rows,
-                gr.update(choices=labels, value=default_label),
-                {k: v for k, v in mapping.items()},
-                msg,
-                suppliers_upd,
-                category_upd,
-                budget_upd,
-                budget_slider_upd,
-                facet_speed_upd,
-                facet_freehub_upd,
-                facet_brake_upd,
-                facet_rotor_upd,
-                facet_axle_upd,
-                active_filters_upd,
+                result.rows,
+                gr.update(choices=result.offer_labels, value=result.default_label),
+                {k: v for k, v in result.mapping.items()},
+                result.message,
+                gr.update(choices=result.suppliers_choices),
+                gr.update(
+                    choices=result.category.choices,
+                    value=result.category.value,
+                    interactive=result.category.interactive,
+                    info=result.category.info,
+                ),
+                gr.update(info=result.budget.info),
+                gr.update(
+                    minimum=result.budget.slider_min,
+                    maximum=result.budget.slider_max,
+                    value=result.budget.slider_value,
+                ),
+                gr.update(
+                    choices=result.speed.choices[
+                        1:
+                    ],  # Remove empty string prefix for Radio
+                    value=None,
+                    interactive=result.speed.interactive,
+                    info=result.speed.info,
+                ),
+                gr.update(
+                    choices=result.freehub.choices[1:],  # Remove empty string prefix
+                    value=None,
+                    interactive=result.freehub.interactive,
+                    info=result.freehub.info,
+                ),
+                gr.update(
+                    choices=result.brake.choices[1:],  # Remove empty string prefix
+                    value=None,
+                    interactive=result.brake.interactive,
+                    info=result.brake.info,
+                ),
+                gr.update(
+                    choices=result.rotor.choices[1:],  # Remove empty string prefix
+                    value=None,
+                    interactive=result.rotor.interactive,
+                    info=result.rotor.info,
+                ),
+                gr.update(
+                    choices=result.axle.choices,
+                    value=None,
+                    info=result.axle.info,
+                ),
+                gr.update(choices=result.active_filters, value=result.active_filters),
             )
 
         search_btn.click(
