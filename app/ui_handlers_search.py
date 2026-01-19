@@ -16,6 +16,17 @@ from .ui_models import BudgetUpdate, FacetUpdate, SearchHandlerResult
 FACET_COVERAGE_THRESHOLD = 0.15
 
 
+def _parse_budget(budget: str | None) -> float | None:
+    """Parse budget string to float, returning None if invalid or non-positive."""
+    if budget is None or budget == "":
+        return None
+    try:
+        val = float(budget)
+        return val if val > 0 else None
+    except ValueError:
+        return None
+
+
 def _do_search(
     query: str,
     speed: str,
@@ -121,14 +132,7 @@ def handle_search_request(
         SearchHandlerResult with all data needed to update UI components
     """
     # Convert budget string to float
-    budget_float = None
-    if budget is not None and budget != "":
-        try:
-            bval = float(budget)
-            if bval > 0:
-                budget_float = bval
-        except ValueError:
-            pass
+    budget_float = _parse_budget(budget)
 
     # Execute core search
     rows, options, mapping, msg = _do_search(
@@ -289,10 +293,10 @@ def handle_search_request(
             max_val = float(price.get("max") or 0.0)
 
             # If budget is None or 0, keep slider at 0; else clamp in [min,max]
-            if budget is None or budget == "" or float(budget or 0) <= 0:
+            if budget_float is None:
                 slider_val = 0
             else:
-                slider_val = max(min(int(float(budget)), int(max_val)), 0)
+                slider_val = max(min(int(budget_float), int(max_val)), 0)
 
             budget_update = BudgetUpdate(
                 info=price_info,

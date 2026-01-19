@@ -3,6 +3,27 @@
 from __future__ import annotations
 
 
+def test_parse_budget_valid():
+    """Test _parse_budget with valid inputs."""
+    from app.ui_handlers_search import _parse_budget
+
+    assert _parse_budget("50") == 50.0
+    assert _parse_budget("100.5") == 100.5
+    assert _parse_budget("1") == 1.0
+
+
+def test_parse_budget_invalid():
+    """Test _parse_budget with invalid inputs."""
+    from app.ui_handlers_search import _parse_budget
+
+    assert _parse_budget(None) is None
+    assert _parse_budget("") is None
+    assert _parse_budget("0") is None
+    assert _parse_budget("-50") is None
+    assert _parse_budget("abc") is None
+    assert _parse_budget("12.3.4") is None
+
+
 def test_handle_search_request_basic(monkeypatch):
     """Test successful search with facets."""
     from app import ui_handlers_search
