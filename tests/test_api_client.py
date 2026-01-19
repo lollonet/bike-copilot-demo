@@ -22,7 +22,9 @@ class DummyResponse:
             import httpx
 
             raise httpx.HTTPStatusError(
-                "HTTP error", request=None, response=self  # type: ignore[arg-type]
+                "HTTP error",
+                request=None,
+                response=self,  # type: ignore[arg-type]
             )
 
 

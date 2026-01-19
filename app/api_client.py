@@ -38,7 +38,9 @@ def api_get(path: str, timeout: float = 15.0) -> dict[str, Any]:
         return r.json()
 
 
-def api_post(path: str, payload: dict[str, Any], timeout: float = 20.0) -> dict[str, Any]:
+def api_post(
+    path: str, payload: dict[str, Any], timeout: float = 20.0
+) -> dict[str, Any]:
     """
     Execute POST request to backend API.
 
