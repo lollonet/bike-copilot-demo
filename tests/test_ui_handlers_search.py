@@ -127,9 +127,10 @@ def test_handle_search_request_api_error(monkeypatch):
     # Verify search still works even though facets failed
     assert len(result.rows) == 1
     assert result.message == "Trovate 1 offerte"
-    # Facets should be empty/default
-    assert result.speed.choices == []
-    assert result.speed.interactive is False
+    # Facets should preserve current filter state (empty in this case)
+    # to keep UI consistent with search results
+    assert result.speed.choices == [""]  # Preserves empty state
+    assert result.speed.interactive is True  # Keeps interactive to allow changes
 
 
 def test_handle_search_request_with_filters(monkeypatch):

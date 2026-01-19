@@ -149,14 +149,25 @@ def handle_search_request(
     default_label = labels[0] if labels else None
 
     # Default facet updates (used if API call fails)
-    speed_update = FacetUpdate([], None, None, False)
-    freehub_update = FacetUpdate([], None, None, False)
-    brake_update = FacetUpdate([], None, None, False)
-    rotor_update = FacetUpdate([], None, None, False)
-    axle_update = FacetUpdate([], None, None, False)
-    suppliers_choices: list[str] = []
-    category_update = FacetUpdate([], None, None, False)
-    budget_update = BudgetUpdate(None, 0, 100, 0)
+    # Preserve current filter state to keep UI consistent with search results
+    speed_update = FacetUpdate(["", speed] if speed else [""], speed, None, True)
+    freehub_update = FacetUpdate(
+        ["", freehub] if freehub else [""], freehub, None, True
+    )
+    brake_update = FacetUpdate(["", brake] if brake else [""], brake, None, True)
+    rotor_update = FacetUpdate(["", rotor] if rotor else [""], rotor, None, True)
+    axle_update = FacetUpdate(["", axle] if axle else [""], axle, None, True)
+    suppliers_choices: list[str] = list(suppliers_sel or [])
+    category_update = FacetUpdate(
+        ["", category] if category else [""], category, None, True
+    )
+    # Preserve budget state if set
+    if budget_float is not None and budget_float > 0:
+        budget_update = BudgetUpdate(
+            None, 0, max(100, int(budget_float)), int(budget_float)
+        )
+    else:
+        budget_update = BudgetUpdate(None, 0, 100, 0)
 
     # Fetch facets from API to refresh filter options/info
     try:
