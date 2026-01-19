@@ -478,3 +478,58 @@ def compute_synth_summary() -> dict[str, int]:
         "suppliers": sup_count,
         "in_stock_offers": in_stock,
     }
+
+
+def create_task_launcher(
+    name: str,
+    supplier: str,
+    statuses: dict[str, ProviderStatus],
+    lock_dir: Any,
+) -> Callable[[Callable[[], IngestStats | None]], Callable[[], IngestStats | None]]:
+    """Create a task launcher that wraps a provider function with locking and status tracking.
+
+    Args:
+        name: Provider name
+        supplier: Supplier name
+        statuses: Shared status dict
+        lock_dir: Directory for lock files
+
+    Returns:
+        Launcher function that wraps provider functions
+    """
+
+    def _launch(
+        fn: Callable[[], IngestStats | None],
+    ) -> Callable[[], IngestStats | None]:
+        status: ProviderStatus = {
+            "name": name,
+            "supplier": supplier,
+            "state": "pending",
+            "pages_done": 0,
+            "products": 0,
+            "offers": 0,
+            "total_seeds": None,
+            "message": "",
+            "lock_file": None,
+        }
+        statuses[name] = status
+
+        def _wrapped() -> IngestStats | None:
+            lock_file = provider_lock(name, lock_dir)
+            if lock_file is None:
+                status["state"] = "skipped"
+                status["message"] = "another run in progress (lock held)"
+                return None
+            status["lock_file"] = str(lock_file)
+            status["state"] = "running"
+            try:
+                return fn()
+            finally:
+                status["state"] = (
+                    "done" if status.get("state") != "error" else status["state"]
+                )
+                release_lock(lock_file)
+
+        return _wrapped
+
+    return _launch

@@ -17,10 +17,9 @@ from ..adapters.pdf_adapter import extract_from_pdf
 from ..cli_helpers.ingest_helpers import (
     ProviderStatus,
     compute_synth_summary,
+    create_task_launcher,
     generate_synthetic_offers,
     group_offers_by_product,
-    provider_lock,
-    release_lock,
     run_ciclodiffusione,
     run_dealer_from_yaml,
     run_montanini,
@@ -147,181 +146,15 @@ def ingest_all_parallel(
 ) -> None:
     """Seed CSV then crawl all providers in parallel with per-minute status."""
     try:
-        # Import DealerSession here to avoid circular imports
-        from ..cli import DealerSession, _build_dealer_session
-
-        create_all()
-        products, offers = parse_unified_csv(seed_csv, seed_mapping)
-        seed_stats = upsert(products, offers)
-        rich.print({"seed": seed_stats})
-
-        statuses: dict[str, ProviderStatus] = {}
-        lock = threading.Lock()
-        stop_event = threading.Event()
-
-        def _launch(
-            name: str, supplier: str, fn: Callable[[], IngestStats | None]
-        ) -> Callable[[], IngestStats | None]:
-            status: ProviderStatus = {
-                "name": name,
-                "supplier": supplier,
-                "state": "pending",
-                "pages_done": 0,
-                "products": 0,
-                "offers": 0,
-                "total_seeds": None,
-                "message": "",
-                "lock_file": None,
-            }
-            statuses[name] = status
-
-            def _wrapped() -> IngestStats | None:
-                lock_file = provider_lock(name, lock_dir)
-                if lock_file is None:
-                    status["state"] = "skipped"
-                    status["message"] = "another run in progress (lock held)"
-                    return None
-                status["lock_file"] = str(lock_file)
-                status["state"] = "running"
-                try:
-                    return fn()
-                finally:
-                    status["state"] = (
-                        "done" if status.get("state") != "error" else status["state"]
-                    )
-                    release_lock(lock_file)
-
-            return _wrapped
-
-        queries_list = [q for q in queries.split(" ") if q.strip()]
-
-        cfgs = {
-            key: find_dealer(key)
-            for key in ["ciclodiffusione", "rms", "ciclopromo", "bikeparts"]
-        }
-
-        def _build_session_for(
-            key: str, status: ProviderStatus
-        ) -> DealerSession | None:
-            cfg = cfgs.get(key)
-            if cfg is None:
-                status["state"] = "skipped"
-                status["message"] = "dealer not found in providers/dealers.yaml"
-                return None
-            try:
-                return _build_dealer_session(cfg)
-            except Exception as exc:  # pragma: no cover
-                status["state"] = "skipped"
-                status["message"] = f"auth/session error: {exc}"
-                return None
-
-        tasks: dict[str, Callable[[], IngestStats | None]] = {
-            "ciclimontanini": _launch(
-                "ciclimontanini",
-                "CicliMontanini",
-                lambda status=statuses["ciclimontanini"], lk=lock: run_montanini(
-                    status, lk
-                ),
-            ),
-            "ciclodiffusione": _launch(
-                "ciclodiffusione",
-                "Ciclodiffusione",
-                lambda cfg_key="ciclodiffusione",
-                q=queries_list,
-                mp=max_pages,
-                d=delay: (
-                    run_ciclodiffusione(
-                        statuses[cfg_key],
-                        lock,
-                        cfg,
-                        session,
-                        q,
-                        mp,
-                        d,
-                    )
-                    if (cfg := cfgs.get(cfg_key))
-                    and (session := _build_session_for(cfg_key, statuses[cfg_key]))
-                    else None
-                ),
-            ),
-            "rms": _launch(
-                "rms",
-                "RMS",
-                lambda cfg_key="rms", mp=max_pages, d=delay: (
-                    run_dealer_from_yaml(
-                        statuses[cfg_key],
-                        lock,
-                        cfg,
-                        session,
-                        d,
-                        mp,
-                    )
-                    if (cfg := cfgs.get(cfg_key))
-                    and (session := _build_session_for(cfg_key, statuses[cfg_key]))
-                    else None
-                ),
-            ),
-            "ciclopromo": _launch(
-                "ciclopromo",
-                "CicloPromo",
-                lambda cfg_key="ciclopromo", mp=max_pages, d=delay: (
-                    run_dealer_from_yaml(
-                        statuses[cfg_key],
-                        lock,
-                        cfg,
-                        session,
-                        d,
-                        mp,
-                    )
-                    if (cfg := cfgs.get(cfg_key))
-                    and (session := _build_session_for(cfg_key, statuses[cfg_key]))
-                    else None
-                ),
-            ),
-            "bikeparts": _launch(
-                "bikeparts",
-                "Bikeparts",
-                lambda cfg_key="bikeparts", mp=max_pages, d=delay: (
-                    run_dealer_from_yaml(
-                        statuses[cfg_key],
-                        lock,
-                        cfg,
-                        session,
-                        d,
-                        mp,
-                    )
-                    if (cfg := cfgs.get(cfg_key))
-                    and (session := _build_session_for(cfg_key, statuses[cfg_key]))
-                    else None
-                ),
-            ),
-        }
-
-        reporter = threading.Thread(
-            target=status_reporter,
-            args=(stop_event, statuses, progress_interval, lock),
-            daemon=True,
+        _run_parallel_ingestion(
+            queries,
+            max_pages,
+            delay,
+            seed_csv,
+            seed_mapping,
+            progress_interval,
+            lock_dir,
         )
-        reporter.start()
-
-        results: dict[str, IngestStats | None] = {}
-        with ThreadPoolExecutor(max_workers=len(tasks)) as pool:
-            future_map = {pool.submit(fn): name for name, fn in tasks.items()}
-            for fut in as_completed(future_map):
-                name = future_map[fut]
-                try:
-                    results[name] = fut.result()
-                except Exception as exc:  # pragma: no cover
-                    results[name] = None
-                    with lock:
-                        statuses[name]["state"] = "error"
-                        statuses[name]["message"] = str(exc)
-                    log_exception("cli", "ingest-all-parallel", f"{name} failed", exc)
-
-        stop_event.set()
-        reporter.join(timeout=2)
-
-        rich.print({"results": {k: str(v) for k, v in results.items()}})
     except Exception as exc:
         log_exception(
             "cli",
@@ -331,6 +164,159 @@ def ingest_all_parallel(
             extra={"queries": queries},
         )
         raise typer.Exit(code=1)
+
+
+def _run_parallel_ingestion(
+    queries: str,
+    max_pages: int,
+    delay: float,
+    seed_csv: Path,
+    seed_mapping: Path,
+    progress_interval: int,
+    lock_dir: Path,
+) -> None:
+    """Execute parallel provider ingestion."""
+    from ..cli import _build_dealer_session
+
+    # Seed database
+    create_all()
+    products, offers = parse_unified_csv(seed_csv, seed_mapping)
+    seed_stats = upsert(products, offers)
+    rich.print({"seed": seed_stats})
+
+    # Setup shared state
+    statuses: dict[str, ProviderStatus] = {}
+    lock = threading.Lock()
+    stop_event = threading.Event()
+    queries_list = [q for q in queries.split(" ") if q.strip()]
+
+    # Load dealer configurations
+    cfgs = {
+        key: find_dealer(key)
+        for key in ["ciclodiffusione", "rms", "ciclopromo", "bikeparts"]
+    }
+
+    # Build tasks
+    tasks = _build_provider_tasks(
+        statuses,
+        lock,
+        lock_dir,
+        cfgs,
+        _build_dealer_session,
+        queries_list,
+        max_pages,
+        delay,
+    )
+
+    # Run tasks with status reporting
+    _execute_parallel_tasks(tasks, statuses, lock, stop_event, progress_interval)
+
+
+def _build_provider_tasks(
+    statuses: dict[str, ProviderStatus],
+    lock: threading.Lock,
+    lock_dir: Path,
+    cfgs: dict,
+    build_session_fn: Callable,
+    queries_list: list[str],
+    max_pages: int,
+    delay: float,
+) -> dict[str, Callable[[], IngestStats | None]]:
+    """Build task dictionary for all providers."""
+    launcher = create_task_launcher
+
+    # Montanini task (no auth required)
+    montanini_task = launcher("ciclimontanini", "CicliMontanini", statuses, lock_dir)(
+        lambda: run_montanini(statuses["ciclimontanini"], lock)
+    )
+
+    # Dealer tasks with session building
+    dealer_tasks = {}
+    for key, supplier in [
+        ("ciclodiffusione", "Ciclodiffusione"),
+        ("rms", "RMS"),
+        ("ciclopromo", "CicloPromo"),
+        ("bikeparts", "Bikeparts"),
+    ]:
+        task_fn = _create_dealer_task(
+            key, statuses, lock, cfgs, build_session_fn, queries_list, max_pages, delay
+        )
+        dealer_tasks[key] = launcher(key, supplier, statuses, lock_dir)(task_fn)
+
+    return {"ciclimontanini": montanini_task, **dealer_tasks}
+
+
+def _create_dealer_task(
+    key: str,
+    statuses: dict[str, ProviderStatus],
+    lock: threading.Lock,
+    cfgs: dict,
+    build_session_fn: Callable,
+    queries_list: list[str],
+    max_pages: int,
+    delay: float,
+) -> Callable[[], IngestStats | None]:
+    """Create a task function for a dealer."""
+
+    def task() -> IngestStats | None:
+        cfg = cfgs.get(key)
+        if not cfg:
+            statuses[key]["state"] = "skipped"
+            statuses[key]["message"] = "dealer not found"
+            return None
+
+        try:
+            session = build_session_fn(cfg)
+        except Exception as exc:
+            statuses[key]["state"] = "skipped"
+            statuses[key]["message"] = f"auth error: {exc}"
+            return None
+
+        # Run ciclodiffusione with queries, others from YAML
+        if key == "ciclodiffusione":
+            return run_ciclodiffusione(
+                statuses[key], lock, cfg, session, queries_list, max_pages, delay
+            )
+        return run_dealer_from_yaml(statuses[key], lock, cfg, session, delay, max_pages)
+
+    return task
+
+
+def _execute_parallel_tasks(
+    tasks: dict[str, Callable[[], IngestStats | None]],
+    statuses: dict[str, ProviderStatus],
+    lock: threading.Lock,
+    stop_event: threading.Event,
+    progress_interval: int,
+) -> None:
+    """Execute tasks in parallel with status reporting."""
+    # Start status reporter
+    reporter = threading.Thread(
+        target=status_reporter,
+        args=(stop_event, statuses, progress_interval, lock),
+        daemon=True,
+    )
+    reporter.start()
+
+    # Execute tasks
+    results: dict[str, IngestStats | None] = {}
+    with ThreadPoolExecutor(max_workers=len(tasks)) as pool:
+        future_map = {pool.submit(fn): name for name, fn in tasks.items()}
+        for fut in as_completed(future_map):
+            name = future_map[fut]
+            try:
+                results[name] = fut.result()
+            except Exception as exc:  # pragma: no cover
+                results[name] = None
+                with lock:
+                    statuses[name]["state"] = "error"
+                    statuses[name]["message"] = str(exc)
+                log_exception("cli", "ingest-all-parallel", f"{name} failed", exc)
+
+    # Stop reporter and print results
+    stop_event.set()
+    reporter.join(timeout=2)
+    rich.print({"results": {k: str(v) for k, v in results.items()}})
 
 
 @app.command("csv-synth")
