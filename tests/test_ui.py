@@ -12,13 +12,14 @@ def test_ui_builds_interface(
     """Smoke test: ui.build_interface() must construct Blocks without real HTTP or DB side effects."""
     import app.ui as ui_mod
 
-    # Fake search to avoid DB access during _do_search.
+    # Fake search to avoid DB access - patch in ui_handlers_search module
     from app.types import SearchRequest, SearchResponse
+    import app.ui_handlers_search
 
     def fake_search(req: SearchRequest) -> SearchResponse:
         return SearchResponse(items=[])
 
-    monkeypatch.setattr(ui_mod, "search", fake_search)
+    monkeypatch.setattr(app.ui_handlers_search, "search", fake_search)
 
     # Patch httpx.post used in _create_quote and _on_search facets call.
     class DummyResp:
