@@ -9,12 +9,15 @@ from .api_client import api_post_silent
 from .logging_utils import log_exception
 from .search import search
 from .types import Brake, Freehub, Rotor, SearchRequest
+from .ui_helpers import active_filters_list, annotate_low_coverage, calculate_coverage
 from sqlalchemy.orm import Session
 from typing import cast
 
 
 from .models import EventLog, SessionLocal, SupplierOffer
 from .quote import render_quote
+
+__all__ = ["build_interface"]
 
 
 def _do_search(
@@ -407,50 +410,6 @@ def build_interface() -> gr.Blocks:
                     label="URL file (se API attiva)", interactive=False
                 )
 
-        def _active_filters_list(
-            category,
-            suppliers_sel,
-            in_stock_only,
-            speed,
-            freehub,
-            brake,
-            axle,
-            rotor,
-            budget,
-        ) -> list[str]:
-            filters: list[str] = []
-            if category:
-                filters.append(f"category:{category}")
-            if suppliers_sel:
-                filters.append(f"suppliers:{','.join(sorted(suppliers_sel))}")
-            if in_stock_only:
-                filters.append("in_stock:true")
-            if speed:
-                filters.append(f"speed:{speed}")
-            if freehub:
-                filters.append(f"freehub:{freehub}")
-            if brake:
-                filters.append(f"brake:{brake}")
-            if axle:
-                filters.append(f"axle:{axle}")
-            if rotor:
-                filters.append(f"rotor:{rotor}")
-            if budget is not None:
-                try:
-                    bval = float(budget)
-                except Exception as exc:
-                    log_exception(
-                        "ui",
-                        "filters",
-                        "invalid budget value",
-                        exc,
-                        extra={"budget": budget},
-                    )
-                    bval = 0.0
-                if bval > 0:
-                    filters.append(f"budget:<= {bval:.0f}")
-            return filters
-
         def _on_search(
             query,
             speed,
@@ -525,11 +484,6 @@ def build_interface() -> gr.Blocks:
                     totals = f.get("totals", {})
                     prod_total = int(totals.get("products", 0) or 0) or 1
 
-                    def _coverage(counts: dict[str, int]) -> float:
-                        return sum(int(v) for v in (counts or {}).values()) / float(
-                            prod_total
-                        )
-
                     # Reset value to "" if current selection disappears
                     speed_val = speed if speed in speed_choices else ""
                     freehub_val = freehub if freehub in freehub_choices else ""
@@ -538,45 +492,34 @@ def build_interface() -> gr.Blocks:
                     category_choices = sorted(list(f.get("category", {}).keys()))
                     category_val = category if category in category_choices else ""
 
-                    thr = 0.15
-
-                    def _annotate(info: str | None, cov: float) -> str | None:
-                        if not info:
-                            return None
-                        return (
-                            f"{info} — poche specifiche nei risultati"
-                            if cov < thr
-                            else info
-                        )
-
-                    cov_speed = _coverage(f.get("speed", {}))
-                    cov_freehub = _coverage(f.get("freehub", {}))
-                    cov_brake = _coverage(f.get("brake", {}))
-                    cov_rotor = _coverage(f.get("rotor", {}))
+                    cov_speed = calculate_coverage(f.get("speed", {}), prod_total)
+                    cov_freehub = calculate_coverage(f.get("freehub", {}), prod_total)
+                    cov_brake = calculate_coverage(f.get("brake", {}), prod_total)
+                    cov_rotor = calculate_coverage(f.get("rotor", {}), prod_total)
                     _ = gr.update(
                         choices=[""] + speed_choices,
                         value=speed_val,
-                        info=_annotate((speed_info or None), cov_speed),
-                        interactive=(cov_speed >= thr),
+                        info=annotate_low_coverage((speed_info or None), cov_speed),
+                        interactive=(cov_speed >= 0.15),
                     )
                     _ = gr.update(
                         choices=[""] + freehub_choices,
                         value=freehub_val,
-                        info=_annotate((freehub_info or None), cov_freehub),
-                        interactive=(cov_freehub >= thr),
+                        info=annotate_low_coverage((freehub_info or None), cov_freehub),
+                        interactive=(cov_freehub >= 0.15),
                     )
                     _ = gr.update(
                         choices=[""] + brake_choices,
                         value=brake_val,
-                        info=_annotate((brake_info or None), cov_brake),
-                        interactive=(cov_brake >= thr),
+                        info=annotate_low_coverage((brake_info or None), cov_brake),
+                        interactive=(cov_brake >= 0.15),
                     )
                     _ = gr.update(info=(axle_info or None))
                     _ = gr.update(
                         choices=[""] + rotor_choices,
                         value=rotor_val,
-                        info=_annotate((rotor_info or None), cov_rotor),
-                        interactive=(cov_rotor >= thr),
+                        info=annotate_low_coverage((rotor_info or None), cov_rotor),
+                        interactive=(cov_rotor >= 0.15),
                     )
                     suppliers_upd = gr.update(
                         choices=sorted(list(f.get("supplier", {}).keys()))
@@ -613,33 +556,33 @@ def build_interface() -> gr.Blocks:
                         value=slider_val,
                     )
                     # Facet tree radios (choices + enablement)
-                    cov_speed = _coverage(f.get("speed", {}))
-                    cov_freehub = _coverage(f.get("freehub", {}))
-                    cov_brake = _coverage(f.get("brake", {}))
-                    cov_rotor = _coverage(f.get("rotor", {}))
+                    cov_speed = calculate_coverage(f.get("speed", {}), prod_total)
+                    cov_freehub = calculate_coverage(f.get("freehub", {}), prod_total)
+                    cov_brake = calculate_coverage(f.get("brake", {}), prod_total)
+                    cov_rotor = calculate_coverage(f.get("rotor", {}), prod_total)
                     facet_speed_upd = gr.update(
                         choices=speed_choices,
                         value=None,
-                        interactive=(cov_speed >= thr),
-                        info=_annotate(speed_info or None, cov_speed),
+                        interactive=(cov_speed >= 0.15),
+                        info=annotate_low_coverage(speed_info or None, cov_speed),
                     )
                     facet_freehub_upd = gr.update(
                         choices=freehub_choices,
                         value=None,
-                        interactive=(cov_freehub >= thr),
-                        info=_annotate(freehub_info or None, cov_freehub),
+                        interactive=(cov_freehub >= 0.15),
+                        info=annotate_low_coverage(freehub_info or None, cov_freehub),
                     )
                     facet_brake_upd = gr.update(
                         choices=brake_choices,
                         value=None,
-                        interactive=(cov_brake >= thr),
-                        info=_annotate(brake_info or None, cov_brake),
+                        interactive=(cov_brake >= 0.15),
+                        info=annotate_low_coverage(brake_info or None, cov_brake),
                     )
                     facet_rotor_upd = gr.update(
                         choices=rotor_choices,
                         value=None,
-                        interactive=(cov_rotor >= thr),
-                        info=_annotate(rotor_info or None, cov_rotor),
+                        interactive=(cov_rotor >= 0.15),
+                        info=annotate_low_coverage(rotor_info or None, cov_rotor),
                     )
                     facet_axle_upd = gr.update(
                         choices=sorted(list(f.get("axle", {}).keys())),
@@ -668,7 +611,7 @@ def build_interface() -> gr.Blocks:
                 facet_rotor_upd = gr.update()
                 facet_axle_upd = gr.update()
 
-            af = _active_filters_list(
+            af = active_filters_list(
                 category,
                 suppliers_sel,
                 in_stock_only,
