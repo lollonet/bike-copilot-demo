@@ -1,12 +1,19 @@
 from __future__ import annotations
 
-import os
 from typing import Any
 
 import gradio as gr
 
 from .api_client import api_post_silent
 from .logging_utils import log_exception
+from .ui_handlers_cart import (
+    handle_cart_add,
+    handle_cart_adjust,
+    handle_cart_clear,
+    handle_cart_remove,
+    handle_offer_select,
+)
+from .ui_handlers_quote import handle_quote_request
 from .ui_handlers_search import handle_search_request
 from sqlalchemy.orm import Session
 from typing import cast
@@ -722,61 +729,12 @@ def build_interface() -> gr.Blocks:
         )
 
         def _on_select(offer_label: str | None, mapping: dict[int, dict[str, Any]]):
-            if not offer_label:
-                return "Seleziona un'offerta per i dettagli"
-            # Extract offer_id from label prefix
-            try:
-                offer_id = int(str(offer_label).split(" · ")[0])
-            except Exception as exc:
-                log_exception(
-                    "ui",
-                    "select-offer",
-                    "failed to parse offer label",
-                    exc,
-                    extra={"label": offer_label},
-                )
-                return "Seleziona un'offerta per i dettagli"
-            info = mapping.get(int(offer_id)) or {}
-            return f"**Offerta {offer_id}** — {info.get('brand', '')} {info.get('mpn', '')} — {info.get('supplier', '')} — €{info.get('price', '')}"
+            """Gradio wrapper for offer selection handler."""
+            return handle_offer_select(offer_label, mapping)
 
         cast(Any, offer_select).change(  # type: ignore[attr-defined]
             _on_select, inputs=[offer_select, results_state], outputs=preview
         )
-
-        def _cart_rows(cart: dict[int, dict[str, Any]]):
-            rows = []
-            labels = []
-            for oid, info in cart.items():
-                qty = int(info.get("qty", 1))
-                total = float(info.get("price", 0.0)) * qty
-                rows.append(
-                    [
-                        oid,
-                        info.get("brand", ""),
-                        info.get("mpn", ""),
-                        info.get("supplier", ""),
-                        round(float(info.get("price", 0.0)), 2),
-                        qty,
-                        round(total, 2),
-                    ]
-                )
-                labels.append(f"{oid} · {info.get('brand', '')} {info.get('mpn', '')}")
-            return rows, labels
-
-        def _cart_totals(cart: dict[int, dict[str, Any]]):
-            subtotal = 0.0
-            for info in cart.values():
-                qty = int(info.get("qty", 1))
-                price = float(info.get("price", 0.0))
-                subtotal += price * qty
-            vat_rate = float(os.environ.get("APP_VAT", "0") or 0)
-            vat = subtotal * vat_rate
-            total = subtotal + vat
-            return subtotal, vat_rate, vat, total
-
-        def _totals_md(cart: dict[int, dict[str, Any]]):
-            subtotal, vat_rate, vat, total = _cart_totals(cart)
-            return f"**Subtotale:** €{subtotal:.2f} &nbsp;&nbsp; **IVA ({vat_rate * 100:.0f}%):** €{vat:.2f} &nbsp;&nbsp; **Totale:** €{total:.2f}"
 
         def _on_add(
             offer_label: str | None,
@@ -784,32 +742,15 @@ def build_interface() -> gr.Blocks:
             mapping: dict[int, dict[str, Any]],
             cart: dict[int, dict[str, Any]],
         ):
-            if not offer_label:
-                return gr.update(), cart, gr.update()
-            try:
-                offer_id = int(str(offer_label).split(" · ")[0])
-            except Exception as exc:
-                log_exception(
-                    "ui",
-                    "cart-add",
-                    "failed to parse offer label",
-                    exc,
-                    extra={"label": offer_label},
-                )
-                return gr.update(), cart, gr.update()
-            info = mapping.get(offer_id)
-            if not info:
-                return gr.update(), cart, gr.update()
-            prev = cart.get(offer_id, {**info, "qty": 0})
-            prev_qty = int(prev.get("qty", 0))
-            prev.update({"qty": prev_qty + max(1, int(qty))})
-            cart[offer_id] = prev
-            rows, labels = _cart_rows(cart)
+            """Gradio wrapper for cart add handler."""
+            rows, updated_cart, labels, selected_label, totals = handle_cart_add(
+                offer_label, qty, mapping, cart
+            )
             return (
                 rows,
-                cart,
-                gr.update(choices=labels, value=(labels[-1] if labels else None)),
-                _totals_md(cart),
+                updated_cart,
+                gr.update(choices=labels, value=selected_label),
+                totals,
             )
 
         add_btn.click(
@@ -819,23 +760,9 @@ def build_interface() -> gr.Blocks:
         )
 
         def _on_remove(cart_label: str | None, cart: dict[int, dict[str, Any]]):
-            if not cart_label:
-                return gr.update(), cart, gr.update(), _totals_md(cart)
-            try:
-                offer_id = int(str(cart_label).split(" · ")[0])
-            except Exception as exc:
-                log_exception(
-                    "ui",
-                    "cart-remove",
-                    "failed to parse cart label",
-                    exc,
-                    extra={"label": cart_label},
-                )
-                return gr.update(), cart, gr.update(), _totals_md(cart)
-            if offer_id in cart:
-                cart.pop(offer_id)
-            rows, labels = _cart_rows(cart)
-            return rows, cart, gr.update(choices=labels, value=None), _totals_md(cart)
+            """Gradio wrapper for cart remove handler."""
+            rows, updated_cart, labels, totals = handle_cart_remove(cart_label, cart)
+            return rows, updated_cart, gr.update(choices=labels, value=None), totals
 
         remove_btn.click(
             _on_remove,
@@ -844,7 +771,9 @@ def build_interface() -> gr.Blocks:
         )
 
         def _on_clear_cart():
-            return [], {}, gr.update(choices=[], value=None), ""
+            """Gradio wrapper for cart clear handler."""
+            rows, cart, labels, totals = handle_cart_clear()
+            return rows, cart, gr.update(choices=labels, value=None), totals
 
         clear_cart_btn.click(
             _on_clear_cart,
@@ -855,35 +784,15 @@ def build_interface() -> gr.Blocks:
         def _on_adjust(
             sign: str, cart_label: str | None, cart: dict[int, dict[str, Any]]
         ):
-            if not cart_label:
-                return gr.update(), cart, gr.update(), _totals_md(cart)
-            try:
-                offer_id = int(str(cart_label).split(" · ")[0])
-            except Exception as exc:
-                log_exception(
-                    "ui",
-                    "cart-adjust",
-                    "failed to parse cart label",
-                    exc,
-                    extra={"label": cart_label},
-                )
-                return gr.update(), cart, gr.update(), _totals_md(cart)
-            if offer_id not in cart:
-                return gr.update(), cart, gr.update(), _totals_md(cart)
-            cur = cart[offer_id]
-            qty = int(cur.get("qty", 1))
-            if sign == "+":
-                qty += 1
-            else:
-                qty = max(1, qty - 1)
-            cur["qty"] = qty
-            cart[offer_id] = cur
-            rows, labels = _cart_rows(cart)
+            """Gradio wrapper for cart adjust handler."""
+            rows, updated_cart, labels, selected_label, totals = handle_cart_adjust(
+                sign, cart_label, cart
+            )
             return (
                 rows,
-                cart,
-                gr.update(choices=labels, value=cart_label),
-                _totals_md(cart),
+                updated_cart,
+                gr.update(choices=labels, value=selected_label),
+                totals,
             )
 
         plus_btn.click(
@@ -897,48 +806,6 @@ def build_interface() -> gr.Blocks:
             outputs=[cart_table, cart_state, cart_select, totals_md],
         )
 
-        def _render_local_cart(
-            items: list[dict[str, int]],
-            customer: str,
-            contact: str,
-            validity: int,
-            notes: str,
-        ):
-            from .models import SupplierOffer
-
-            rows: list[dict[str, Any]] = []
-            with SessionLocal() as db:
-                for entry in items:
-                    oid = int(entry.get("offer_id", 0))
-                    qty = int(entry.get("qty", 1))
-                    offer = db.get(SupplierOffer, oid)
-                    if not offer:
-                        continue
-                    p = offer.product
-                    rows.append(
-                        {
-                            "brand": p.brand,
-                            "mpn": p.mpn,
-                            "name": p.name,
-                            "supplier": offer.supplier,
-                            "price": offer.price,
-                            "qty": qty,
-                            "in_stock": offer.in_stock,
-                            "lead_time_days": offer.lead_time_days,
-                        }
-                    )
-            if not rows:
-                return "Nessun elemento nel carrello", "", ""
-            ctx = {
-                "customer_name": customer,
-                "customer_contact": contact,
-                "validity_days": validity,
-                "notes": notes,
-                "items": rows,
-            }
-            html_path, pdf_path = render_quote(ctx)
-            return html_path, (pdf_path or ""), ""
-
         def _on_quote(
             offer_label: str | None,
             customer: str,
@@ -947,49 +814,10 @@ def build_interface() -> gr.Blocks:
             notes: str,
             cart: dict[int, dict[str, Any]],
         ):
-            # Prefer cart items if present; otherwise fallback to selected offer
-            items: list[dict[str, Any]] = []
-            if cart:
-                for oid, info in cart.items():
-                    items.append({"offer_id": int(oid), "qty": int(info.get("qty", 1))})
-            else:
-                if not offer_label:
-                    return "Seleziona un'offerta", "", ""
-                try:
-                    offer_id = int(str(offer_label).split(" · ")[0])
-                except Exception as exc:
-                    log_exception(
-                        "ui",
-                        "quote",
-                        "failed to parse offer label",
-                        exc,
-                        extra={"label": offer_label},
-                    )
-                    return "Seleziona un'offerta", "", ""
-                items = [{"offer_id": offer_id, "qty": 1}]
-            # Call API
-            try:
-                payload = {
-                    "items": items,
-                    "customer_name": customer,
-                    "customer_contact": contact,
-                    "validity_days": int(validity),
-                    "notes": notes or None,
-                }
-                r = api_post_silent("/quote", payload, timeout=15)
-                if r.status_code == 200:
-                    data = r.json()
-                    return (
-                        data.get("html_path", ""),
-                        data.get("pdf_path") or "",
-                        data.get("file_url") or "",
-                    )
-                # Fall back to local multi-line rendering on non-200
-                return _render_local_cart(items, customer, contact, validity, notes)
-            except Exception as exc:
-                log_exception("ui", "quote", "failed to create quote", exc)
-                # Robust fallback to local multi-line rendering
-                return _render_local_cart(items, customer, contact, validity, notes)
+            """Gradio wrapper for quote generation handler."""
+            return handle_quote_request(
+                offer_label, customer, contact, validity, notes, cart
+            )
 
         quote_btn.click(
             _on_quote,
