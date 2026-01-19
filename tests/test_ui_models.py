@@ -87,7 +87,14 @@ def test_search_handler_result_with_results():
         rows=[[1, "Brand1", "PN123", "Supplier1", 50.0, "Sì", 5, 0.95]],
         offer_labels=["€50.00 - Supplier1"],
         default_label="€50.00 - Supplier1",
-        mapping={1: {"brand": "Brand1", "mpn": "PN123", "supplier": "Supplier1", "price": 50.0}},
+        mapping={
+            1: {
+                "brand": "Brand1",
+                "mpn": "PN123",
+                "supplier": "Supplier1",
+                "price": 50.0,
+            }
+        },
         message="Trovate 1 offerte",
         speed=FacetUpdate(["", "11-speed"], None, "11-speed (1)", True, 1.0),
         freehub=FacetUpdate(["", "Shimano"], None, "Shimano (1)", True, 1.0),
@@ -134,7 +141,14 @@ def test_search_handler_result_with_multiple_filters():
         rows=[[1, "Brand1", "PN123", "Supplier1", 50.0, "Sì", 5, 0.95]],
         offer_labels=["€50.00 - Supplier1"],
         default_label="€50.00 - Supplier1",
-        mapping={1: {"brand": "Brand1", "mpn": "PN123", "supplier": "Supplier1", "price": 50.0}},
+        mapping={
+            1: {
+                "brand": "Brand1",
+                "mpn": "PN123",
+                "supplier": "Supplier1",
+                "price": 50.0,
+            }
+        },
         message="Trovate 1 offerte",
         speed=FacetUpdate(["", "11-speed"], "11-speed", "11-speed (1)", True, 1.0),
         freehub=FacetUpdate(["", "Shimano"], "Shimano", "Shimano (1)", True, 1.0),
@@ -162,7 +176,14 @@ def test_search_handler_result_facet_value_reset():
         rows=[[1, "Brand1", "PN123", "Supplier1", 50.0, "Sì", 5, 0.95]],
         offer_labels=["€50.00 - Supplier1"],
         default_label="€50.00 - Supplier1",
-        mapping={1: {"brand": "Brand1", "mpn": "PN123", "supplier": "Supplier1", "price": 50.0}},
+        mapping={
+            1: {
+                "brand": "Brand1",
+                "mpn": "PN123",
+                "supplier": "Supplier1",
+                "price": 50.0,
+            }
+        },
         message="Trovate 1 offerte",
         speed=FacetUpdate(
             ["", "11-speed"], "", "11-speed (1)", True, 1.0
