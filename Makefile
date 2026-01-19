@@ -12,11 +12,11 @@ seed:
 	UV_CACHE_DIR=.uv-cache XDG_CACHE_HOME=.uv-cache PYTHONPATH=. uv run python -m app.cli ingest-csv-mapped --csv catalogo_real_mtb.csv --mapping providers/csv-catalogo-mtb.yaml
 
 ui:
-	uv run python -m app.ui
+	uv run python bin/run_ui.py
 
 # PN-first UI (porta :7861)
 ui-pn:
-	uv run python -m app.ui_pn
+	uv run python bin/run_ui_pn.py
 
 test:
 	UV_CACHE_DIR=.uv-cache XDG_CACHE_HOME=.uv-cache PYTHONPATH=. uv run pytest -q

@@ -1411,10 +1411,26 @@ def health() -> None:
 
 @app.command()
 def ui(port: int = typer.Option(7860), host: str = typer.Option("0.0.0.0")) -> None:
-    from .ui import build_interface
+    """Launch Gradio UI interface.
 
-    iface = build_interface()
-    iface.launch(server_name=host, server_port=port)
+    Note: Delegates to bin/run_ui.py to avoid architectural boundary violation.
+    CLI layer should not import UI layer.
+    """
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    # Find project root (where bin/ directory is located)
+    cli_file = Path(__file__).resolve()
+    project_root = cli_file.parent.parent
+    ui_script = project_root / "bin" / "run_ui.py"
+
+    # Call the UI entry script with the same arguments
+    result = subprocess.run(
+        [sys.executable, str(ui_script), "--port", str(port), "--host", host],
+        check=False,
+    )
+    sys.exit(result.returncode)
 
 
 @app.command()
@@ -1607,7 +1623,15 @@ def _build_spa_payload(
     username: str,
     password: str,
 ) -> dict[str, Any]:
+    import base64
+
     payload: dict[str, Any] = dict(login_cfg.extra_fields or {})
+
+    # Encode credentials if configured
+    if login_cfg.encode_base64:
+        username = base64.b64encode(username.encode()).decode()
+        password = base64.b64encode(password.encode()).decode()
+
     if login_cfg.username_field:
         payload[login_cfg.username_field] = username
     if login_cfg.password_field:

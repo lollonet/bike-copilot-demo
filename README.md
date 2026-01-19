@@ -371,8 +371,30 @@ done
 1. Fork the repository
 2. Create feature branch: `git checkout -b feat/amazing-feature`
 3. Follow conventions: `REQ-XXX: Clear commit message`
-4. Ensure tests pass: `make test`
-5. Submit PR with comprehensive description
+4. **Run local CI validation**: `bash scripts/ci_local.sh`
+5. Ensure all checks pass before pushing
+6. Submit PR with comprehensive description
+
+### Local CI Validation
+
+Before pushing, run the local CI validation script to ensure all checks pass:
+
+```bash
+# Run all CI checks locally (same as GitHub Actions)
+bash scripts/ci_local.sh
+
+# This runs:
+# - Ruff linting
+# - Ruff formatting check
+# - Basedpyright type checking
+# - Pytest test suite
+# - Complexity gates
+# - Spec lint
+# - Traceability
+# - Bandit security scan (informational)
+```
+
+The script exits with status 0 if all checks pass, or 1 if any fail. This ensures your local environment matches the remote CI exactly.
 
 ## 📝 License
 

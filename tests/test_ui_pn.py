@@ -60,8 +60,11 @@ def test_ui_pn_builds_interface(
             }
         return {}
 
-    monkeypatch.setattr(ui_pn, "_api_get", fake_api_get)
-    monkeypatch.setattr(ui_pn, "_api_post", fake_api_post)
+    # Patch the api_client functions that ui_pn now imports
+    import app.api_client as api_client
+
+    monkeypatch.setattr(api_client, "api_get", fake_api_get)
+    monkeypatch.setattr(api_client, "api_post", fake_api_post)
 
     # Configure or clear basic auth credentials to cover both branches.
     if have_auth:

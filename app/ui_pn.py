@@ -1,35 +1,11 @@
 from __future__ import annotations
 
-import os
 from typing import Any, Dict, List, Tuple
 
 import gradio as gr
-import httpx
 
+from .api_client import api_get, api_post
 from .logging_utils import log_exception
-
-API_BASE = os.environ.get("APP_API_BASE", "http://localhost:8000").rstrip("/")
-_auth_credentials: tuple[str, str] | None = None
-_basic_user = os.environ.get("APP_BASIC_USER")
-_basic_pass = os.environ.get("APP_BASIC_PASS")
-if _basic_user and _basic_pass:
-    _auth_credentials = (_basic_user, _basic_pass)
-
-
-def _api_get(path: str) -> Dict[str, Any]:
-    with httpx.Client(timeout=15.0) as client:
-        auth = _auth_credentials if _auth_credentials else httpx.USE_CLIENT_DEFAULT
-        r = client.get(f"{API_BASE}{path}", auth=auth)
-        r.raise_for_status()
-        return r.json()
-
-
-def _api_post(path: str, payload: Dict[str, Any]) -> Dict[str, Any]:
-    with httpx.Client(timeout=20.0) as client:
-        auth = _auth_credentials if _auth_credentials else httpx.USE_CLIENT_DEFAULT
-        r = client.post(f"{API_BASE}{path}", json=payload, auth=auth)
-        r.raise_for_status()
-        return r.json()
 
 
 def _parse_pn_lines(text: str) -> List[str]:
@@ -40,7 +16,7 @@ def _parse_pn_lines(text: str) -> List[str]:
 
 def load_dealers() -> List[str]:
     try:
-        data = _api_get("/dealers")
+        data = api_get("/dealers")
         return sorted([d["name"] for d in data.get("dealers", []) if d.get("name")])
     except Exception as exc:
         log_exception("ui-pn", "dealers", "failed to load dealers", exc)
@@ -128,7 +104,7 @@ def _call_quote_api(items: List[Dict[str, Any]], notes: str) -> Dict[str, Any]:
         note_txt = (notes or "").strip()
         if note_txt:
             payload["notes"] = note_txt
-        return _api_post("/quote", payload)
+        return api_post("/quote", payload)
     except Exception as exc:
         log_exception("ui-pn", "quote-api", "quote api call failed", exc)
         return {"error": str(exc)}
@@ -169,7 +145,7 @@ def _call_optimize_api(
                 "penale_lead": float(penale_lead),
             },
         }
-        return _api_post("/optimize", payload)
+        return api_post("/optimize", payload)
     except Exception as exc:
         log_exception("ui-pn", "optimize-api", "optimize api call failed", exc)
         return {"error": str(exc)}
@@ -186,7 +162,7 @@ def do_search(
         payload["dealers"] = dealers
     if in_stock_only:
         payload["in_stock_only"] = True
-    data = _api_post("/search_pn_batch", payload)
+    data = api_post("/search_pn_batch", payload)
     # Flatten offers to a simple table per PN for preview
     rows: List[List[Any]] = []
     for res in data.get("results", []):

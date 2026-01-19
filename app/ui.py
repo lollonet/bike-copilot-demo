@@ -4,8 +4,8 @@ import os
 from typing import Any
 
 import gradio as gr
-import httpx
 
+from .api_client import api_post_silent
 from .logging_utils import log_exception
 from .search import search
 from .types import Brake, Freehub, Rotor, SearchRequest
@@ -15,11 +15,6 @@ from typing import cast
 
 from .models import EventLog, SessionLocal, SupplierOffer
 from .quote import render_quote
-
-
-API_BASE = os.environ.get("APP_API_BASE", "http://127.0.0.1:8000")
-API_USER = os.environ.get("APP_BASIC_USER", "")
-API_PASS = os.environ.get("APP_BASIC_PASS", "")
 
 
 def _do_search(
@@ -173,8 +168,7 @@ def _try_create_quote_via_api(
     payload: dict[str, object],
 ) -> tuple[str, str, str] | None:
     try:
-        auth = (API_USER, API_PASS) if API_USER and API_PASS else None
-        r = httpx.post(f"{API_BASE}/quote", json=payload, auth=auth, timeout=10)
+        r = api_post_silent("/quote", payload, timeout=10)
         if r.status_code != 200:
             return None
         data = r.json()
@@ -485,7 +479,6 @@ def build_interface() -> gr.Blocks:
             default_label = labels[0] if labels else None
             # Fetch facets from API to refresh filter options/info
             try:
-                auth = (API_USER, API_PASS) if API_USER and API_PASS else None
                 payload = {
                     "query_text": query or None,
                     "speed": speed or None,
@@ -502,9 +495,7 @@ def build_interface() -> gr.Blocks:
                     "suppliers": suppliers_sel or [],
                     "in_stock_only": bool(in_stock_only),
                 }
-                r = httpx.post(
-                    f"{API_BASE}/facets", json=payload, auth=auth, timeout=10
-                )
+                r = api_post_silent("/facets", payload, timeout=10)
                 if r.status_code == 200:
                     f = r.json()
                     # Build info strings
@@ -1407,7 +1398,6 @@ def build_interface() -> gr.Blocks:
                 items = [{"offer_id": offer_id, "qty": 1}]
             # Call API
             try:
-                auth = (API_USER, API_PASS) if API_USER and API_PASS else None
                 payload = {
                     "items": items,
                     "customer_name": customer,
@@ -1415,7 +1405,7 @@ def build_interface() -> gr.Blocks:
                     "validity_days": int(validity),
                     "notes": notes or None,
                 }
-                r = httpx.post(f"{API_BASE}/quote", json=payload, auth=auth, timeout=15)
+                r = api_post_silent("/quote", payload, timeout=15)
                 if r.status_code == 200:
                     data = r.json()
                     return (
