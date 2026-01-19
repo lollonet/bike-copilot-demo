@@ -19,12 +19,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Security Scanning** - Bandit security scanner in CI pipeline (Dec 19)
 - **Base64 Authentication** - Support for Base64-encoded credentials in SPA login (Jan 18)
 - **Web Ingestion Testing** - Comprehensive test suite and documentation for B2B scraping (Jan 18)
+- **Shared API Client** - Centralized HTTP client module (app/api_client.py) for backend API calls (Jan 19)
+- **UI Entry Scripts** - Independent entry points for Gradio and Panel UIs (bin/run_ui.py, bin/run_ui_pn.py) (Jan 19)
 
 ### Changed
 - **RMS Authentication Endpoint** - Updated to correct API endpoint (apib2b.rms.it/users/authenticate) (Jan 18)
 - **Authentication Defaults** - Enforced secure defaults for dealer authentication (Dec 18)
 - **Price History** - Enhanced trace context and price change recording (Dec 18)
 - **CI Workflows** - Improved Claude review workflows with sticky comments (Dec 19)
+- **Architecture Refactoring (ARC-001 Phase 1 & 2)** - Extracted shared API client and fixed CLI/UI boundary violations (Jan 19)
 
 ### Fixed
 - **Skeptic Review Issues** - Applied security and correctness fixes from automated review (Dec 18)
@@ -39,6 +42,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Crawl/Ingest Targets** - Documented new make targets for dealer operations (Dec 17)
 - **Session Standards** - Added runbooks and workflow documentation (Dec 18)
 - **RMS Authentication Notes** - Technical investigation documenting AES encryption requirement (Jan 18)
+- **Architecture Technical Debt** - Documented refactoring plan in ARC-001 with 4-phase approach (Jan 19)
 
 ### Removed
 - **Claude Refactor Triggers** - Removed obsolete CI trigger configuration (#72) (Jan 16)
