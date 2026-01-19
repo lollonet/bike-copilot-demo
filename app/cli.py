@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, TypedDict, Callable, Dict
+from typing import Any, TypedDict
 from urllib.parse import parse_qs, urlparse
 
 import rich
@@ -9,27 +9,19 @@ from pydantic import BaseModel
 import typer
 from rich.table import Table
 import os
-import random
 import httpx
 import yaml
 from dotenv import load_dotenv
 from sqlalchemy.orm import Session
-from sqlalchemy import select, func, asc
-from concurrent.futures import ThreadPoolExecutor, as_completed
-import threading
-import time
-import json
+from sqlalchemy import select, asc
 
 from .logging_utils import log_exception
 
-from .adapters.csv_adapter import parse_offers_csv, parse_products_csv
-from .adapters.pdf_adapter import extract_from_pdf
 from .adapters.web_adapter import (
     fetch_and_parse_urls,
     build_search_urls,
     parse_sitemap_urls,
 )
-from .adapters.csv_mapped_adapter import parse_unified_csv
 from .ingest import IngestStats, upsert
 from .models import (
     EventLog,
@@ -41,10 +33,10 @@ from .models import (
 )
 from .quote import render_quote
 from .search import search
-from .types import Brake, Freehub, OfferInput, QuoteResponse, Rotor, SearchRequest
+from .types import Brake, Freehub, QuoteResponse, Rotor, SearchRequest
 from .policy import parse_policy_html
 from .dealers import DealerConfig, DealerLoginConfig, find_dealer
-from .commands import fetch_commands
+from .commands import fetch_commands, ingest_commands
 from .cli_helpers.fetch_helpers import upsert_dealer_policy
 
 
@@ -53,6 +45,9 @@ load_dotenv()
 
 # Register fetch commands
 fetch_commands.register_to_main_app(app)
+
+# Register ingest commands
+ingest_commands.register_to_main_app(app)
 
 
 def _offer_id_completions(incomplete: str) -> list[str]:
@@ -231,7 +226,6 @@ def pn_alias_import(
           dealer_pn: ICNHG601116
           confidence: 0.98
     """
-    import yaml
 
     data = yaml.safe_load(yaml_file.read_text(encoding="utf-8")) or []
     if not isinstance(data, list):
@@ -372,48 +366,6 @@ def _insert_alias_row(
     )
 
 
-@app.command("ingest-csv")
-def ingest_csv(
-    products: Path = typer.Option(
-        ...,
-        exists=True,
-        file_okay=True,
-        dir_okay=False,
-        readable=True,
-        help="products.csv",
-    ),
-    offers: Path = typer.Option(
-        ...,
-        exists=True,
-        file_okay=True,
-        dir_okay=False,
-        readable=True,
-        help="offers.csv",
-    ),
-) -> None:
-    """Ingest demo CSVs with staging and upsert."""
-    ps = parse_products_csv(products)
-    os_list = parse_offers_csv(offers)
-    stats: IngestStats = upsert(ps, os_list)
-    rich.print(stats)
-
-
-@app.command("ingest-pdf")
-def ingest_pdf(
-    pdf: Path = typer.Option(
-        ..., exists=True, file_okay=True, dir_okay=False, readable=True
-    ),
-    mapping: Path | None = typer.Option(
-        None, exists=False, help="Provider mapping YAML"
-    ),
-    provider: str = typer.Option("PDFProvider"),
-) -> None:
-    """Extract tables from PDF and upsert using a mapping file."""
-    products, offers = extract_from_pdf(pdf, mapping)
-    stats: IngestStats = upsert(products, offers)
-    rich.print(stats)
-
-
 @app.command("search-web")
 def search_web(
     query: str = typer.Option(..., help="search query to embed in url_template"),
@@ -440,21 +392,6 @@ def search_web(
     rich.print({"urls": urls, **stats.__dict__})
 
 
-@app.command("ingest-csv-mapped")
-def ingest_csv_mapped(
-    csv: Path = typer.Option(
-        ..., exists=True, file_okay=True, dir_okay=False, readable=True
-    ),
-    mapping: Path = typer.Option(
-        ..., exists=True, file_okay=True, dir_okay=False, readable=True
-    ),
-) -> None:
-    """Ingest a single CSV using a mapping YAML to canonical fields."""
-    products, offers = parse_unified_csv(csv, mapping)
-    stats: IngestStats = upsert(products, offers)
-    rich.print(stats)
-
-
 @app.command("reset-db")
 def reset_db() -> None:
     """Delete local SQLite database and recreate tables."""
@@ -478,522 +415,6 @@ def reset_db() -> None:
     # Recreate
     create_all()
     rich.print({"db": "reset", "url": url})
-
-
-# --- Parallel ingest orchestrator -------------------------------------------------
-
-
-class ProviderStatus(TypedDict, total=False):
-    name: str
-    supplier: str
-    state: str
-    pages_done: int
-    products: int
-    offers: int
-    total_seeds: int | None
-    message: str
-    lock_file: str | None
-
-
-def _provider_lock(name: str, lock_dir: Path) -> Path | None:
-    """Create a per-provider lock file; return None if already locked."""
-    lock_dir.mkdir(parents=True, exist_ok=True)
-    lf = lock_dir / f"{name}.lock"
-    try:
-        fd = os.open(lf, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
-        os.close(fd)
-        lf.write_text(str(os.getpid()))
-        return lf
-    except FileExistsError:
-        return None
-
-
-def _release_lock(lock_file: Path | None) -> None:
-    if lock_file and lock_file.exists():
-        try:
-            lock_file.unlink()
-        except OSError:
-            pass
-
-
-def _load_dealer_seeds(key: str) -> list[str]:
-    data = (
-        yaml.safe_load(Path("providers/dealers.yaml").read_text(encoding="utf-8")) or {}
-    )
-    for d in data.get("dealers", []):
-        if d.get("key") == key:
-            return d.get("seeds", {}).get("urls", []) or []
-    return []
-
-
-def _default_progress_cb(
-    status: ProviderStatus, lock: threading.Lock
-) -> Callable[[str, int, int, int], None]:
-    def _cb(url: str, page_idx: int, products: int, offers: int) -> None:  # noqa: ARG001 - signature fixed
-        with lock:
-            status["pages_done"] = status.get("pages_done", 0) + 1
-            status["products"] = products
-            status["offers"] = offers
-
-    return _cb
-
-
-def _run_montanini(status: ProviderStatus, lock: threading.Lock) -> IngestStats:
-    urls = parse_sitemap_urls(
-        "https://www.ciclimontanini.com/product-sitemap.xml",
-        headers=None,
-        limit=None,
-    ) + parse_sitemap_urls(
-        "https://www.ciclimontanini.com/product-sitemap2.xml",
-        headers=None,
-        limit=None,
-    )
-    status["total_seeds"] = len(urls)
-    products, offers = fetch_and_parse_urls(
-        urls,
-        Path("providers/web-ciclimontanini.yaml"),
-        follow_next=False,
-        max_pages=1,
-        delay_sec=0.75,
-        progress_cb=_default_progress_cb(status, lock),
-    )
-    return upsert(products, offers)
-
-
-def _run_ciclodiffusione(
-    status: ProviderStatus,
-    lock: threading.Lock,
-    cfg: DealerConfig,
-    session: "DealerSession",
-    queries: list[str],
-    max_pages: int,
-    delay: float,
-) -> IngestStats:
-    mapping = Path(cfg.mapping or "providers/web-ciclodiffusione.yaml")
-    seeds: list[str] = list(cfg.seeds.urls)
-    if not seeds:
-        for q in queries:
-            seeds.extend(build_search_urls(q, mapping))
-    status["total_seeds"] = len(seeds)
-    products, offers = fetch_and_parse_urls(
-        seeds,
-        mapping,
-        follow_next=True,
-        max_pages=max_pages,
-        delay_sec=delay,
-        progress_cb=_default_progress_cb(status, lock),
-        session=session.client,
-    )
-    return upsert(products, offers)
-
-
-def _run_dealer_from_yaml(
-    status: ProviderStatus,
-    lock: threading.Lock,
-    cfg: DealerConfig,
-    session: "DealerSession",
-    delay: float,
-    max_pages: int,
-) -> IngestStats | None:
-    mapping_path = Path(cfg.mapping) if cfg.mapping else None
-    if mapping_path is None or not mapping_path.exists():
-        status["message"] = "missing mapping; skipping"
-        status["state"] = "skipped"
-        return None
-    seeds = list(cfg.seeds.urls)
-    if cfg.seeds.sitemap:
-        seeds.extend(
-            parse_sitemap_urls(
-                cfg.seeds.sitemap,
-                headers=None,
-                limit=None,
-                session=session.client,
-            )
-        )
-    if not seeds:
-        status["message"] = "no seeds configured; skipping"
-        status["state"] = "skipped"
-        return None
-    status["total_seeds"] = len(seeds)
-    products, offers = fetch_and_parse_urls(
-        seeds,
-        mapping_path,
-        follow_next=True,
-        max_pages=max_pages,
-        delay_sec=delay,
-        progress_cb=_default_progress_cb(status, lock),
-        session=session.client,
-    )
-    return upsert(products, offers)
-
-
-def _status_reporter(
-    stop: threading.Event,
-    statuses: Dict[str, ProviderStatus],
-    interval: int,
-    lock: threading.Lock,
-) -> None:
-    while not stop.wait(interval):
-        with lock:
-            snapshot = {
-                "ts": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-                "providers": list(statuses.values()),
-            }
-        print(json.dumps(snapshot))
-
-
-@app.command("ingest-all-parallel")
-def ingest_all_parallel(
-    queries: str = typer.Option(
-        "copertone sella casco catena",
-        "--queries",
-        "-q",
-        help="Space-separated search queries for Ciclodiffusione",
-    ),
-    max_pages: int = typer.Option(
-        5, help="Max pages to follow for search-based crawlers"
-    ),
-    delay: float = typer.Option(0.8, help="Delay between requests (seconds)"),
-    seed_csv: Path = typer.Option(
-        Path("catalogo_real_mtb.csv"), help="CSV to seed before crawls"
-    ),
-    seed_mapping: Path = typer.Option(
-        Path("providers/csv-catalogo-mtb.yaml"), help="Mapping for seed CSV"
-    ),
-    progress_interval: int = typer.Option(60, help="Status report interval (seconds)"),
-    lock_dir: Path = typer.Option(
-        Path("/tmp/bike-copilot-locks"), help="Directory for provider locks"
-    ),
-) -> None:
-    """Seed CSV then crawl all providers in parallel with per-minute status."""
-    create_all()
-    products, offers = parse_unified_csv(seed_csv, seed_mapping)
-    seed_stats = upsert(products, offers)
-    rich.print({"seed": seed_stats})
-
-    statuses: Dict[str, ProviderStatus] = {}
-    lock = threading.Lock()
-    stop_event = threading.Event()
-
-    def _launch(
-        name: str, supplier: str, fn: Callable[[], IngestStats | None]
-    ) -> Callable[[], IngestStats | None]:
-        status: ProviderStatus = {
-            "name": name,
-            "supplier": supplier,
-            "state": "pending",
-            "pages_done": 0,
-            "products": 0,
-            "offers": 0,
-            "total_seeds": None,
-            "message": "",
-            "lock_file": None,
-        }
-        statuses[name] = status
-
-        def _wrapped() -> IngestStats | None:
-            lock_file = _provider_lock(name, lock_dir)
-            if lock_file is None:
-                status["state"] = "skipped"
-                status["message"] = "another run in progress (lock held)"
-                return None
-            status["lock_file"] = str(lock_file)
-            status["state"] = "running"
-            try:
-                return fn()
-            finally:
-                status["state"] = (
-                    "done" if status.get("state") != "error" else status["state"]
-                )
-                _release_lock(lock_file)
-
-        return _wrapped
-
-    queries_list = [q for q in queries.split(" ") if q.strip()]
-
-    cfgs = {
-        key: find_dealer(key)
-        for key in ["ciclodiffusione", "rms", "ciclopromo", "bikeparts"]
-    }
-
-    def _build_session_for(key: str, status: ProviderStatus) -> DealerSession | None:
-        cfg = cfgs.get(key)
-        if cfg is None:
-            status["state"] = "skipped"
-            status["message"] = "dealer not found in providers/dealers.yaml"
-            return None
-        try:
-            return _build_dealer_session(cfg)
-        except Exception as exc:  # pragma: no cover - runtime safety
-            status["state"] = "skipped"
-            status["message"] = f"auth/session error: {exc}"
-            return None
-
-    tasks: dict[str, Callable[[], IngestStats | None]] = {
-        "ciclimontanini": _launch(
-            "ciclimontanini",
-            "CicliMontanini",
-            lambda status=statuses["ciclimontanini"], lk=lock: _run_montanini(
-                status, lk
-            ),
-        ),
-        "ciclodiffusione": _launch(
-            "ciclodiffusione",
-            "Ciclodiffusione",
-            lambda cfg_key="ciclodiffusione", q=queries_list, mp=max_pages, d=delay: (
-                _run_ciclodiffusione(
-                    statuses[cfg_key],
-                    lock,
-                    cfg,
-                    session,
-                    q,
-                    mp,
-                    d,
-                )
-                if (cfg := cfgs.get(cfg_key))
-                and (session := _build_session_for(cfg_key, statuses[cfg_key]))
-                else None
-            ),
-        ),
-        "rms": _launch(
-            "rms",
-            "RMS",
-            lambda cfg_key="rms", mp=max_pages, d=delay: (
-                _run_dealer_from_yaml(
-                    statuses[cfg_key],
-                    lock,
-                    cfg,
-                    session,
-                    d,
-                    mp,
-                )
-                if (cfg := cfgs.get(cfg_key))
-                and (session := _build_session_for(cfg_key, statuses[cfg_key]))
-                else None
-            ),
-        ),
-        "ciclopromo": _launch(
-            "ciclopromo",
-            "CicloPromo",
-            lambda cfg_key="ciclopromo", mp=max_pages, d=delay: (
-                _run_dealer_from_yaml(
-                    statuses[cfg_key],
-                    lock,
-                    cfg,
-                    session,
-                    d,
-                    mp,
-                )
-                if (cfg := cfgs.get(cfg_key))
-                and (session := _build_session_for(cfg_key, statuses[cfg_key]))
-                else None
-            ),
-        ),
-        "bikeparts": _launch(
-            "bikeparts",
-            "Bikeparts",
-            lambda cfg_key="bikeparts", mp=max_pages, d=delay: (
-                _run_dealer_from_yaml(
-                    statuses[cfg_key],
-                    lock,
-                    cfg,
-                    session,
-                    d,
-                    mp,
-                )
-                if (cfg := cfgs.get(cfg_key))
-                and (session := _build_session_for(cfg_key, statuses[cfg_key]))
-                else None
-            ),
-        ),
-    }
-
-    reporter = threading.Thread(
-        target=_status_reporter,
-        args=(stop_event, statuses, progress_interval, lock),
-        daemon=True,
-    )
-    reporter.start()
-
-    results: Dict[str, IngestStats | None] = {}
-    with ThreadPoolExecutor(max_workers=len(tasks)) as pool:
-        future_map = {pool.submit(fn): name for name, fn in tasks.items()}
-        for fut in as_completed(future_map):
-            name = future_map[fut]
-            try:
-                results[name] = fut.result()
-            except Exception as exc:  # pragma: no cover - runtime safety
-                results[name] = None
-                with lock:
-                    statuses[name]["state"] = "error"
-                    statuses[name]["message"] = str(exc)
-                log_exception("cli", "ingest-all-parallel", f"{name} failed", exc)
-
-    stop_event.set()
-    reporter.join(timeout=2)
-
-    rich.print({"results": {k: str(v) for k, v in results.items()}})
-
-
-@app.command("ingest-csv-synth")
-def ingest_csv_synth(
-    csv: Path = typer.Option(
-        ..., exists=True, file_okay=True, dir_okay=False, readable=True
-    ),
-    mapping: Path = typer.Option(
-        ..., exists=True, file_okay=True, dir_okay=False, readable=True
-    ),
-    suppliers: int = typer.Option(
-        3, min=1, help="number of synthetic suppliers per product (approx)"
-    ),
-    coverage: float = typer.Option(
-        0.6, min=0.0, max=1.0, help="fraction of products that get extra suppliers"
-    ),
-    jitter: float = typer.Option(
-        0.12, min=0.0, max=0.5, help="max price variation +/- as fraction"
-    ),
-) -> None:
-    """Ingest CSV and synthesize duplicate offers across multiple suppliers."""
-    base_products, base_offers = parse_unified_csv(csv, mapping)
-
-    stats = upsert(base_products, base_offers)
-    rng = random.Random(42)
-    grouped = _group_offers_by_product(base_offers)
-    extra_offers = _generate_synthetic_offers(grouped, suppliers, coverage, jitter, rng)
-    stats = _upsert_synthetic_offers(extra_offers, stats)
-    summary = _compute_synth_summary()
-    rich.print({**summary, "ingest": stats.__dict__})
-
-
-def _group_offers_by_product(
-    base_offers: list["OfferInput"],
-) -> dict[tuple[str, str], dict[str, float]]:
-    grouped: dict[tuple[str, str], dict[str, float]] = {}
-    for offer in base_offers:
-        key = (offer.brand, offer.mpn)
-        grouped[key] = {"price": offer.price}
-    return grouped
-
-
-def _generate_synthetic_offers(
-    grouped: dict[tuple[str, str], dict[str, float]],
-    suppliers: int,
-    coverage: float,
-    jitter: float,
-    rng: random.Random,
-) -> list[OfferInput]:
-    supplier_names = _synthetic_supplier_names()
-    extra_offers: list[OfferInput] = []
-    for (brand, mpn), info in grouped.items():
-        base_price = float(info.get("price", 0.0)) or 0.0
-        if not _should_synthesize_group(base_price, coverage, rng):
-            continue
-        extra_offers.extend(
-            _offers_for_group(
-                brand,
-                mpn,
-                base_price,
-                suppliers,
-                jitter,
-                rng,
-                supplier_names,
-            )
-        )
-    return extra_offers
-
-
-def _synthetic_supplier_names() -> list[str]:
-    return [
-        "BiciPro",
-        "RideLabs",
-        "PedalX",
-        "Velocita",
-        "GearHub",
-        "TrailWorks",
-        "WheelHouse",
-        "ChainLine",
-    ]
-
-
-def _should_synthesize_group(
-    base_price: float,
-    coverage: float,
-    rng: random.Random,
-) -> bool:
-    if rng.random() > coverage:
-        return False
-    if base_price <= 0:
-        return False
-    return True
-
-
-def _offers_for_group(
-    brand: str,
-    mpn: str,
-    base_price: float,
-    suppliers: int,
-    jitter: float,
-    rng: random.Random,
-    supplier_names: list[str],
-) -> list[OfferInput]:
-    extra_count = max(0, suppliers - 1)
-    chosen = rng.sample(supplier_names, k=min(extra_count, len(supplier_names)))
-    offers: list[OfferInput] = []
-    for sup in chosen:
-        price = _synthetic_price(base_price, jitter, rng)
-        in_stock = rng.random() < 0.7
-        lead = rng.randint(0, 5)
-        offers.append(
-            OfferInput(
-                brand=brand,
-                mpn=mpn,
-                supplier=sup,
-                price=price,
-                in_stock=in_stock,
-                lead_time_days=lead,
-            )
-        )
-    return offers
-
-
-def _synthetic_price(base_price: float, jitter: float, rng: random.Random) -> float:
-    delta = rng.uniform(-jitter, jitter)
-    return round(base_price * (1.0 + delta), 2)
-
-
-def _upsert_synthetic_offers(extra_offers, stats: IngestStats) -> IngestStats:
-    if not extra_offers:
-        return stats
-    stats2 = upsert([], extra_offers)
-    return IngestStats(
-        products_new=stats.products_new,
-        products_updated=stats.products_updated,
-        offers_upserted=stats.offers_upserted + stats2.offers_upserted,
-        offers_skipped=stats.offers_skipped + stats2.offers_skipped,
-    )
-
-
-def _compute_synth_summary() -> dict[str, int]:
-    with SessionLocal() as db:
-        prod_count = int(
-            db.scalar(select(func.count(func.distinct(SupplierOffer.product_id)))) or 0
-        )
-        offer_count = int(db.scalar(select(func.count(SupplierOffer.id))) or 0)
-        sup_count = int(
-            db.scalar(select(func.count(func.distinct(SupplierOffer.supplier)))) or 0
-        )
-        in_stock = int(
-            db.scalar(
-                select(func.count(SupplierOffer.id)).where(SupplierOffer.in_stock)
-            )
-            or 0
-        )
-    return {
-        "products": prod_count,
-        "offers": offer_count,
-        "suppliers": sup_count,
-        "in_stock_offers": in_stock,
-    }
 
 
 @app.command()
@@ -1494,7 +915,6 @@ def _sync_dealer_catalog_if_needed(
         return
     from .adapters.web_adapter import (
         fetch_and_parse_urls,
-        parse_sitemap_urls,
     )
 
     urls = _collect_dealer_urls(cfg, session, parse_sitemap_urls)
