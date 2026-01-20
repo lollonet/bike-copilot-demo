@@ -168,7 +168,6 @@ def test_upsert_synthetic_offers():
     """Test merging synthetic offer stats with existing stats."""
     from app.cli_helpers.ingest_helpers import upsert_synthetic_offers
     from app.ingest import IngestStats
-    from app.types import OfferInput
 
     base_stats = IngestStats(
         products_new=10,
