@@ -1,19 +1,17 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, TypedDict
+from typing import Any
 from urllib.parse import parse_qs, urlparse
 
-import rich
-from pydantic import BaseModel
-import typer
-from rich.table import Table
-import os
 import httpx
-import yaml
+import os
+import rich
+import typer
 from dotenv import load_dotenv
+from rich.table import Table
+from sqlalchemy import select
 from sqlalchemy.orm import Session
-from sqlalchemy import select, asc
 
 from .logging_utils import log_exception
 
@@ -29,14 +27,13 @@ from .models import (
     SupplierOffer,
     Product,
     create_all,
-    PNMapping,
 )
 from .quote import render_quote
 from .search import search
 from .types import Brake, Freehub, QuoteResponse, Rotor, SearchRequest
 from .policy import parse_policy_html
 from .dealers import DealerConfig, DealerLoginConfig, find_dealer
-from .commands import fetch_commands, ingest_commands
+from .commands import data_commands, fetch_commands, ingest_commands
 from .cli_helpers.fetch_helpers import upsert_dealer_policy
 
 
@@ -48,6 +45,9 @@ fetch_commands.register_to_main_app(app)
 
 # Register ingest commands
 ingest_commands.register_to_main_app(app)
+
+# Register data commands
+data_commands.register_to_main_app(app)
 
 
 def _offer_id_completions(incomplete: str) -> list[str]:
@@ -86,284 +86,6 @@ def _offer_id_completions(incomplete: str) -> list[str]:
 def _init() -> None:
     """Ensure DB is ready."""
     create_all()
-
-
-class ExportRow(BaseModel):
-    brand: str
-    mpn: str
-    name: str
-    category: str | None = None
-    supplier: str
-    price: float
-    in_stock: bool
-    lead_time_days: int | None = None
-
-
-def _escape_md(text: str) -> str:
-    return text.replace("|", "\\|")
-
-
-class AliasEntry(TypedDict, total=False):
-    maker_pn: str
-    dealer_pn: str
-    confidence: float
-
-
-class AliasBlock(TypedDict, total=False):
-    dealer: str | None
-    aliases: list[AliasEntry]
-
-
-@app.command("dump-md")
-def dump_md(
-    limit: int | None = typer.Option(None, help="Max rows; omit for all"),
-    supplier: str | None = typer.Option(None, help="Filter by supplier"),
-    brand: str | None = typer.Option(None, help="Filter by brand"),
-    category: str | None = typer.Option(None, help="Filter by category"),
-) -> None:
-    """Dump joined product+offer rows as a Markdown table for inspection."""
-    rows = _query_export_rows(limit, supplier, brand, category)
-    items = _build_export_rows(rows)
-    table = _render_export_table(items)
-    print(table)
-
-
-def _query_export_rows(
-    limit: int | None,
-    supplier: str | None,
-    brand: str | None,
-    category: str | None,
-) -> list[
-    tuple[SupplierOffer, str, float, bool, int | None, str, str, str, str | None]
-]:
-    with SessionLocal() as db:
-        stmt = (
-            select(
-                SupplierOffer,
-                SupplierOffer.supplier,
-                SupplierOffer.price,
-                SupplierOffer.in_stock,
-                SupplierOffer.lead_time_days,
-                Product.brand,
-                Product.mpn,
-                Product.name,
-                Product.category,
-            )
-            .join(Product, SupplierOffer.product_id == Product.id)
-            .order_by(asc(Product.brand), asc(Product.mpn), asc(SupplierOffer.supplier))
-        )
-        if supplier:
-            stmt = stmt.where(SupplierOffer.supplier == supplier)
-        if brand:
-            stmt = stmt.where(Product.brand == brand)
-        if category:
-            stmt = stmt.where(Product.category == category)
-        if isinstance(limit, int) and limit > 0:
-            stmt = stmt.limit(limit)
-        rows_raw = db.execute(stmt).all()
-        rows = [tuple(r) for r in rows_raw]
-    return rows
-
-
-def _build_export_rows(
-    rows: list[
-        tuple[SupplierOffer, str, float, bool, int | None, str, str, str, str | None]
-    ],
-) -> list[ExportRow]:
-    items: list[ExportRow] = []
-    for _offer, sup, price, in_stock, lead, br, mpn, name, cat in rows:
-        items.append(
-            ExportRow(
-                brand=str(br or ""),
-                mpn=str(mpn or ""),
-                name=str(name or ""),
-                category=str(cat) if cat is not None else None,
-                supplier=str(sup or ""),
-                price=float(price or 0.0),
-                in_stock=bool(in_stock),
-                lead_time_days=int(lead) if lead is not None else None,
-            )
-        )
-    return items
-
-
-def _render_export_table(items: list[ExportRow]) -> str:
-    header = "| brand | mpn | name | category | supplier | price | in_stock | lead_time_days |"
-    sep = "|---|---|---|---|---|---:|---:|---:|"
-    lines: list[str] = [header, sep]
-    for it in items:
-        lines.append(
-            "| "
-            + " | ".join(
-                [
-                    _escape_md(it.brand),
-                    _escape_md(it.mpn),
-                    _escape_md(it.name),
-                    _escape_md(it.category or ""),
-                    _escape_md(it.supplier),
-                    f"{it.price:.2f}",
-                    ("yes" if it.in_stock else "no"),
-                    (str(it.lead_time_days) if it.lead_time_days is not None else ""),
-                ]
-            )
-            + " |"
-        )
-    return "\n".join(lines)
-
-
-@app.command("pn-alias-import")
-def pn_alias_import(
-    yaml_file: Path = typer.Argument(
-        ..., exists=True, dir_okay=False, help="YAML con alias PN per dealer"
-    ),
-) -> None:
-    """Import PN alias pairs from a YAML file.
-
-    YAML structure:
-    - dealer: DealerA
-      aliases:
-        - maker_pn: CN-HG601
-          dealer_pn: ICNHG601116
-          confidence: 0.98
-    """
-
-    data = yaml.safe_load(yaml_file.read_text(encoding="utf-8")) or []
-    if not isinstance(data, list):
-        raise typer.BadParameter("YAML root must be a list of dealer blocks")
-    create_all()
-    with SessionLocal() as db:
-        norm_to_product = _build_norm_mpn_index(db)
-        inserted, updated = _apply_pn_alias_blocks(db, data, norm_to_product)
-    rich.print(
-        f"[green]Alias PN importati da {yaml_file} — inseriti: {inserted}, aggiornati: {updated}[/green]"
-    )
-
-
-def _build_norm_mpn_index(db: Session) -> dict[str, int]:
-    from .pn import normalize_pn
-
-    rows = db.execute(
-        select(Product.id, Product.mpn).where(Product.mpn.is_not(None))
-    ).all()
-    norm_to_product: dict[str, int] = {}
-    for pid, mpn in rows:
-        try:
-            key = normalize_pn(str(mpn))
-        except Exception as exc:
-            log_exception(
-                "cli",
-                "pn-normalize",
-                "failed to normalize mpn",
-                exc,
-                extra={"mpn": mpn},
-            )
-            continue
-        if key:
-            norm_to_product[key] = int(pid)
-    return norm_to_product
-
-
-def _apply_pn_alias_blocks(
-    db: Session,
-    data: list[AliasBlock],
-    norm_to_product: dict[str, int],
-) -> tuple[int, int]:
-    from .pn import normalize_pn
-
-    inserted = 0
-    updated = 0
-    for block in data:
-        dealer = _dealer_from_block(block)
-        block_inserted, block_updated = _apply_aliases_for_block(
-            db, dealer, block.get("aliases") or [], norm_to_product, normalize_pn
-        )
-        inserted += block_inserted
-        updated += block_updated
-    db.commit()
-    return inserted, updated
-
-
-def _dealer_from_block(block: AliasBlock) -> str | None:
-    dealer_raw = block.get("dealer")
-    dealer = str(dealer_raw or "").strip()
-    return dealer or None
-
-
-def _apply_aliases_for_block(
-    db: Session,
-    dealer: str | None,
-    aliases: list[AliasEntry],
-    norm_to_product: dict[str, int],
-    normalize_pn,
-) -> tuple[int, int]:
-    inserted = 0
-    updated = 0
-    for alias in aliases:
-        maker_norm, dealer_norm = _normalized_alias_codes(alias, normalize_pn)
-        if not maker_norm:
-            continue
-        target_id = norm_to_product.get(maker_norm)
-        if not target_id:
-            continue
-        row = _find_existing_alias_row(db, dealer, dealer_norm)
-        confidence = _alias_confidence(alias)
-        if row:
-            _update_alias_row(row, target_id, maker_norm, confidence)
-            updated += 1
-        else:
-            _insert_alias_row(
-                db, dealer, target_id, maker_norm, dealer_norm, confidence
-            )
-            inserted += 1
-    return inserted, updated
-
-
-def _normalized_alias_codes(alias: AliasEntry, normalize_pn) -> tuple[str, str | None]:
-    maker = normalize_pn(str(alias.get("maker_pn") or ""))
-    dealer_pn = str(alias.get("dealer_pn") or "").strip()
-    dealer_norm = normalize_pn(dealer_pn) if dealer_pn else None
-    return maker, dealer_norm
-
-
-def _find_existing_alias_row(db: Session, dealer: str | None, dealer_norm: str | None):
-    return db.scalar(
-        select(PNMapping).where(
-            PNMapping.dealer == dealer,
-            PNMapping.dealer_pn_norm == dealer_norm,
-        )
-    )
-
-
-def _alias_confidence(alias: AliasEntry) -> float:
-    conf_raw = alias.get("confidence")
-    return float(conf_raw) if conf_raw is not None else 1.0
-
-
-def _update_alias_row(
-    row: PNMapping, target_id: int, maker_norm: str, confidence: float
-) -> None:
-    row.product_id = int(target_id)
-    row.maker_pn_norm = maker_norm
-    row.confidence = confidence
-
-
-def _insert_alias_row(
-    db: Session,
-    dealer: str | None,
-    target_id: int,
-    maker_norm: str,
-    dealer_norm: str | None,
-    confidence: float,
-) -> None:
-    db.add(
-        PNMapping(
-            product_id=int(target_id),
-            dealer=dealer,
-            maker_pn_norm=maker_norm,
-            dealer_pn_norm=dealer_norm,
-            confidence=confidence,
-        )
-    )
 
 
 @app.command("search-web")
