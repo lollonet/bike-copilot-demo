@@ -117,10 +117,10 @@ def test_pn_mapping_updates_on_same_dealer_code():
 
     # Reload CLI bound to current DB and import
     import importlib
-    import app.cli as app_cli
+    import app.commands.data_commands as data_commands
 
-    importlib.reload(app_cli)
-    from app.cli import pn_alias_import
+    importlib.reload(data_commands)
+    from app.commands.data_commands import pn_alias_import
 
     pn_alias_import(temp_path)
 
