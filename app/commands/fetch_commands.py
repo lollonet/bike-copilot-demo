@@ -40,6 +40,7 @@ def fetch_policy(
             timeout=15.0,
             headers=hdrs or {"User-Agent": "BikeCopilotBot/0.1"},
             follow_redirects=True,
+            verify=True,
         ) as client:
             r = client.get(url)
             r.raise_for_status()

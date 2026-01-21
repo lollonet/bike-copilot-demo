@@ -194,11 +194,16 @@ def test_fetch_policy_cli(
 
     class DummyClient:
         def __init__(
-            self, timeout: float, headers: dict[str, str], follow_redirects: bool
+            self,
+            timeout: float,
+            headers: dict[str, str],
+            follow_redirects: bool,
+            verify: bool,
         ):
             self._timeout = timeout
             self._headers = headers
             self._follow = follow_redirects
+            self._verify = verify
 
         def get(self, url: str) -> DummyResp:
             return DummyResp("<html>dummy</html>")
@@ -286,11 +291,16 @@ def test_fetch_web_url_cli(
 
     class DummyClient:
         def __init__(
-            self, timeout: float, headers: dict[str, str], follow_redirects: bool
+            self,
+            timeout: float,
+            headers: dict[str, str],
+            follow_redirects: bool,
+            verify: bool,
         ):
             self._timeout = timeout
             self._headers = headers
             self._follow = follow_redirects
+            self._verify = verify
 
         def get(self, url: str) -> DummyResp:
             return DummyResp(html)

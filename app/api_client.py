@@ -31,7 +31,7 @@ def api_get(path: str, timeout: float = 15.0) -> dict[str, Any]:
     Raises:
         httpx.HTTPStatusError: If response status is not 2xx
     """
-    with httpx.Client(timeout=timeout) as client:
+    with httpx.Client(timeout=timeout, verify=True) as client:
         auth = _auth_credentials if _auth_credentials else httpx.USE_CLIENT_DEFAULT
         r = client.get(f"{API_BASE}{path}", auth=auth)
         r.raise_for_status()
@@ -55,7 +55,7 @@ def api_post(
     Raises:
         httpx.HTTPStatusError: If response status is not 2xx
     """
-    with httpx.Client(timeout=timeout) as client:
+    with httpx.Client(timeout=timeout, verify=True) as client:
         auth = _auth_credentials if _auth_credentials else httpx.USE_CLIENT_DEFAULT
         r = client.post(f"{API_BASE}{path}", json=payload, auth=auth)
         r.raise_for_status()
@@ -79,4 +79,6 @@ def api_post_silent(
         Full httpx.Response object
     """
     auth = _auth_credentials if _auth_credentials else None
-    return httpx.post(f"{API_BASE}{path}", json=payload, auth=auth, timeout=timeout)
+    return httpx.post(
+        f"{API_BASE}{path}", json=payload, auth=auth, timeout=timeout, verify=True
+    )
