@@ -19,6 +19,7 @@ from ..adapters.web_adapter import (
     parse_sitemap_urls,
 )
 from ..ingest import IngestStats, upsert
+from ..logging_utils import log_event, log_exception
 from ..models import SessionLocal, SupplierOffer
 from ..types import OfferInput
 
@@ -66,7 +67,14 @@ def provider_lock(name: str, lock_dir: Path) -> Path | None:
         os.close(fd)
         lf.write_text(str(os.getpid()))
         return lf
-    except FileExistsError:
+    except FileExistsError as exc:
+        log_event(
+            "WARN",
+            op="lock",
+            kind="acquire",
+            message=f"provider {name} already locked, skipping",
+            extra={"provider": name, "lock_file": str(lf), "error": str(exc)},
+        )
         return None
 
 
@@ -79,8 +87,14 @@ def release_lock(lock_file: Path | None) -> None:
     if lock_file and lock_file.exists():
         try:
             lock_file.unlink()
-        except OSError:
-            pass
+        except OSError as exc:
+            log_exception(
+                "ingest",
+                "lock",
+                "failed to release provider lock",
+                exc,
+                extra={"lock_file": str(lock_file)},
+            )
 
 
 def load_dealer_seeds(key: str) -> list[str]:

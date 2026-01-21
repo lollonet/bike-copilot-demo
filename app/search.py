@@ -79,7 +79,14 @@ def _load_synonyms() -> dict[str, dict[str, list[str]]]:
         with open(settings.synonyms_path, "r", encoding="utf-8") as f:
             data: dict[str, dict[str, list[str]]] = yaml.safe_load(f) or {}
         return data
-    except (OSError, FileNotFoundError):
+    except (OSError, FileNotFoundError) as exc:
+        log_event(
+            "WARN",
+            op="synonyms",
+            kind="load",
+            message="failed to load synonyms file, search quality degraded",
+            extra={"path": str(settings.synonyms_path), "error": str(exc)},
+        )
         return {}
 
 

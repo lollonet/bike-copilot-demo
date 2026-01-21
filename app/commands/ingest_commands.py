@@ -268,6 +268,13 @@ def _create_dealer_task(
         try:
             session = build_session_fn(cfg)
         except Exception as exc:
+            log_exception(
+                "cli",
+                "ingest-all-parallel",
+                f"auth failed for {key}",
+                exc,
+                extra={"dealer": key},
+            )
             statuses[key]["state"] = "skipped"
             statuses[key]["message"] = f"auth error: {exc}"
             return None
