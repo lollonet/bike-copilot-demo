@@ -84,6 +84,5 @@ def _log_pdf_failure(exc: Exception) -> None:
         op="quote",
         kind="pdf",
         message="wkhtmltopdf failed; falling back to HTML only",
-        trace_id=None,
         extra={"error": str(exc)},
     )
