@@ -51,14 +51,14 @@ def test_dealer_sync_uses_correct_path_resolution():
     """Verify the actual implementation in dealer_sync uses _repo_root for mapping paths."""
 
     import inspect
-    from app.cli import dealer_sync
+    from app.commands.service_commands import dealer_sync
 
     # Get the source code of dealer_sync
     source = inspect.getsource(dealer_sync)
 
     # Verify that it imports _repo_root from dealers module
     assert (
-        "from .dealers import _repo_root" in source
+        "from ..dealers import _repo_root" in source
         or "from app.dealers import _repo_root" in source
     )
 

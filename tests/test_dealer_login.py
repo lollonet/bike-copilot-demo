@@ -14,7 +14,7 @@ from app.dealers import (
 
 def test_form_login_get_method_uses_query_params():
     """Test that GET form login correctly builds query parameters."""
-    from app.cli import _build_dealer_session
+    from app.cli_helpers.service_helpers import build_dealer_session
 
     dealer = DealerConfig(
         key="test",
@@ -42,7 +42,7 @@ def test_form_login_get_method_uses_query_params():
     )
 
     # Mock environment variables
-    with patch("app.cli.os.getenv") as mock_getenv:
+    with patch("app.cli_helpers.service_helpers.os.getenv") as mock_getenv:
         mock_getenv.side_effect = lambda key, default="": {
             "DEALER_TEST_AUTH_MODE": "form",
             "DEALER_TEST_USER": "testuser",
@@ -50,7 +50,7 @@ def test_form_login_get_method_uses_query_params():
         }.get(key, default)
 
         # Mock httpx.Client to verify the correct params are passed
-        with patch("app.cli.httpx.Client") as mock_client_class:
+        with patch("app.cli_helpers.service_helpers.httpx.Client") as mock_client_class:
             mock_client = Mock()
             mock_response = Mock()
             mock_response.status_code = 200
@@ -60,7 +60,7 @@ def test_form_login_get_method_uses_query_params():
             mock_client_class.return_value = mock_client
 
             # Build the session - this should not raise NameError
-            _build_dealer_session(dealer)
+            build_dealer_session(dealer)
 
             # Verify GET was called with correct params
             mock_client.get.assert_called_once()
@@ -79,7 +79,7 @@ def test_form_login_get_method_uses_query_params():
 
 def test_form_login_post_method_uses_form_data():
     """Test that POST form login correctly builds form data."""
-    from app.cli import _build_dealer_session
+    from app.cli_helpers.service_helpers import build_dealer_session
 
     dealer = DealerConfig(
         key="test",
@@ -106,14 +106,14 @@ def test_form_login_post_method_uses_form_data():
         ),
     )
 
-    with patch("app.cli.os.getenv") as mock_getenv:
+    with patch("app.cli_helpers.service_helpers.os.getenv") as mock_getenv:
         mock_getenv.side_effect = lambda key, default="": {
             "DEALER_TEST_AUTH_MODE": "form",
             "DEALER_TEST_USER": "testuser",
             "DEALER_TEST_PASS": "testpass",
         }.get(key, default)
 
-        with patch("app.cli.httpx.Client") as mock_client_class:
+        with patch("app.cli_helpers.service_helpers.httpx.Client") as mock_client_class:
             mock_client = Mock()
             mock_response = Mock()
             mock_response.status_code = 200
@@ -122,7 +122,7 @@ def test_form_login_post_method_uses_form_data():
             mock_client_class.return_value = mock_client
 
             # Build the session
-            _build_dealer_session(dealer)
+            build_dealer_session(dealer)
 
             # Verify POST was called with form data
             mock_client.post.assert_called_once()
@@ -135,7 +135,7 @@ def test_form_login_post_method_uses_form_data():
 
 def test_unsupported_login_method_raises_error():
     """Test that unsupported login methods raise appropriate errors."""
-    from app.cli import _build_dealer_session
+    from app.cli_helpers.service_helpers import build_dealer_session
 
     dealer = DealerConfig(
         key="test",
@@ -162,19 +162,19 @@ def test_unsupported_login_method_raises_error():
         ),
     )
 
-    with patch("app.cli.os.getenv") as mock_getenv:
+    with patch("app.cli_helpers.service_helpers.os.getenv") as mock_getenv:
         mock_getenv.side_effect = lambda key, default="": {
             "DEALER_TEST_AUTH_MODE": "form",
             "DEALER_TEST_USER": "testuser",
             "DEALER_TEST_PASS": "testpass",
         }.get(key, default)
 
-        with patch("app.cli.httpx.Client") as mock_client_class:
+        with patch("app.cli_helpers.service_helpers.httpx.Client") as mock_client_class:
             mock_client = Mock()
             mock_client.headers = {}
             mock_client_class.return_value = mock_client
 
             with pytest.raises(typer.BadParameter) as exc_info:
-                _build_dealer_session(dealer)
+                build_dealer_session(dealer)
 
             assert "PUT non supportato" in str(exc_info.value)
