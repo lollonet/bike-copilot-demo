@@ -176,7 +176,7 @@ def _run_parallel_ingestion(
     lock_dir: Path,
 ) -> None:
     """Execute parallel provider ingestion."""
-    from ..cli import _build_dealer_session
+    from ..cli_helpers.service_helpers import build_dealer_session
 
     # Seed database
     create_all()
@@ -202,7 +202,7 @@ def _run_parallel_ingestion(
         lock,
         lock_dir,
         cfgs,
-        _build_dealer_session,
+        build_dealer_session,
         queries_list,
         max_pages,
         delay,
