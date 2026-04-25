@@ -12,8 +12,8 @@ mpn: ".product-code"
 
 # Optional fields
 category: ".product-category"
-stock: ".availability-status"
-lead_time: ".lead-time"
+in_stock: ".availability-status"
+lead_time_days: ".lead-time"
 image: ".product-image img"
 description: ".product-description"
 
