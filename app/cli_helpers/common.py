@@ -31,4 +31,5 @@ def create_http_client(
         timeout=timeout,
         headers=default_headers,
         follow_redirects=follow_redirects,
+        verify=True,
     )

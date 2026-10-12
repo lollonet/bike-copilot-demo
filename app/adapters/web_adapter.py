@@ -510,6 +510,7 @@ def _build_fetch_fn(
             timeout=10.0,
             headers=headers or {"User-Agent": "BikeCopilotBot/0.1"},
             follow_redirects=True,
+            verify=True,
         ) as client:
             r = client.get(u)
             r.raise_for_status()
@@ -1067,6 +1068,7 @@ def parse_sitemap_urls(
             timeout=10.0,
             headers=headers or {"User-Agent": "BikeCopilotBot/0.1"},
             follow_redirects=True,
+            verify=True,
         ) as client:
             r = client.get(u)
             r.raise_for_status()

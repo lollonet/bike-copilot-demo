@@ -153,6 +153,7 @@ def fetch_sitemap_details(
         timeout=10.0,
         headers=headers or {"User-Agent": "BikeCopilotBot/0.1"},
         follow_redirects=True,
+        verify=True,
     ) as client:
         for u in urls:
             success = fetch_single_sitemap_url(

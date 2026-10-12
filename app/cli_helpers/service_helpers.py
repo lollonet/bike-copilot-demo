@@ -76,7 +76,9 @@ def build_http_client() -> httpx.Client:
         Configured httpx.Client
     """
     headers = {"User-Agent": "BikeCopilotBot/0.1"}
-    return httpx.Client(timeout=15.0, headers=headers, follow_redirects=True)
+    return httpx.Client(
+        timeout=15.0, headers=headers, follow_redirects=True, verify=True
+    )
 
 
 def build_dealer_session(cfg: DealerConfig) -> DealerSession:
