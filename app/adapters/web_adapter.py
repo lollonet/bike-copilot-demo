@@ -62,6 +62,16 @@ class FetchContext:
     seen_pages: set[str]
     all_products: list[ProductInput]
     all_offers: list[OfferInput]
+    start_time: float
+    max_total_seconds: float | None
+
+
+def _timeout_exceeded(ctx: FetchContext, time_mod) -> bool:
+    """Check if total operation time has exceeded the configured limit."""
+    if ctx.max_total_seconds is None:
+        return False
+    elapsed = time_mod.time() - ctx.start_time
+    return elapsed >= ctx.max_total_seconds
 
 
 def _load_mapping(path: Path) -> WebMapping:
@@ -472,11 +482,13 @@ def fetch_and_parse_urls(
     headers: dict[str, str] | None = None,
     session: "httpx.Client | None" = None,
     progress_cb: ProgressCallback | None = None,
+    max_total_seconds: float | None = 600.0,
 ) -> tuple[list[ProductInput], list[OfferInput]]:
     """Fetch one or more URLs and parse them using the provided mapping.
 
     - If follow_next is True and mapping.pagination.next is set, follows next links up to max_pages.
     - headers can include cookies/auth; keep polite delays via delay_sec.
+    - max_total_seconds: Maximum total runtime (default: 600s = 10 minutes). Set to None for no limit.
     """
     import time
 
@@ -491,6 +503,7 @@ def fetch_and_parse_urls(
         progress_cb,
         fetch_fn,
         time,
+        max_total_seconds,
     )
 
 
@@ -528,6 +541,7 @@ def _fetch_and_parse_urls_impl(
     progress_cb: ProgressCallback | None,
     fetch_fn: Callable[[str], str],
     time_mod,
+    max_total_seconds: float | None,
 ) -> tuple[list[ProductInput], list[OfferInput]]:
     ctx = FetchContext(
         mapping=mapping,
@@ -539,8 +553,13 @@ def _fetch_and_parse_urls_impl(
         seen_pages=set(),
         all_products=[],
         all_offers=[],
+        start_time=time_mod.time(),
+        max_total_seconds=max_total_seconds,
     )
     for seed in urls:
+        # Check if we've exceeded total timeout
+        if _timeout_exceeded(ctx, time_mod):
+            break
         _process_seed_url(
             seed,
             ctx,
@@ -618,6 +637,7 @@ def _process_seed_pagination(
         html,
         seed,
         ctx,
+        time_mod,
     )
     _process_additional_pages(
         pages,
@@ -824,6 +844,7 @@ def _collect_paginated_pages(
     first_html: str,
     first_url: str,
     ctx: FetchContext,
+    time_mod,
 ) -> list[tuple[str, str]]:
     pagination_cfg = _pagination_config(ctx.mapping)
     if not _should_paginate(ctx.follow_next, pagination_cfg):
@@ -840,10 +861,8 @@ def _collect_paginated_pages(
         pagination_cfg,
         first_html,
         first_url,
-        ctx.max_pages,
-        ctx.seen_pages,
-        ctx.delay_sec,
-        ctx.fetch_fn,
+        ctx,
+        time_mod,
     )
 
 
@@ -864,13 +883,9 @@ def _pagination_chain_link(
     pcfg: PaginationMapping | None,
     first_html: str,
     first_url: str,
-    max_pages: int,
-    seen_pages: set[str],
-    delay_sec: float,
-    fetch_fn: Callable[[str], str],
+    ctx: FetchContext,
+    time_mod,
 ) -> list[tuple[str, str]]:
-    import time as _time
-
     if pcfg is None:
         return []
 
@@ -882,11 +897,8 @@ def _pagination_chain_link(
         next_sel,
         first_html,
         first_url,
-        max_pages,
-        seen_pages,
-        delay_sec,
-        fetch_fn,
-        _time,
+        ctx,
+        time_mod,
     )
 
 
@@ -894,22 +906,22 @@ def _pagination_link_loop(
     next_sel: str,
     first_html: str,
     first_url: str,
-    max_pages: int,
-    seen_pages: set[str],
-    delay_sec: float,
-    fetch_fn: Callable[[str], str],
+    ctx: FetchContext,
     time_mod,
 ) -> list[tuple[str, str]]:
     out: list[tuple[str, str]] = []
     current_html = first_html
     current_url = first_url
-    for _ in range(max_pages - 1):
+    for _ in range(ctx.max_pages - 1):
+        # Check timeout before fetching next page
+        if _timeout_exceeded(ctx, time_mod):
+            break
         soup = BeautifulSoup(current_html, "html.parser")
-        href = _next_page_href(soup, next_sel, current_url, seen_pages)
+        href = _next_page_href(soup, next_sel, current_url, ctx.seen_pages)
         if not href:
             break
-        time_mod.sleep(max(0.0, delay_sec))
-        next_html = _safe_fetch(fetch_fn, href)
+        time_mod.sleep(max(0.0, ctx.delay_sec))
+        next_html = _safe_fetch(ctx.fetch_fn, href)
         if next_html is None:
             break
         out.append((href, next_html))
@@ -981,6 +993,9 @@ def _pagination_query_loop(
     current_skip = start_skip
     root_selector = ctx.mapping["root"]
     for _ in range(ctx.max_pages - 1):
+        # Check timeout before fetching next page
+        if _timeout_exceeded(ctx, time_mod):
+            break
         next_skip, next_url = _next_paginated_url(
             first_url, base_query, param_name, current_skip, limit
         )
