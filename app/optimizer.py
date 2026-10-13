@@ -145,7 +145,6 @@ def optimize(req: OptimizeRequest, db=None) -> OptimizeResponse:
         op="optimize",
         kind="service",
         message="order optimization completed",
-        trace_id=None,
         extra={
             "scenario": params.scenario or "miglior-prezzo",
             "items": len(items),

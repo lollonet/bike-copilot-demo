@@ -57,7 +57,6 @@ def parse_policy_html(html: str) -> PolicyExtract:
         op="policy",
         kind="extraction",
         message="Extracted shipping policy values",
-        trace_id=None,
         extra={
             "base_cost": base,
             "free_threshold": free,

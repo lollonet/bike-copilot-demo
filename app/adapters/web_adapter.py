@@ -1109,7 +1109,6 @@ def _parse_sitemap_xml(
             op="web-adapter",
             kind="sitemap",
             message=f"Max depth {MAX_SITEMAP_DEPTH} reached; skipping nested sitemap",
-            trace_id=None,
         )
         return []
     seen: set[str] = set()

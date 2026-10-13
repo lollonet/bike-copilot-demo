@@ -42,7 +42,6 @@ def upsert(core: list[ProductInput], offers: list[OfferInput]) -> IngestStats:
         op="ingest",
         kind="ingest",
         message="ingest started",
-        trace_id=None,
         extra={"products": len(core), "offers": len(offers)},
     )
     with SessionLocal() as db:
@@ -53,7 +52,6 @@ def upsert(core: list[ProductInput], offers: list[OfferInput]) -> IngestStats:
         op="ingest",
         kind="ingest",
         message="ingest completed",
-        trace_id=None,
         extra={
             "products_new": stats.products_new,
             "products_updated": stats.products_updated,

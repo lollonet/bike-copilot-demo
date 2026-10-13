@@ -28,7 +28,6 @@ def _build_category_synonym_mapping(raw: object) -> dict[str, str]:
             op="category_synonyms",
             kind="search",
             message="category synonyms file has unexpected structure; using empty map",
-            trace_id=None,
             extra={"type": type(raw).__name__},
         )
     return mapping
@@ -49,7 +48,6 @@ def _load_category_synonyms() -> dict[str, str]:
             op="category_synonyms",
             kind="search",
             message="failed to load category synonyms; using empty map",
-            trace_id=None,
             extra={"error": str(exc)},
         )
         raw = {}
